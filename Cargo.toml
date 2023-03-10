@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 rusb = "0.9"
-hex-literal = "*"
+hex-literal = "0.3"
+clap = "4.1"
