@@ -1,6 +1,7 @@
 use hex_literal::*;
 use rusb::*;
 use std::time::Duration;
+use chrono::*;
 
 /// Device specific endpoints
 /// TODO: given it's one device this could all be hard-coded
@@ -19,6 +20,24 @@ struct Endpoint {
     setting: u8,
     address: u8,
 }
+
+pub struct ChipType {
+    part_number: [u8; 5],
+    model: [u8; 6],
+    chip_type: u8,
+    custom_block: u8,
+    product_block: u8,
+    default_code_options: [u8; 8]
+}
+
+pub const CHIP_68F90A: ChipType = ChipType {
+    part_number: hex!("68f90a0000"),
+    model: hex!("06080f09000a"),
+    chip_type: 0x07,
+    custom_block: 0x03,
+    product_block: 0x01,
+    default_code_options: hex!("a4e063c00f000088")
+};
 
 pub struct Sinolink {
     device: Device<GlobalContext>,
@@ -131,7 +150,7 @@ impl Sinolink {
         let b: [u8; 0] = [];
         self.write_control(0x40, 18, 1, 0, &b);
 
-        self.configure();
+        self.configure(CHIP_68F90A);
 
         self.read_chip(17, 0, 0, 0x0000, 0x0400, &mut buf);
 
@@ -267,14 +286,15 @@ impl Sinolink {
             .unwrap();
     }
 
-    pub fn configure(&self) {
+    pub fn configure(&self, chip_type: ChipType) {
+        println!("Sending config payload");
         let mut buf: [u8; 16] = [
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x04,
         ];
         self.write_control(0x40, 16, 0, 0, &buf);
 
-        let config: [u8; 1024] = hex!("
+        let mut config: [u8; 1024] = hex!("
             7887
             bd // checksum???
             07 // Chip Type
@@ -282,7 +302,7 @@ impl Sinolink {
             02 // Power setting - 0x02 - 5V, 0x01 - 3.3V, 0x03 - External (3.3V or 5V seems to not matter)
             0402040000050000
             03 // CustomBlock
-            01 // Product Block
+            01 // ProductBlock
             0620000000000000000800000000000000000000000000000000000000000008
             a4e063c00f000088 // code options
             00000000000000000000010040ff0000fd8f3600000000000000000000000100b36300000000000000000000000000000000000000000000000000000000000000000000000000000002000080000000000000000000000000000000000000000000000000000000081c11
@@ -293,6 +313,26 @@ impl Sinolink {
             230308203607 // current date 2023-03-08 20:36:07
             05500000000000000000
         ");
+
+        config[3] = chip_type.chip_type;
+
+        // config[5] = //power setting
+
+        config[14] = chip_type.custom_block;
+        config[15] = chip_type.product_block;
+
+        config[47..47+8].clone_from_slice(&chip_type.default_code_options);
+
+        config[162..162+6].clone_from_slice(&chip_type.model);
+
+        config[181..181+5].clone_from_slice(&chip_type.part_number);
+
+        let dt = Utc.with_ymd_and_hms(2023, 03, 08, 20, 36, 07).unwrap();
+        let dt_string = dt.format("%y%m%d%H%M%S").to_string();
+        let date_bytes: Vec<u8> = dt_string.chars().collect::<Vec<char>>().chunks(2).map(|chunk| chunk.iter().collect::<String>()).map(|number| u8::from_str_radix(&number, 16).unwrap()).collect();
+        config[1008..1008+6].clone_from_slice(&date_bytes);
+
+
         self.handle
             .write_bulk(0x02, &config, Duration::new(2, 0))
             .unwrap();
