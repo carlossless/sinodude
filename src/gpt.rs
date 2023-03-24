@@ -3,9 +3,9 @@ use std::path::Path;
 pub type KeyPair = (u8, u8);
 const HEADER_SIZE: usize = 17;
 
-pub struct Decryptor {}
+pub struct GPTDecryptor {}
 
-impl Decryptor {
+impl GPTDecryptor {
     pub fn decrypt<'a>(mut input: impl Iterator<Item = u8>, keys: KeyPair) -> Vec<u8> {
         let header: Vec<u8> = input.by_ref().take(HEADER_SIZE).collect();
         assert_eq!(header, b"[Version]\r\n3.00\r\n");

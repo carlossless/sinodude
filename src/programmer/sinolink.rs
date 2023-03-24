@@ -1,16 +1,9 @@
+use super::super::part::*;
+use super::*;
+use chrono::*;
 use hex_literal::*;
 use rusb::*;
 use std::time::Duration;
-use chrono::*;
-
-/// Device specific endpoints
-/// TODO: given it's one device this could all be hard-coded
-#[derive(Debug)]
-struct Endpoints {
-    control: Endpoint,
-    read: Endpoint,
-    write: Endpoint,
-}
 
 /// Internal endpoint representations
 #[derive(Debug, PartialEq, Clone)]
@@ -21,30 +14,13 @@ struct Endpoint {
     address: u8,
 }
 
-pub struct ChipType {
-    part_number: [u8; 5],
-    model: [u8; 6],
-    chip_type: u8,
-    custom_block: u8,
-    product_block: u8,
-    default_code_options: [u8; 8]
-}
-
-pub const CHIP_68F90A: ChipType = ChipType {
-    part_number: hex!("68f90a0000"),
-    model: hex!("06080f09000a"),
-    chip_type: 0x07,
-    custom_block: 0x03,
-    product_block: 0x01,
-    default_code_options: hex!("a4e063c00f000088")
-};
-
-pub struct Sinolink {
-    device: Device<GlobalContext>,
+pub struct Sinolink<'a> {
     handle: DeviceHandle<GlobalContext>,
+    chip_type: &'a Part,
+    power_setting: PowerSetting,
 }
 
-impl Sinolink {
+impl Sinolink<'static> {
     fn find_sinolink() -> Device<GlobalContext> {
         for device in devices().unwrap().iter() {
             let device_desc = device.device_descriptor().unwrap();
@@ -56,7 +32,7 @@ impl Sinolink {
         panic!("nope");
     }
 
-    pub fn new() -> Self {
+    pub fn new(chip_type: &'static Part, power_setting: PowerSetting) -> Self {
         let device = Self::find_sinolink();
 
         let device_desc = device.device_descriptor().unwrap();
@@ -115,26 +91,27 @@ impl Sinolink {
         println!("READ & WRITE: {:02x} {:02x}", read_addr, write_addr);
 
         return Self {
-            device: device,
             handle: handle,
+            chip_type: chip_type,
+            power_setting: power_setting,
         };
     }
 
     pub fn init(&self) {
         let mut bufff: [u8; 64] = [0; 64];
-        let length = self.read_control(0xc0, 0, 0, 0, &mut bufff);
+        self.read_control(0xc0, 0, 0, 0, &mut bufff);
         // bufff
         // 220602144418025015092302200102011c0029000447333230313537c0fc00c00000000000000000000000000000000002002202091456000230000000000000
         // first six bytes is date version of firmware YY MM DD HH mm ss (all in hex)
         // two bytes after is the firmwares version, also in hex
         hex!(
             "
-      220602144418 // version date - 2022-06-02 14:44:18
-      0250 // version - 2.50
-      15092302200102011
-      c0029000447333230 // programmer device serial number = 1C-00-29-00-04-47-33-32-30
-      313537c0fc00c00000000000000000000000000000000002002202091456000230000000000000
-    "
+            220602144418 // version date - 2022-06-02 14:44:18
+            0250 // version - 2.50
+            15092302200102011
+            c0029000447333230 // programmer device serial number = 1C-00-29-00-04-47-33-32-30
+            313537c0fc00c00000000000000000000000000000000002002202091456000230000000000000
+        "
         );
 
         let mut buf2: [u8; 16] = [
@@ -150,7 +127,7 @@ impl Sinolink {
         let b: [u8; 0] = [];
         self.write_control(0x40, 18, 1, 0, &b);
 
-        self.configure(CHIP_68F90A);
+        self.configure();
 
         self.read_chip(17, 0, 0, 0x0000, 0x0400, &mut buf);
 
@@ -286,9 +263,10 @@ impl Sinolink {
             .unwrap();
     }
 
-    pub fn configure(&self, chip_type: ChipType) {
+    pub fn configure(&self) {
+        let chip_type = self.chip_type;
         println!("Sending config payload");
-        let mut buf: [u8; 16] = [
+        let buf: [u8; 16] = [
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x04,
         ];
@@ -316,37 +294,42 @@ impl Sinolink {
 
         config[3] = chip_type.chip_type;
 
-        // config[5] = //power setting
+        config[5] = self.power_setting.to_byte();
 
         config[14] = chip_type.custom_block;
         config[15] = chip_type.product_block;
 
-        config[47..47+8].clone_from_slice(&chip_type.default_code_options);
+        config[47..47 + 8].clone_from_slice(&chip_type.default_code_options);
 
-        config[162..162+6].clone_from_slice(&chip_type.model);
+        config[162..162 + 6].clone_from_slice(&chip_type.model);
 
-        config[181..181+5].clone_from_slice(&chip_type.part_number);
+        config[181..181 + 5].clone_from_slice(&chip_type.part_number);
 
         let dt = Utc.with_ymd_and_hms(2023, 03, 08, 20, 36, 07).unwrap();
         let dt_string = dt.format("%y%m%d%H%M%S").to_string();
-        let date_bytes: Vec<u8> = dt_string.chars().collect::<Vec<char>>().chunks(2).map(|chunk| chunk.iter().collect::<String>()).map(|number| u8::from_str_radix(&number, 16).unwrap()).collect();
-        config[1008..1008+6].clone_from_slice(&date_bytes);
-
+        let date_bytes: Vec<u8> = dt_string
+            .chars()
+            .collect::<Vec<char>>()
+            .chunks(2)
+            .map(|chunk| chunk.iter().collect::<String>())
+            .map(|number| u8::from_str_radix(&number, 16).unwrap())
+            .collect();
+        config[1008..1008 + 6].clone_from_slice(&date_bytes);
 
         self.handle
             .write_bulk(0x02, &config, Duration::new(2, 0))
             .unwrap();
     }
 
-    pub fn read_flash(&self) -> [u8; 65536] {
-        let mut buf: [u8; 65536] = [0; 65536];
+    pub fn read_flash(&self) -> Vec<u8> {
+        let mut contents = vec![0; self.chip_type.flash_size];
 
-        for addr in (0..65536).step_by(64) {
+        for addr in (0..self.chip_type.flash_size).step_by(64) {
             let mut buff: [u8; 64] = [0; 64];
             self.read_chip(68, 0x01, 0x00, addr as u16, 64, &mut buff);
-            buf[addr..(addr + 64)].clone_from_slice(&buff[0..64]);
+            contents[addr..(addr + 64)].clone_from_slice(&buff[0..64]);
         }
 
-        return buf;
+        return contents;
     }
 }

@@ -2,13 +2,15 @@ use clap::*;
 use std::fs::*;
 use std::io::{Read, Write};
 
+pub mod part;
 mod gpt;
-mod sinolink;
+mod programmer;
+
+use part::*;
 use gpt::*;
-use sinolink::*;
+use programmer::{sinolink::*, PowerSetting};
 
 use crc::*;
-use hex_literal::*;
 
 const CUSTOM_ALG: Algorithm<u8> = Algorithm {
     width: 8,
@@ -33,9 +35,23 @@ fn cli() -> Command {
         .subcommand(
             Command::new("read")
                 .short_flag('r')
-                .long_flag("read")
                 .about("Read the chips flash contents.")
-                .arg(arg!(output_file: <OUTPUT_FILE> "file to write flash contents to")),
+                .arg(arg!(output_file: <OUTPUT_FILE> "file to write flash contents to"))
+                .arg(
+                    arg!(-c --programmer <PART>)
+                        .value_parser(["sinolink"])
+                        .required(true),
+                )
+                .arg(
+                    arg!(-p --part <PART>)
+                        .value_parser(PARTS.keys().map(|&s| s).collect::<Vec<_>>())
+                        .required(true),
+                )
+                .arg(
+                    arg!(-t --power <POWER_SETTING>)
+                        .value_parser(["3v3", "5v", "external"])
+                        .required(true),
+                ),
         )
         .subcommand(
             Command::new("decrypt")
@@ -74,7 +90,20 @@ fn main() {
                 .map(|s| s.as_str())
                 .unwrap();
 
-            let sinolink = Sinolink::new();
+            let power_setting_name = sub_matches
+                .get_one::<String>("power")
+                .map(|s| s.as_str())
+                .unwrap();
+
+            let power_setting = PowerSetting::from_option(power_setting_name);
+
+            let part_name = sub_matches
+                .get_one::<String>("part")
+                .map(|s| s.as_str())
+                .unwrap();
+
+            let part = PARTS.get(part_name).unwrap();
+            let sinolink = Sinolink::new(part, power_setting);
             sinolink.init();
 
             let buf = sinolink.read_flash();
@@ -91,10 +120,10 @@ fn main() {
                 .get_one::<String>("gpt_file")
                 .map(|s| s.as_str())
                 .unwrap();
-            let keypair = Decryptor::keypair(output_file);
+            let keypair = GPTDecryptor::keypair(output_file);
 
             let file = File::open(output_file).unwrap();
-            let decrypted = Decryptor::decrypt(file.bytes().scan((), |_, x| x.ok()), keypair);
+            let decrypted = GPTDecryptor::decrypt(file.bytes().scan((), |_, x| x.ok()), keypair);
 
             write(format!("{}.decrypted", output_file), decrypted).unwrap();
         }

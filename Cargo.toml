@@ -11,3 +11,4 @@ hex-literal = "0.3"
 clap = "4.1"
 crc = "*"
 chrono = "*"
+phf = { version = "0.11", features = ["macros"] }
