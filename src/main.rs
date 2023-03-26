@@ -9,6 +9,7 @@ mod programmer;
 use part::*;
 use gpt::*;
 use programmer::*;
+use programmer::keyboard::*;
 
 use crc::*;
 
@@ -39,7 +40,7 @@ fn cli() -> Command {
                 .arg(arg!(output_file: <OUTPUT_FILE> "file to write flash contents to"))
                 .arg(
                     arg!(-c --programmer <PART>)
-                        .value_parser(["sinolink"])
+                        .value_parser(["sinolink", "keyboard"])
                         .required(true),
                 )
                 .arg(
