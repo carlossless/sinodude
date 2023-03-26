@@ -22,17 +22,22 @@ impl Keyboard {
         firmware[lenght - 3] = 0x00; // 3rd last byte is 0x66, erase it
 
         let api = HidApi::new().unwrap();
-        // let kb_device = api.open(0x05ac, 0x024f).unwrap();
 
-        // println!("Resetting into Bootloader...");
-        // let mut buf_reset: [u8; 6] = [0x00; 6];
-        // buf_reset[0] = 0x05;
-        // buf_reset[1] = 0x75;
-        // kb_device.send_feature_report(&buf_reset).unwrap_or_default(); // ignore errors
+        if let Some(kb_device_info) = api.device_list().find(|d| d.vendor_id() == 0x5ac && d.product_id() == 0x024f) {
+            println!("Found KB. Resetting into bootloader...");
+            let device = kb_device_info.open_device(&api).unwrap();
+            let mut buf_reset: [u8; 6] = [0x00; 6];
+            buf_reset[0] = 0x05;
+            buf_reset[1] = 0x75;
+            device.send_feature_report(&buf_reset).unwrap_or_default(); // ignore errors, a reset will happen immedaatelly
+            println!("Waiting for bootloader device...");
+            thread::sleep(time::Duration::from_millis(2000));
+        } else {
+            println!("No KB found. Trying bootloader directly...");
+        }
 
-        println!("Waiting for bootloader device...");
-        thread::sleep(time::Duration::from_millis(2000));
         let device = api.open(0x0603, 0x1020).unwrap();
+        println!("Connected!");
 
         println!("Erasing...");
         let mut buf_erase: [u8; 6] = [0x45; 6];
@@ -100,13 +105,10 @@ impl Keyboard {
         buf_read[1] = 0x72;
         for i in 0..NUM_PAGES {
             device.get_feature_report(&mut buf_read).unwrap();
-            println!("{:?} {:?}", (2..PAGE_SIZE + 2), ((i*PAGE_SIZE)..((i+1)*PAGE_SIZE)));
-            println!("{:02x?}", &buf_read[2..(PAGE_SIZE + 2)]);
-            println!("{:02x?}", &firmware[(i*PAGE_SIZE)..((i+1)*PAGE_SIZE)]);
 
             for y in 0..PAGE_SIZE {
                 if buf_read[y+2] != firmware[(i*PAGE_SIZE) + y] {
-                    panic!("FIRMWARE MISMATCH @ PAGE {} + {} == {:02x} != {:02x}", i, y, buf_read[y+2], firmware[(i*PAGE_SIZE) + y])
+                    panic!("FIRMWARE MISMATCH @ 0x{:04x} | PAGE {} BYTE {} | == {:02x} != {:02x}", i*PAGE_SIZE+y, i, y, buf_read[y+2], firmware[(i*PAGE_SIZE) + y])
                 }
             };
 
