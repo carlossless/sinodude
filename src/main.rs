@@ -8,7 +8,7 @@ mod programmer;
 
 use part::*;
 use gpt::*;
-use programmer::{sinolink::*, PowerSetting};
+use programmer::*;
 
 use crc::*;
 
@@ -102,18 +102,21 @@ fn main() {
                 .map(|s| s.as_str())
                 .unwrap();
 
-            let part = PARTS.get(part_name).unwrap();
-            let sinolink = Sinolink::new(part, power_setting);
-            sinolink.init();
 
-            let buf = sinolink.read_flash();
-            let mut file = File::create(output_file).unwrap();
-            for chunk in buf.chunks(16) {
-                for x in &chunk[0..16] {
-                    write!(file, "{:02X}", x).unwrap();
-                }
-                write!(file, "\n").unwrap();
-            }
+
+            let part = PARTS.get(part_name).unwrap();
+            let sinolink = Keyboard::new();
+            // let sinolink = Sinolink::new(part, power_setting);
+            // sinolink.init();
+
+            // let buf = sinolink.read_flash();
+            // let mut file = File::create(output_file).unwrap();
+            // for chunk in buf.chunks(16) {
+            //     for x in &chunk[0..16] {
+            //         write!(file, "{:02X}", x).unwrap();
+            //     }
+            //     write!(file, "\n").unwrap();
+            // }
         }
         Some(("decrypt", sub_matches)) => {
             let output_file = sub_matches
