@@ -106,7 +106,7 @@ fn main() {
 
 
             let part = PARTS.get(part_name).unwrap();
-            let sinolink = Keyboard::new();
+            let sinolink = Keyboard::new().new_test();
             // let sinolink = Sinolink::new(part, power_setting);
             // sinolink.init();
 
