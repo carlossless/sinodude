@@ -7,8 +7,8 @@ pub struct Keyboard {
 }
 
 const PAGE_SIZE: usize = 2048;
-const FLASH_SIZE: usize = 61440; // 0xF000
-// const FLASH_SIZE: usize = 65536; // 0xFFFF
+// const FLASH_SIZE: usize = 61440; // 0xF000
+const FLASH_SIZE: usize = 65536; // 0xFFFF
 const NUM_PAGES: usize = FLASH_SIZE / PAGE_SIZE;
 
 
@@ -37,20 +37,39 @@ impl Keyboard {
     }
 
     pub fn new_test(&self) {
-        let (mut firmware, _) = load_file_vec("private/kb_firmware.hex", FLASH_SIZE, 0).unwrap();
-        let lenght = firmware.len();
-        firmware[0] = 0x00; // 3rd byte is 0x66
-        firmware[1] = 0x00; // 3rd byte is 0x66
-        firmware[2] = 0x66; // 3rd byte is 0x66
-        firmware[lenght - 5] = 0x00; // 5th last byte is 0x02, erase it
-        firmware[lenght - 3] = 0x00; // 3rd last byte is 0x66, erase it
+        // let (mut firmware, _) = load_file_vec("private/kb_firmware.hex", FLASH_SIZE, 0).unwrap();
+        // let lenght = firmware.len();
+        // firmware[0] = 0x00; // 3rd byte is 0x66
+        // firmware[1] = 0x00; // 3rd byte is 0x66
+        // firmware[2] = 0x66; // 3rd byte is 0x66
+        // firmware[lenght - 5] = 0x00; // 5th last byte is 0x02, erase it
+        // firmware[lenght - 3] = 0x00; // 3rd last byte is 0x66, erase it
 
-        self.erase();
-        self.write(&firmware);
-        let written = self.read();
-        firmware[0] = 0x02;
-        self.verify(&firmware, &written);
-        self.finalize();
+        // self.erase();
+        // self.write(&firmware);
+        // let written = self.read();
+        // firmware[0] = 0x02;
+        // self.verify(&firmware, &written);
+        // self.finalize();
+
+        println!("Read Option...");
+        let mut buf_write_cmd: [u8; 6] = [0; 6];
+        buf_write_cmd[0] = 0x05;
+        buf_write_cmd[1] = 0x55;
+        buf_write_cmd[2] = 0;
+        buf_write_cmd[3] = 0;
+        buf_write_cmd[4] = (FLASH_SIZE & 0xff) as u8;
+        buf_write_cmd[5] = (FLASH_SIZE >> 8) as u8;
+
+        self.device.send_feature_report(&buf_write_cmd).unwrap();
+
+        let result = self.read();
+        for chunk in result.chunks(16) {
+            for x in &chunk[0..16] {
+                print!("{:02X}", x);
+            }
+            println!();
+        }
     }
 
 
