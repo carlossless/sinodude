@@ -4,7 +4,6 @@ use chrono::*;
 use hex_literal::*;
 use rusb::*;
 use std::time::Duration;
-
 /// Internal endpoint representations
 #[derive(Debug, PartialEq, Clone)]
 struct Endpoint {

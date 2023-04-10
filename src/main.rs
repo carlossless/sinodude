@@ -9,22 +9,6 @@ mod programmer;
 use part::*;
 use gpt::*;
 use programmer::*;
-use programmer::keyboard::*;
-
-use crc::*;
-
-const CUSTOM_ALG: Algorithm<u8> = Algorithm {
-    width: 8,
-    poly: 0x00,
-    init: 0x00,
-    refin: false,
-    refout: true,
-    xorout: 0x00,
-    check: 0x00,
-    residue: 0x00,
-};
-
-pub const CDUDE: Crc<u8> = Crc::<u8>::new(&CUSTOM_ALG);
 
 fn cli() -> Command {
     return Command::new("sinodude")
@@ -106,18 +90,17 @@ fn main() {
 
 
             let part = PARTS.get(part_name).unwrap();
-            let sinolink = Keyboard::new().read_cycle();
-            // let sinolink = Sinolink::new(part, power_setting);
-            // sinolink.init();
+            let sinolink = Sinolink::new(part, power_setting);
+            sinolink.init();
 
-            // let buf = sinolink.read_flash();
-            // let mut file = File::create(output_file).unwrap();
-            // for chunk in buf.chunks(16) {
-            //     for x in &chunk[0..16] {
-            //         write!(file, "{:02X}", x).unwrap();
-            //     }
-            //     write!(file, "\n").unwrap();
-            // }
+            let buf = sinolink.read_flash();
+            let mut file = File::create(output_file).unwrap();
+            for chunk in buf.chunks(16) {
+                for x in &chunk[0..16] {
+                    write!(file, "{:02X}", x).unwrap();
+                }
+                write!(file, "\n").unwrap();
+            }
         }
         Some(("decrypt", sub_matches)) => {
             let output_file = sub_matches

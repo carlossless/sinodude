@@ -1,5 +1,5 @@
 pub mod sinolink;
-pub mod keyboard;
+pub use sinolink::*;
 
 pub enum PowerSetting {
     Internal3v3,
