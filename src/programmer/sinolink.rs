@@ -3,7 +3,7 @@ use super::*;
 use chrono::*;
 use hex_literal::*;
 use rusb::*;
-use std::{thread, time::Duration};
+use std::time::Duration;
 
 use log::{debug, info};
 
