@@ -2,6 +2,7 @@
 name = "sinodude"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 
 [dependencies]
 rusb = "0.9"
@@ -9,3 +10,15 @@ hex-literal = "0.3"
 clap = "4.1"
 chrono = "0.4"
 phf = { version = "0.11", features = ["macros"] }
+ihex = "3.0"
+thiserror = "1.0"
+md5 = "0.7"
+
+[dependencies.log]
+version = "0.4"
+features = ["max_level_debug"]
+
+[dependencies.simple_logger]
+version = "4.3"
+default-features = false
+features = ["stderr", "colors"]

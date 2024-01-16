@@ -21,7 +21,7 @@ impl PowerSetting {
             "3v3" => Self::Internal3v3,
             "5v" => Self::Internal5v,
             "external" => Self::External,
-            _ => unreachable!()
-        }
+            _ => unreachable!(),
+        };
     }
 }
