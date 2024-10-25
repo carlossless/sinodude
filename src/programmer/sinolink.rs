@@ -1,8 +1,9 @@
 use super::super::part::*;
 use super::*;
 use chrono::*;
+use futures_lite::future::block_on;
 use hex_literal::*;
-use rusb::*;
+use nusb::{list_devices, transfer::{ControlIn, ControlOut, ControlType, Direction, EndpointType, Recipient, RequestBuffer}, Device, DeviceInfo, Error, Interface};
 use std::time::Duration;
 
 use log::{debug, info};
@@ -17,16 +18,16 @@ struct Endpoint {
 }
 
 pub struct Sinolink<'a> {
-    handle: DeviceHandle<GlobalContext>,
+    handle: Device,
+    interface: Interface,
     chip_type: &'a Part,
     power_setting: PowerSetting,
 }
 
 impl Sinolink<'static> {
-    fn find_sinolink() -> Device<GlobalContext> {
-        for device in devices().unwrap().iter() {
-            let device_desc = device.device_descriptor().unwrap();
-            if device_desc.vendor_id() == 0x258a && device_desc.product_id() == 0x5007 {
+    fn find_sinolink() -> DeviceInfo {
+        for device in list_devices().unwrap() {
+            if device.vendor_id() == 0x258a && device.product_id() == 0x5007 {
                 return device;
             }
         }
@@ -37,64 +38,44 @@ impl Sinolink<'static> {
     pub fn new(chip_type: &'static Part, power_setting: PowerSetting) -> Self {
         let device = Self::find_sinolink();
 
-        let device_desc = device.device_descriptor().unwrap();
-
         debug!(
             "Bus {:03} Device {:03} ID {:04x}:{:04x}",
             device.bus_number(),
-            device.address(),
-            device_desc.vendor_id(),
-            device_desc.product_id()
+            device.device_address(),
+            device.vendor_id(),
+            device.product_id()
         );
 
-        let mut handle = device.open().unwrap();
+        let handle = device.open().unwrap();
+        for interface in handle.configurations() {
+            debug!("{:?}", interface);
+        }
+
+        handle.set_configuration(1).unwrap();
 
         // can fail, should retry
-        handle.reset().unwrap();
+        // handle.reset().unwrap();
 
         // Fetch base configuration
         // let languages = handle.read_languages(timeout).unwrap();
+        // handle.set_configuration(0).unwrap();
         let active_config = handle.active_configuration().unwrap();
 
-        debug!("Active configuration: {}", active_config);
+        debug!("Active configuration: {}", active_config.attributes());
 
-        let config_desc = device.config_descriptor(0).unwrap();
-
-        let (mut write, mut read) = (None, None);
-
-        for interface in config_desc.interfaces() {
-            for interface_desc in interface.descriptors() {
-                for endpoint_desc in interface_desc.endpoint_descriptors() {
-                    // Create an endpoint container
-                    let e = Endpoint {
-                        config: config_desc.number(),
-                        iface: interface_desc.interface_number(),
-                        setting: interface_desc.setting_number(),
-                        address: endpoint_desc.address(),
-                    };
-
-                    debug!("Endpoint: {:?}", e);
-
-                    // Find the relevant endpoints
-                    match (endpoint_desc.transfer_type(), endpoint_desc.direction()) {
-                        (TransferType::Bulk, Direction::In) => read = Some(e),
-                        (TransferType::Bulk, Direction::Out) => write = Some(e),
-                        (_, _) => continue,
-                    }
-                }
+        for setting in active_config.interface_alt_settings() {
+            debug!("Setting: {:?}", setting); 
+            for endpoint in setting.endpoints() {
+                debug!("Endpoint: {:?}", endpoint); 
             }
         }
 
-        handle.claim_interface(0).unwrap();
-        handle.set_active_configuration(1).unwrap();
-
-        let read_addr = read.unwrap().address;
-        let write_addr = write.unwrap().address;
-
-        debug!("READ & WRITE: {:02x} {:02x}", read_addr, write_addr);
+        let interface = handle.claim_interface(0).unwrap();
+        // handle.set_active_configuration(1).unwrap();
 
         return Self {
             handle: handle,
+            interface: interface,
             chip_type: chip_type,
             power_setting: power_setting,
         };
@@ -125,8 +106,7 @@ impl Sinolink<'static> {
         // 1c0029000447333230 // programmer device serial number = 1C-00-29-00-04-47-33-32-30
         // 313537c0fc00c00000000000000000000000000000000002002202091456000230000000000000
 
-        let mut buf: [u8; 64] = [0; 64];
-        self.read_control(0xc0, 0, 0, 0, &mut buf);
+        let buf = self.read_control(0xc0, 0, 0, 64);
         let firmware_date = Self::hdatodt(&buf[0..6]).and_utc();
         info!("Date: {}", firmware_date.format("%+"));
 
@@ -148,182 +128,156 @@ impl Sinolink<'static> {
     pub fn read_init(&self) {
         self.get_info();
 
-        let mut buf2: [u8; 16] = [
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x04,
-        ];
-        let mut buf: [u8; 1024] = [0; 1024];
-
-        self.read_chip(17, 0, 0, 0x0000, 0x0400, &mut buf);
+        self.read_chip(17, 0, 0, 0x0000, 0x0400);
 
         // seems like external power setting, don't see a difference between v5 and v3.3
         // this command is not sent when external power is used
         let b: [u8; 0] = [];
-        self.write_control(0x40, 18, 1, 0, &b);
+        self.write_control(18, 1, 0, &b);
 
         self.configure_read();
 
-        self.read_chip(17, 0, 0, 0x0000, 0x0400, &mut buf);
+        self.read_chip(17, 0, 0, 0x0000, 0x0400);
 
-        let mut buf_1: [u8; 16] = [0; 16];
-        self.read_control(0xc0, 24, 1, 0, &mut buf_1);
-
-        let mut buf_2: [u8; 2] = [0; 2];
-        self.read_control(0xc0, 21, 1, 0, &mut buf_2);
-
-        let mut buf_3: [u8; 16] = [0; 16];
-        self.read_control(0xc0, 64, 0x0101, 0, &mut buf_3);
+        self.read_control(24, 1, 0, 16);
+        self.read_control(21, 1, 0, 2);
+        self.read_control(64, 0x0101, 0, 16);
         // seems like a status call
         // buf == 00 00 00 00 when chip is successfully connected
         // buf == 09 11 22 00 when chip is not connected
         // or 09 00 00 00
 
-        let mut buf_01: [u8; 0x1024] = [0; 0x1024];
-        self.read_chip(70, 1, 0, 0, 0x10, &mut buf_01);
+        self.read_chip(70, 1, 0, 0, 0x10);
 
-        self.read_chip(68, 1, 1, 0x1209, 0x40, &mut buf);
+        self.read_chip(68, 1, 1, 0x1209, 0x40);
 
-        let mut buf_4: [u8; 5] = [0; 5];
-        self.read_control(0xc0, 22, 1, 0, &mut buf_4);
+        self.read_control(22, 1, 0, 5);
 
-        self.read_chip(68, 1, 1, 0x1200, 0x10, &mut buf2);
+        self.read_chip(68, 1, 1, 0x1200, 0x10);
 
-        self.read_chip(68, 1, 1, 0x1006, 0x04, &mut buf2);
+        self.read_chip(68, 1, 1, 0x1006, 0x04);
 
-        let mut buf_5: [u8; 5] = [0; 5];
-        self.read_control(0xc0, 22, 1, 0, &mut buf_5);
+        self.read_control(22, 1, 0, 5);
 
-        self.read_chip(68, 1, 1, 0x1100, 0x04, &mut buf2);
+        self.read_chip(68, 1, 1, 0x1100, 0x04);
 
-        let mut buf_6: [u8; 5] = [0; 5];
-        self.read_control(0xc0, 22, 1, 0, &mut buf_6);
+        self.read_control(22, 1, 0, 5);
 
-        self.read_chip(68, 1, 1, 0x1000, 0x40, &mut buf);
+        self.read_chip(68, 1, 1, 0x1000, 0x40);
 
-        self.read_chip(68, 1, 1, 0x1040, 0x40, &mut buf);
+        self.read_chip(68, 1, 1, 0x1040, 0x40);
 
-        let mut buf_7: [u8; 5] = [0; 5];
-        self.read_control(0xc0, 22, 1, 0, &mut buf_7);
+        self.read_control(22, 1, 0, 5);
     }
 
     pub fn write_init(&self) {
         self.get_info(); // actully done multiple times (13 times??)
 
-        let mut buf_u1024: [u8; 1024] = [0; 1024];
-        self.read_chip(17, 0, 0, 0x0000, 0x0400, &mut buf_u1024);
+        self.read_chip(17, 0, 0, 0x0000, 0x0400);
 
         // is actually zero length
         let buf_u0: [u8; 0] = [0; 0];
-        self.write_control(0x40, 18, 1, 0, &buf_u0);
+        self.write_control(18, 1, 0, &buf_u0);
 
         self.configure_write();
 
-        self.read_chip(17, 0, 0, 0x0000, 0x0400, &mut buf_u1024);
+        self.read_chip(17, 0, 0, 0x0000, 0x0400);
 
-        let mut buf_u2: [u8; 2] = [0; 2];
-        self.read_control(0xc0, 21, 1, 0, &mut buf_u2);
+        self.read_control(21, 1, 0, 2);
 
-        let mut buf_u4: [u8; 4] = [0; 4];
-        self.read_control(0xc0, 64, 0x0101, 0, &mut buf_u4);
+        self.read_control(64, 0x0101, 0, 4);
         // seems like a status call
         // buf == 00 00 00 00 when chip is successfully connected
         // buf == 09 11 22 00 when chip is not connected
         // or 09 00 00 00
 
-        let mut buf_u16: [u8; 16] = [0; 16];
-        self.read_chip(70, 1, 0, 0, 0x10, &mut buf_u16);
+        self.read_chip(70, 1, 0, 0, 0x10);
 
-        let mut buf_u64: [u8; 64] = [0; 64];
-        self.read_chip(68, 1, 1, 0x1209, 0x40, &mut buf_u64);
+        self.read_chip(68, 1, 1, 0x1209, 0x40);
 
-        let mut buf_u5: [u8; 5] = [0; 5];
-        self.read_control(0xc0, 22, 1, 0, &mut buf_u5);
+        self.read_control(22, 1, 0, 5);
 
-        self.read_chip(68, 1, 1, 0x1200, 0x10, &mut buf_u16);
+        self.read_chip(68, 1, 1, 0x1200, 0x10);
 
-        self.read_chip(68, 1, 1, 0x1100, 0x04, &mut buf_u4);
+        self.read_chip(68, 1, 1, 0x1100, 0x04);
 
-        self.read_control(0xc0, 22, 1, 0, &mut buf_u5);
+        self.read_control(22, 1, 0, 5);
 
-        self.read_chip(69, 1, 1, 0x0000, 0x10, &mut buf_u16);
+        self.read_chip(69, 1, 1, 0x0000, 0x10);
 
-        let buf_w4: [u8; 4] = [0x00, 0x00, 0x00, 0x88];
-        self.write_chip(66, 1, 1, 0x1100, 0x04, &buf_w4);
+        let buf_w4: Vec<u8> = vec![0x00, 0x00, 0x00, 0x88];
+        self.write_chip(66, 1, 1, 0x1100, 0x04, buf_w4);
 
-        self.read_control(0xc0, 22, 1, 0, &mut buf_u5);
+        let buf_u5 = self.read_control(22, 1, 0, 5);
         if buf_u5[0] != 0x00 {
             panic!("woop!");
         }
 
-        let mut buf_w64: [u8; 64] = [0; 64];
+        let mut buf_w64: Vec<u8> = vec![0; 64];
         buf_w64[4] = 0xc0;
         buf_w64[5] = 0x4a;
         buf_w64[6] = 0xa4;
         buf_w64[7] = 0xe0;
         buf_w64[8] = 0x63;
         buf_w64[9] = 0xc0;
-        self.write_chip(66, 1, 1, 0x1000, 0x40, &buf_w64);
+        self.write_chip(66, 1, 1, 0x1000, 0x40, buf_w64);
 
-        self.read_control(0xc0, 22, 1, 0, &mut buf_u5);
+        self.read_control(22, 1, 0, 5);
 
-        let buf_w4: [u8; 4] = [0x0f, 0x00, 0x00, 0x88];
-        self.write_chip(66, 1, 1, 0x1100, 0x04, &buf_w4);
+        let buf_w4: Vec<u8> = vec![0x0f, 0x00, 0x00, 0x88];
+        self.write_chip(66, 1, 1, 0x1100, 0x04, buf_w4);
 
-        self.read_control(0xc0, 22, 1, 0, &mut buf_u5);
+        self.read_control(22, 1, 0, 5);
     }
 
     pub fn read_control(
         &self,
-        request_type: u8,
         request: u8,
         value: u16,
         index: u16,
-        buf: &mut [u8],
-    ) -> usize {
+        length: u16
+    ) -> Vec<u8> {
         debug!(
-            "Read CONTROL: {:02x} {:02} {:04x} {:04x}",
-            request_type, request, value, index
+            "Read CONTROL: {:02} {:04x} {:04x}",
+            request, value, index
         );
-        let result = self
+        let result = block_on(self
             .handle
-            .read_control(
-                request_type,
+            .control_in(ControlIn {
+                control_type: ControlType::Vendor,
+                recipient: Recipient::Device,
                 request,
                 value,
                 index,
-                buf,
-                Duration::new(2, 0),
-            )
-            .unwrap();
-        debug!("RESULT {:02x?}", &buf[0..result]);
+                length,
+            })).into_result().unwrap();
+        debug!("RESULT {:02x?}", &result);
         return result;
     }
 
     pub fn write_control(
         &self,
-        request_type: u8,
         request: u8,
         value: u16,
         index: u16,
-        buf: &[u8],
-    ) -> usize {
+        data: &[u8],
+    ) {
         debug!(
-            "Write CONTROL: {:02x} {:02} {:04x} {:04x}",
-            request_type, request, value, index
+            "Write CONTROL: {:02} {:04x} {:04x}",
+            request, value, index
         );
-        debug!("COMMAND {:02x?}", buf);
-        let result = self
-            .handle
-            .write_control(
-                request_type,
+        debug!("COMMAND {:02x?}", data);
+        let result = block_on(self
+            .interface
+            .control_out(ControlOut {
+                control_type: ControlType::Vendor,
+                recipient: Recipient::Device,
                 request,
                 value,
                 index,
-                buf,
-                Duration::new(2, 0),
-            )
-            .unwrap();
-        return result;
+                data: data,
+            }));
+        result.into_result().unwrap();
     }
 
     pub fn read_chip(
@@ -333,8 +287,7 @@ impl Sinolink<'static> {
         mode2: u8,
         addr: u16,
         length: u16,
-        buf: &mut [u8],
-    ) {
+    ) -> Vec<u8> {
         debug!(
             "Read CHIP: {:02} {:02x} {:02x} {:04x} {:04x}",
             request, mode1, mode2, addr, length
@@ -358,10 +311,8 @@ impl Sinolink<'static> {
             (length >> 8) as u8,
         ];
 
-        self.write_control(0x40, request, 0, 0, &write_buf);
-        self.handle
-            .read_bulk(0x81, buf, Duration::new(2, 0))
-            .unwrap();
+        self.write_control(request, 0, 0, &write_buf);
+        return block_on(self.interface.bulk_in(0x81, RequestBuffer::new(length.into()))).into_result().unwrap();
     }
 
     pub fn write_chip(
@@ -371,7 +322,7 @@ impl Sinolink<'static> {
         mode2: u8,
         addr: u16,
         length: u16,
-        buf: &[u8],
+        buf: Vec<u8>,
     ) {
         debug!(
             "Write CHIP: {:02} {:02x} {:02x} {:04x} {:04x}",
@@ -396,11 +347,9 @@ impl Sinolink<'static> {
             (length >> 8) as u8,
         ];
 
-        self.write_control(0x40, request, 0, 0, &write_buf);
+        self.write_control(request, 0, 0, &write_buf);
         debug!("WRITING: {:?}", buf);
-        self.handle
-            .write_bulk(0x02, buf, Duration::new(2, 0))
-            .unwrap();
+        block_on(self.interface.bulk_out(0x02, buf)).into_result().unwrap();
     }
 
     pub fn configure_read(&self) {
@@ -410,9 +359,10 @@ impl Sinolink<'static> {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x04,
         ];
-        self.write_control(0x40, 16, 0, 0, &buf);
+        self.write_control(16, 0, 0, &buf);
 
-        let mut config: [u8; 1024] = hex!("
+        let mut config = vec![0; 1024];
+        config.copy_from_slice(&hex!("
             7887
             bd // checksum???
             07 // Chip Type
@@ -430,7 +380,7 @@ impl Sinolink<'static> {
             0000000000040000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000012000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
             230308203607 // current date 2023-03-08 20:36:07
             05500000000000000000
-        ");
+        "));
 
         config[3] = chip_type.chip_type;
 
@@ -456,9 +406,7 @@ impl Sinolink<'static> {
             .collect();
         config[1008..1008 + 6].clone_from_slice(&date_bytes);
 
-        self.handle
-            .write_bulk(0x02, &config, Duration::new(2, 0))
-            .unwrap();
+        block_on(self.interface.bulk_out(0x02, config)).into_result().unwrap();
     }
 
     pub fn configure_write(&self) {
@@ -468,9 +416,11 @@ impl Sinolink<'static> {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x04,
         ];
-        self.write_control(0x40, 16, 0, 0, &buf);
+        self.write_control(0x40, 16, 0, &buf);
 
-        let mut config: [u8; 1024] = hex!("
+        let mut config: Vec<u8> = vec![0; 1024];
+
+        config.copy_from_slice(&hex!("
             7887
             7a
             07
@@ -488,7 +438,7 @@ impl Sinolink<'static> {
             0000000000040000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000012000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
             240115143216
             05500000000000000000
-        ");
+        "));
 
         config[3] = chip_type.chip_type;
 
@@ -514,36 +464,34 @@ impl Sinolink<'static> {
             .collect();
         config[1008..1008 + 6].clone_from_slice(&date_bytes);
 
-        self.handle
-            .write_bulk(0x02, &config, Duration::new(2, 0))
-            .unwrap();
+        block_on(self.interface
+            .bulk_out(0x02, config)).into_result().unwrap();
     }
 
     pub fn read_flash(&self) -> Vec<u8> {
         let mut contents = vec![0; self.chip_type.flash_size];
         const PAGE_SIZE: usize = 64;
         for addr in (0..self.chip_type.flash_size).step_by(PAGE_SIZE) {
-            let mut buff: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
-            self.read_chip(68, 0x01, 0x00, addr as u16, PAGE_SIZE as u16, &mut buff);
-            contents[addr..(addr + PAGE_SIZE)].clone_from_slice(&buff[0..PAGE_SIZE]);
+            let buf = self.read_chip(68, 0x01, 0x00, addr as u16, PAGE_SIZE as u16);
+            contents[addr..(addr + PAGE_SIZE)].clone_from_slice(&buf[0..PAGE_SIZE]);
         }
 
         return contents;
     }
 
-    pub fn write_flash(&self, firmware: &[u8]) -> Result<()> {
+    pub fn write_flash(&self, firmware: &[u8]) -> Result<(), Error> {
         const PAGE_SIZE: usize = 1024;
         for addr in (0..self.chip_type.flash_size).step_by(PAGE_SIZE) {
+            let data = Vec::from(&firmware[addr..(addr + PAGE_SIZE)]);
             self.write_chip(
                 66,
                 0x01,
                 0x00,
                 addr as u16,
                 PAGE_SIZE as u16,
-                &firmware[addr..(addr + PAGE_SIZE)],
+                data,
             );
-            let mut buf_5: [u8; 5] = [0; 5];
-            self.read_control(0xc0, 22, 0, 0, &mut buf_5);
+            let buf_5 = self.read_control(22, 0, 0, 5);
             assert!(buf_5[0] == 0x00);
         }
         Ok(())
