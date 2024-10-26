@@ -6,7 +6,7 @@ const HEADER_SIZE: usize = 17;
 pub struct GPTDecryptor {}
 
 impl GPTDecryptor {
-    pub fn decrypt<'a>(mut input: impl Iterator<Item = u8>, keys: KeyPair) -> Vec<u8> {
+    pub fn decrypt(mut input: impl Iterator<Item = u8>, keys: KeyPair) -> Vec<u8> {
         let header: Vec<u8> = input.by_ref().take(HEADER_SIZE).collect();
         assert_eq!(header, b"[Version]\r\n3.00\r\n");
 
@@ -15,7 +15,7 @@ impl GPTDecryptor {
         for x in input {
             let mut num: u16 = x as u16;
             if num < keys.0 as u16 {
-                num = num + 256;
+                num += 256;
             }
             let partial = (num - keys.0 as u16) as u8;
             result.push(partial ^ keys.1);
@@ -23,7 +23,7 @@ impl GPTDecryptor {
 
         assert_eq!(&result[HEADER_SIZE..(HEADER_SIZE + 10)], b"[ChipName]");
 
-        return result;
+        result
     }
 
     pub fn keypair(filename: &str) -> KeyPair {
@@ -31,10 +31,10 @@ impl GPTDecryptor {
         let len = stem.len();
         let key1 = Self::parse_key(&filename[len - 2..len]);
         let key2 = Self::parse_key(&filename[len - 4..len - 2]);
-        return (key1, key2);
+        (key1, key2)
     }
 
     fn parse_key(str: &str) -> u8 {
-        return u8::from_str_radix(str, 16).unwrap();
+        u8::from_str_radix(str, 16).unwrap()
     }
 }

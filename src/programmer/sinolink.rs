@@ -3,102 +3,129 @@ use super::*;
 use chrono::*;
 use futures_lite::future::block_on;
 use hex_literal::*;
-use nusb::{list_devices, transfer::{ControlIn, ControlOut, ControlType, Direction, EndpointType, Recipient, RequestBuffer}, Device, DeviceInfo, Error, Interface};
+use nusb::{
+    self,
+    descriptors::ActiveConfigurationError,
+    list_devices,
+    transfer::{Control, ControlType, Recipient, RequestBuffer, TransferError},
+    DeviceInfo, Interface,
+};
 use std::time::Duration;
+use thiserror::Error;
 
 use log::{debug, info};
 
-/// Internal endpoint representations
-#[derive(Debug, PartialEq, Clone)]
-struct Endpoint {
-    config: u8,
-    iface: u8,
-    setting: u8,
-    address: u8,
-}
-
 pub struct Sinolink<'a> {
-    handle: Device,
     interface: Interface,
     chip_type: &'a Part,
     power_setting: PowerSetting,
 }
 
+#[derive(Debug, Error, PartialEq)]
+pub enum DeviceError {
+    #[error("Device not found")]
+    DeviceNotFound,
+    #[error("Configuration not found")]
+    ConfigurationNotFound,
+    #[error("Interface not found")]
+    InterfaceNotFound,
+    #[error("Active configuration error")]
+    ConfigurationError(ActiveConfigurationError),
+}
+
+#[derive(Debug, Error, PartialEq)]
+pub enum IOError {
+    #[error("Write error")]
+    WriteControlError(TransferError),
+    #[error("Read error")]
+    ReadControlError(TransferError),
+    #[error("Write bulk error")]
+    WriteBulkError(TransferError),
+    #[error("Read bulk error")]
+    ReadBulkError(TransferError),
+}
+
+const SINOLINK_DEVICE_ID: u16 = 0x258a;
+const SINOLINK_VENDOR_ID: u16 = 0x5007;
+const SINOLINK_CONFIGURATION_VALUE: u8 = 1;
+const SINOLINK_INTERFACE_NUMBER: u8 = 0;
+
+const TIMEOUT: Duration = Duration::from_secs(1);
+
+fn bcdtoi(x: u8) -> u8 {
+    let s = format!("{:02x}", x);
+    s.parse::<u8>().unwrap()
+}
+
+fn bcdtodt(src: &[u8]) -> NaiveDateTime {
+    println!("{:04x?}", src);
+    let s: Vec<String> = src.iter().map(|x| format!("{:02x}", x)).collect();
+    let datestring = s.join("");
+    NaiveDateTime::parse_from_str(&datestring, "%y%m%d%H%M%S").unwrap()
+}
+
 impl Sinolink<'static> {
-    fn find_sinolink() -> DeviceInfo {
+    fn find_sinolink() -> Result<DeviceInfo, DeviceError> {
         for device in list_devices().unwrap() {
-            if device.vendor_id() == 0x258a && device.product_id() == 0x5007 {
-                return device;
+            if device.vendor_id() == SINOLINK_DEVICE_ID && device.product_id() == SINOLINK_VENDOR_ID
+            {
+                return Ok(device);
             }
         }
-
-        panic!("nope");
+        Err(DeviceError::DeviceNotFound)
     }
 
-    pub fn new(chip_type: &'static Part, power_setting: PowerSetting) -> Self {
-        let device = Self::find_sinolink();
+    pub fn new(chip_type: &'static Part, power_setting: PowerSetting) -> Result<Self, DeviceError> {
+        let device_info = Self::find_sinolink()?;
 
         debug!(
             "Bus {:03} Device {:03} ID {:04x}:{:04x}",
-            device.bus_number(),
-            device.device_address(),
-            device.vendor_id(),
-            device.product_id()
+            device_info.bus_number(),
+            device_info.device_address(),
+            device_info.vendor_id(),
+            device_info.product_id()
         );
 
-        let handle = device.open().unwrap();
-        for interface in handle.configurations() {
+        let device = device_info.open().unwrap();
+
+        for interface in device.configurations() {
             debug!("{:?}", interface);
         }
 
-        handle.set_configuration(1).unwrap();
-
-        // can fail, should retry
-        // handle.reset().unwrap();
-
-        // Fetch base configuration
-        // let languages = handle.read_languages(timeout).unwrap();
-        // handle.set_configuration(0).unwrap();
-        let active_config = handle.active_configuration().unwrap();
-
-        debug!("Active configuration: {}", active_config.attributes());
-
-        for setting in active_config.interface_alt_settings() {
-            debug!("Setting: {:?}", setting); 
-            for endpoint in setting.endpoints() {
-                debug!("Endpoint: {:?}", endpoint); 
-            }
-        }
-
-        let interface = handle.claim_interface(0).unwrap();
-        // handle.set_active_configuration(1).unwrap();
-
-        return Self {
-            handle: handle,
-            interface: interface,
-            chip_type: chip_type,
-            power_setting: power_setting,
+        let Some(config) = device
+            .configurations()
+            .find(|c| c.configuration_value() == SINOLINK_CONFIGURATION_VALUE)
+        else {
+            return Err(DeviceError::ConfigurationNotFound);
         };
+
+        device
+            .set_configuration(config.configuration_value())
+            .unwrap();
+
+        let config = device
+            .active_configuration()
+            .map_err(DeviceError::ConfigurationError)?;
+
+        let Some(interface) = config
+            .interfaces()
+            .find(|i| i.interface_number() == SINOLINK_INTERFACE_NUMBER)
+        else {
+            return Err(DeviceError::InterfaceNotFound);
+        };
+
+        let interface = device
+            .claim_interface(interface.interface_number())
+            .unwrap();
+
+        Ok(Self {
+            interface,
+            chip_type,
+            power_setting,
+        })
     }
 
-    fn hdtoi(x: u8) -> u8 {
-        let s = format!("{:02x}", x);
-        return u8::from_str_radix(&s, 10).unwrap();
-    }
-
-    // fn hdatoi(src: &[u8], dst: &mut [u8]) {
-    //     for i in 0..src.len() {
-    //         dst[i] = Self::hdtoi(src[i]);
-    //     }
-    // }
-
-    fn hdatodt(src: &[u8]) -> NaiveDateTime {
-        let s: Vec<String> = src.into_iter().map(|x| format!("{:02x}", x)).collect();
-        let datestring = s.join("");
-        return NaiveDateTime::parse_from_str(&datestring, "%y%m%d%H%M%S").unwrap();
-    }
-
-    fn get_info(&self) {
+    fn get_info(&self) -> Result<(), IOError> {
         // dump example:
         // 220602144418 // version date - 2022-06-02 14:44:18
         // 0250 // version - 2.50
@@ -106,109 +133,106 @@ impl Sinolink<'static> {
         // 1c0029000447333230 // programmer device serial number = 1C-00-29-00-04-47-33-32-30
         // 313537c0fc00c00000000000000000000000000000000002002202091456000230000000000000
 
-        let buf = self.read_control(0xc0, 0, 0, 64);
-        let firmware_date = Self::hdatodt(&buf[0..6]).and_utc();
+        let buf = self.read_control(0, 0, 0, 64)?;
+        let firmware_date = bcdtodt(&buf[0..6]).and_utc();
         info!("Date: {}", firmware_date.format("%+"));
 
-        let version_major: u8 = Self::hdtoi(buf[6]);
-        let version_minor: u8 = Self::hdtoi(buf[7]);
+        let version_major: u8 = bcdtoi(buf[6]);
+        let version_minor: u8 = bcdtoi(buf[7]);
         info!("Version: {}.{}", version_major, version_minor);
 
         // unknown [8..16]
 
-        let serial_chunks: Vec<String> = buf[16..25]
-            .into_iter()
-            .map(|x| format!("{:02x}", x))
-            .collect();
+        let serial_chunks: Vec<String> = buf[16..25].iter().map(|x| format!("{:02x}", x)).collect();
         info!("Serial: {}", serial_chunks.join("-"));
 
         // unknown [25..64]
+        Ok(())
     }
 
-    pub fn read_init(&self) {
-        self.get_info();
+    pub fn read_init(&self) -> Result<(), IOError> {
+        self.get_info()?;
 
-        self.read_chip(17, 0, 0, 0x0000, 0x0400);
+        self.read_chip(17, 0, 0, 0x0000, 0x0400)?;
 
         // seems like external power setting, don't see a difference between v5 and v3.3
         // this command is not sent when external power is used
-        let b: [u8; 0] = [];
-        self.write_control(18, 1, 0, &b);
+        self.write_control(18, 1, 0, &[])?;
 
-        self.configure_read();
+        self.configure_read()?;
 
-        self.read_chip(17, 0, 0, 0x0000, 0x0400);
+        self.read_chip(17, 0, 0, 0x0000, 0x0400)?;
 
-        self.read_control(24, 1, 0, 16);
-        self.read_control(21, 1, 0, 2);
-        self.read_control(64, 0x0101, 0, 16);
+        self.read_control(24, 1, 0, 16)?;
+        self.read_control(21, 1, 0, 2)?;
+        self.read_control(64, 0x0101, 0, 16)?;
         // seems like a status call
         // buf == 00 00 00 00 when chip is successfully connected
         // buf == 09 11 22 00 when chip is not connected
         // or 09 00 00 00
 
-        self.read_chip(70, 1, 0, 0, 0x10);
+        self.read_chip(70, 1, 0, 0, 0x10)?;
 
-        self.read_chip(68, 1, 1, 0x1209, 0x40);
+        self.read_chip(68, 1, 1, 0x1209, 0x40)?;
 
-        self.read_control(22, 1, 0, 5);
+        self.read_control(22, 1, 0, 5)?;
 
-        self.read_chip(68, 1, 1, 0x1200, 0x10);
+        self.read_chip(68, 1, 1, 0x1200, 0x10)?;
 
-        self.read_chip(68, 1, 1, 0x1006, 0x04);
+        self.read_chip(68, 1, 1, 0x1006, 0x04)?;
 
-        self.read_control(22, 1, 0, 5);
+        self.read_control(22, 1, 0, 5)?;
 
-        self.read_chip(68, 1, 1, 0x1100, 0x04);
+        self.read_chip(68, 1, 1, 0x1100, 0x04)?;
 
-        self.read_control(22, 1, 0, 5);
+        self.read_control(22, 1, 0, 5)?;
 
-        self.read_chip(68, 1, 1, 0x1000, 0x40);
+        self.read_chip(68, 1, 1, 0x1000, 0x40)?;
 
-        self.read_chip(68, 1, 1, 0x1040, 0x40);
+        self.read_chip(68, 1, 1, 0x1040, 0x40)?;
 
-        self.read_control(22, 1, 0, 5);
+        self.read_control(22, 1, 0, 5)?;
+
+        Ok(())
     }
 
-    pub fn write_init(&self) {
-        self.get_info(); // actully done multiple times (13 times??)
+    pub fn write_init(&self) -> Result<(), IOError> {
+        self.get_info()?; // actully done multiple times (13 times??)
 
-        self.read_chip(17, 0, 0, 0x0000, 0x0400);
+        self.read_chip(17, 0, 0, 0x0000, 0x0400)?;
 
-        // is actually zero length
-        let buf_u0: [u8; 0] = [0; 0];
-        self.write_control(18, 1, 0, &buf_u0);
+        self.write_control(18, 1, 0, &[])?;
 
-        self.configure_write();
+        self.configure_write()?;
 
-        self.read_chip(17, 0, 0, 0x0000, 0x0400);
+        self.read_chip(17, 0, 0, 0x0000, 0x0400)?;
 
-        self.read_control(21, 1, 0, 2);
+        self.read_control(21, 1, 0, 2)?;
 
-        self.read_control(64, 0x0101, 0, 4);
+        self.read_control(64, 0x0101, 0, 4)?;
         // seems like a status call
         // buf == 00 00 00 00 when chip is successfully connected
         // buf == 09 11 22 00 when chip is not connected
         // or 09 00 00 00
 
-        self.read_chip(70, 1, 0, 0, 0x10);
+        self.read_chip(70, 1, 0, 0, 0x10)?;
 
-        self.read_chip(68, 1, 1, 0x1209, 0x40);
+        self.read_chip(68, 1, 1, 0x1209, 0x40)?;
 
-        self.read_control(22, 1, 0, 5);
+        self.read_control(22, 1, 0, 5)?;
 
-        self.read_chip(68, 1, 1, 0x1200, 0x10);
+        self.read_chip(68, 1, 1, 0x1200, 0x10)?;
 
-        self.read_chip(68, 1, 1, 0x1100, 0x04);
+        self.read_chip(68, 1, 1, 0x1100, 0x04)?;
 
-        self.read_control(22, 1, 0, 5);
+        self.read_control(22, 1, 0, 5)?;
 
-        self.read_chip(69, 1, 1, 0x0000, 0x10);
+        self.read_chip(69, 1, 1, 0x0000, 0x10)?;
 
         let buf_w4: Vec<u8> = vec![0x00, 0x00, 0x00, 0x88];
-        self.write_chip(66, 1, 1, 0x1100, 0x04, buf_w4);
+        self.write_chip(66, 1, 1, 0x1100, 0x04, buf_w4)?;
 
-        let buf_u5 = self.read_control(22, 1, 0, 5);
+        let buf_u5 = self.read_control(22, 1, 0, 5)?;
         if buf_u5[0] != 0x00 {
             panic!("woop!");
         }
@@ -220,14 +244,16 @@ impl Sinolink<'static> {
         buf_w64[7] = 0xe0;
         buf_w64[8] = 0x63;
         buf_w64[9] = 0xc0;
-        self.write_chip(66, 1, 1, 0x1000, 0x40, buf_w64);
+        self.write_chip(66, 1, 1, 0x1000, 0x40, buf_w64)?;
 
-        self.read_control(22, 1, 0, 5);
+        self.read_control(22, 1, 0, 5)?;
 
         let buf_w4: Vec<u8> = vec![0x0f, 0x00, 0x00, 0x88];
-        self.write_chip(66, 1, 1, 0x1100, 0x04, buf_w4);
+        self.write_chip(66, 1, 1, 0x1100, 0x04, buf_w4)?;
 
-        self.read_control(22, 1, 0, 5);
+        self.read_control(22, 1, 0, 5)?;
+
+        Ok(())
     }
 
     pub fn read_control(
@@ -235,24 +261,24 @@ impl Sinolink<'static> {
         request: u8,
         value: u16,
         index: u16,
-        length: u16
-    ) -> Vec<u8> {
-        debug!(
-            "Read CONTROL: {:02} {:04x} {:04x}",
-            request, value, index
-        );
-        let result = block_on(self
-            .handle
-            .control_in(ControlIn {
-                control_type: ControlType::Vendor,
-                recipient: Recipient::Device,
-                request,
-                value,
-                index,
-                length,
-            })).into_result().unwrap();
-        debug!("RESULT {:02x?}", &result);
-        return result;
+        length: u16,
+    ) -> Result<Vec<u8>, IOError> {
+        debug!("Read CONTROL: {:02} {:04x} {:04x}", request, value, index);
+        let mut data = vec![0; length as usize];
+        self.interface
+            .control_in_blocking(
+                Control {
+                    control_type: ControlType::Vendor,
+                    recipient: Recipient::Device,
+                    request,
+                    value,
+                    index,
+                },
+                &mut data,
+                TIMEOUT,
+            )
+            .map(|_| data)
+            .map_err(IOError::ReadControlError)
     }
 
     pub fn write_control(
@@ -261,23 +287,23 @@ impl Sinolink<'static> {
         value: u16,
         index: u16,
         data: &[u8],
-    ) {
-        debug!(
-            "Write CONTROL: {:02} {:04x} {:04x}",
-            request, value, index
-        );
+    ) -> Result<(), IOError> {
+        debug!("Write CONTROL: {:02} {:04x} {:04x}", request, value, index);
         debug!("COMMAND {:02x?}", data);
-        let result = block_on(self
-            .interface
-            .control_out(ControlOut {
-                control_type: ControlType::Vendor,
-                recipient: Recipient::Device,
-                request,
-                value,
-                index,
-                data: data,
-            }));
-        result.into_result().unwrap();
+        self.interface
+            .control_out_blocking(
+                Control {
+                    control_type: ControlType::Vendor,
+                    recipient: Recipient::Device,
+                    request,
+                    value,
+                    index,
+                },
+                data,
+                TIMEOUT,
+            )
+            .map(|_| ())
+            .map_err(IOError::WriteControlError)
     }
 
     pub fn read_chip(
@@ -287,7 +313,7 @@ impl Sinolink<'static> {
         mode2: u8,
         addr: u16,
         length: u16,
-    ) -> Vec<u8> {
+    ) -> Result<Vec<u8>, IOError> {
         debug!(
             "Read CHIP: {:02} {:02x} {:02x} {:04x} {:04x}",
             request, mode1, mode2, addr, length
@@ -311,8 +337,13 @@ impl Sinolink<'static> {
             (length >> 8) as u8,
         ];
 
-        self.write_control(request, 0, 0, &write_buf);
-        return block_on(self.interface.bulk_in(0x81, RequestBuffer::new(length.into()))).into_result().unwrap();
+        self.write_control(request, 0, 0, &write_buf)?;
+        let future = self
+            .interface
+            .bulk_in(0x81, RequestBuffer::new(length.into()));
+        block_on(future)
+            .into_result()
+            .map_err(IOError::ReadBulkError)
     }
 
     pub fn write_chip(
@@ -323,7 +354,7 @@ impl Sinolink<'static> {
         addr: u16,
         length: u16,
         buf: Vec<u8>,
-    ) {
+    ) -> Result<(), IOError> {
         debug!(
             "Write CHIP: {:02} {:02x} {:02x} {:04x} {:04x}",
             request, mode1, mode2, addr, length
@@ -347,19 +378,23 @@ impl Sinolink<'static> {
             (length >> 8) as u8,
         ];
 
-        self.write_control(request, 0, 0, &write_buf);
+        self.write_control(request, 0, 0, &write_buf)?;
         debug!("WRITING: {:?}", buf);
-        block_on(self.interface.bulk_out(0x02, buf)).into_result().unwrap();
+        let future = self.interface.bulk_out(0x02, buf);
+        block_on(future)
+            .into_result()
+            .map(|_| ())
+            .map_err(IOError::WriteBulkError)
     }
 
-    pub fn configure_read(&self) {
+    pub fn configure_read(&self) -> Result<(), IOError> {
         let chip_type = self.chip_type;
         debug!("Sending config payload");
         let buf: [u8; 16] = [
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x04,
         ];
-        self.write_control(16, 0, 0, &buf);
+        self.write_control(16, 0, 0, &buf)?;
 
         let mut config = vec![0; 1024];
         config.copy_from_slice(&hex!("
@@ -395,7 +430,7 @@ impl Sinolink<'static> {
 
         config[181..181 + 5].clone_from_slice(&chip_type.part_number);
 
-        let dt = Utc.with_ymd_and_hms(2023, 03, 08, 20, 36, 07).unwrap();
+        let dt = Utc.with_ymd_and_hms(2023, 3, 8, 20, 36, 7).unwrap();
         let dt_string = dt.format("%y%m%d%H%M%S").to_string();
         let date_bytes: Vec<u8> = dt_string
             .chars()
@@ -406,17 +441,21 @@ impl Sinolink<'static> {
             .collect();
         config[1008..1008 + 6].clone_from_slice(&date_bytes);
 
-        block_on(self.interface.bulk_out(0x02, config)).into_result().unwrap();
+        let future = self.interface.bulk_out(0x02, config);
+        block_on(future)
+            .into_result()
+            .map(|_| ())
+            .map_err(IOError::WriteBulkError)
     }
 
-    pub fn configure_write(&self) {
+    pub fn configure_write(&self) -> Result<(), IOError> {
         let chip_type = self.chip_type;
         debug!("Sending config payload");
         let buf: [u8; 16] = [
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x04,
         ];
-        self.write_control(0x40, 16, 0, &buf);
+        self.write_control(0x40, 16, 0, &buf)?;
 
         let mut config: Vec<u8> = vec![0; 1024];
 
@@ -453,7 +492,7 @@ impl Sinolink<'static> {
 
         config[181..181 + 5].clone_from_slice(&chip_type.part_number);
 
-        let dt = Utc.with_ymd_and_hms(2023, 03, 08, 20, 36, 07).unwrap();
+        let dt = Utc.with_ymd_and_hms(2023, 3, 8, 20, 36, 7).unwrap();
         let dt_string = dt.format("%y%m%d%H%M%S").to_string();
         let date_bytes: Vec<u8> = dt_string
             .chars()
@@ -464,34 +503,30 @@ impl Sinolink<'static> {
             .collect();
         config[1008..1008 + 6].clone_from_slice(&date_bytes);
 
-        block_on(self.interface
-            .bulk_out(0x02, config)).into_result().unwrap();
+        let future = self.interface.bulk_out(0x02, config);
+        block_on(future)
+            .into_result()
+            .map(|_| ())
+            .map_err(IOError::WriteBulkError)
     }
 
-    pub fn read_flash(&self) -> Vec<u8> {
+    pub fn read_flash(&self) -> Result<Vec<u8>, IOError> {
         let mut contents = vec![0; self.chip_type.flash_size];
         const PAGE_SIZE: usize = 64;
         for addr in (0..self.chip_type.flash_size).step_by(PAGE_SIZE) {
-            let buf = self.read_chip(68, 0x01, 0x00, addr as u16, PAGE_SIZE as u16);
+            let buf = self.read_chip(68, 0x01, 0x00, addr as u16, PAGE_SIZE as u16)?;
             contents[addr..(addr + PAGE_SIZE)].clone_from_slice(&buf[0..PAGE_SIZE]);
         }
 
-        return contents;
+        Ok(contents)
     }
 
-    pub fn write_flash(&self, firmware: &[u8]) -> Result<(), Error> {
+    pub fn write_flash(&self, firmware: &[u8]) -> Result<(), IOError> {
         const PAGE_SIZE: usize = 1024;
         for addr in (0..self.chip_type.flash_size).step_by(PAGE_SIZE) {
             let data = Vec::from(&firmware[addr..(addr + PAGE_SIZE)]);
-            self.write_chip(
-                66,
-                0x01,
-                0x00,
-                addr as u16,
-                PAGE_SIZE as u16,
-                data,
-            );
-            let buf_5 = self.read_control(22, 0, 0, 5);
+            self.write_chip(66, 0x01, 0x00, addr as u16, PAGE_SIZE as u16, data)?;
+            let buf_5 = self.read_control(22, 0, 0, 5)?;
             assert!(buf_5[0] == 0x00);
         }
         Ok(())
