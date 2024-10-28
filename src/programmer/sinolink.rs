@@ -8,9 +8,9 @@ use nusb::{
     descriptors::ActiveConfigurationError,
     list_devices,
     transfer::{Control, ControlType, Recipient, RequestBuffer, TransferError},
-    DeviceInfo, Interface,
+    DeviceInfo, Error, Interface,
 };
-use std::time::Duration;
+use std::{thread::sleep, time::Duration};
 use thiserror::Error;
 
 use log::{debug, info};
@@ -21,7 +21,7 @@ pub struct Sinolink<'a> {
     power_setting: PowerSetting,
 }
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub enum DeviceError {
     #[error("Device not found")]
     DeviceNotFound,
@@ -31,6 +31,8 @@ pub enum DeviceError {
     InterfaceNotFound,
     #[error("Active configuration error")]
     ConfigurationError(ActiveConfigurationError),
+    #[error("Setup error")]
+    SetupError(Error),
 }
 
 #[derive(Debug, Error, PartialEq)]
@@ -76,17 +78,25 @@ impl Sinolink<'static> {
     }
 
     pub fn new(chip_type: &'static Part, power_setting: PowerSetting) -> Result<Self, DeviceError> {
-        let device_info = Self::find_sinolink()?;
+        let device_info_temp = Self::find_sinolink()?;
 
         debug!(
             "Bus {:03} Device {:03} ID {:04x}:{:04x}",
-            device_info.bus_number(),
-            device_info.device_address(),
-            device_info.vendor_id(),
-            device_info.product_id()
+            device_info_temp.bus_number(),
+            device_info_temp.device_address(),
+            device_info_temp.vendor_id(),
+            device_info_temp.product_id()
         );
 
-        let device = device_info.open().unwrap();
+        let device_temp = device_info_temp.open().map_err(DeviceError::SetupError)?;
+        debug!("Resetting device");
+        device_temp.reset().map_err(DeviceError::SetupError)?;
+
+        // Wait for device to be reeunmerated
+        sleep(Duration::from_secs(1));
+
+        let device_info = Self::find_sinolink()?;
+        let device = device_info.open().map_err(DeviceError::SetupError)?;
 
         for interface in device.configurations() {
             debug!("{:?}", interface);
@@ -101,7 +111,7 @@ impl Sinolink<'static> {
 
         device
             .set_configuration(config.configuration_value())
-            .unwrap();
+            .map_err(DeviceError::SetupError)?;
 
         let config = device
             .active_configuration()
@@ -116,7 +126,7 @@ impl Sinolink<'static> {
 
         let interface = device
             .claim_interface(interface.interface_number())
-            .unwrap();
+            .map_err(DeviceError::SetupError)?;
 
         Ok(Self {
             interface,
