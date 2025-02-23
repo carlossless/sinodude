@@ -36,9 +36,6 @@ jobs:
             ~/.cargo/registry
             ./target
           key: test-cargo-registry
-      - name: Install and configure dependencies
-        run: |
-          sudo apt-get install -qq libusb-1.0.0-dev
       - name: Run tests
         run: cargo test --verbose
 
@@ -68,13 +65,6 @@ jobs:
             ~/.cargo/registry
             ./target
           key: build-cargo-registry-${{matrix.TARGET}}
-      - name: Install and configure dependencies
-        run: |
-          # dependencies are only needed on ubuntu as that's the only place where
-          # we make cross-compilation
-          if [[ $OS =~ ^ubuntu.*$ ]]; then
-            sudo apt-get install -qq libusb-1.0-0-dev
-          fi
       - name: Install rust target
         run: rustup target add $TARGET
       - name: Run build
@@ -102,7 +92,7 @@ jobs:
           path: |
             ./artifacts
 
-  deploy:
+  release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest

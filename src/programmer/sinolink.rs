@@ -78,40 +78,40 @@ impl Sinolink<'static> {
     }
 
     pub fn new(chip_type: &'static Part, power_setting: PowerSetting) -> Result<Self, DeviceError> {
-        let device_info_temp = Self::find_sinolink()?;
+        // let device_info_temp = Self::find_sinolink()?;
 
-        debug!(
-            "Bus {:03} Device {:03} ID {:04x}:{:04x}",
-            device_info_temp.bus_number(),
-            device_info_temp.device_address(),
-            device_info_temp.vendor_id(),
-            device_info_temp.product_id()
-        );
+        // debug!(
+        //     "Bus {:03} Device {:03} ID {:04x}:{:04x}",
+        //     device_info_temp.bus_id(),
+        //     device_info_temp.device_address(),
+        //     device_info_temp.vendor_id(),
+        //     device_info_temp.product_id()
+        // );
 
-        let device_temp = device_info_temp.open().map_err(DeviceError::SetupError)?;
-        debug!("Resetting device");
-        device_temp.reset().map_err(DeviceError::SetupError)?;
+        // let device_temp = device_info_temp.open().map_err(DeviceError::SetupError)?;
+        // debug!("Resetting device");
+        // device_temp.reset().map_err(DeviceError::SetupError)?;
 
-        // Wait for device to be reeunmerated
-        sleep(Duration::from_secs(1));
+        // // Wait for device to be reeunmerated
+        // sleep(Duration::from_secs(3));
 
         let device_info = Self::find_sinolink()?;
         let device = device_info.open().map_err(DeviceError::SetupError)?;
 
-        for interface in device.configurations() {
-            debug!("{:?}", interface);
-        }
+        // for interface in device.configurations() {
+        //     debug!("{:?}", interface);
+        // }
 
-        let Some(config) = device
-            .configurations()
-            .find(|c| c.configuration_value() == SINOLINK_CONFIGURATION_VALUE)
-        else {
-            return Err(DeviceError::ConfigurationNotFound);
-        };
+        // let Some(config) = device
+        //     .configurations()
+        //     .find(|c| c.configuration_value() == SINOLINK_CONFIGURATION_VALUE)
+        // else {
+        //     return Err(DeviceError::ConfigurationNotFound);
+        // };
 
-        device
-            .set_configuration(config.configuration_value())
-            .map_err(DeviceError::SetupError)?;
+        // device
+        //     .set_configuration(config.configuration_value())
+        //     .map_err(DeviceError::SetupError)?;
 
         let config = device
             .active_configuration()
