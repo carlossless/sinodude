@@ -98,9 +98,15 @@ impl Sinolink<'static> {
         let device_info = Self::find_sinolink()?;
         let device = device_info.open().map_err(DeviceError::SetupError)?;
 
-        // for interface in device.configurations() {
-        //     debug!("{:?}", interface);
-        // }
+        for interface in device.configurations() {
+            debug!("{:?}", interface);
+        }
+
+        let config = device.configurations()
+            .find(|c| c.configuration_value() == SINOLINK_CONFIGURATION_VALUE)
+            .ok_or(DeviceError::ConfigurationNotFound)?;
+
+        device.set_configuration(SINOLINK_CONFIGURATION_VALUE).unwrap();
 
         // let Some(config) = device
         //     .configurations()
@@ -112,6 +118,20 @@ impl Sinolink<'static> {
         // device
         //     .set_configuration(config.configuration_value())
         //     .map_err(DeviceError::SetupError)?;
+
+        let config = device
+            .active_configuration();
+
+        match config {
+            Ok(config) => {
+                if config.configuration_value() != SINOLINK_CONFIGURATION_VALUE {
+                    device.set_configuration(SINOLINK_CONFIGURATION_VALUE).map_err(DeviceError::SetupError)?;
+                }
+            }
+            Err(e) => {
+                device.set_configuration(SINOLINK_CONFIGURATION_VALUE).map_err(DeviceError::SetupError)?;
+            }
+        };
 
         let config = device
             .active_configuration()
