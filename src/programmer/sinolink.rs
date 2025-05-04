@@ -59,11 +59,12 @@ fn bcdtoi(x: u8) -> u8 {
     s.parse::<u8>().unwrap()
 }
 
-fn bcdtodt(src: &[u8]) -> NaiveDateTime {
+fn bcdtodt(src: &[u8]) -> Option<NaiveDateTime> {
     println!("{:04x?}", src);
     let s: Vec<String> = src.iter().map(|x| format!("{:02x}", x)).collect();
     let datestring = s.join("");
-    NaiveDateTime::parse_from_str(&datestring, "%y%m%d%H%M%S").unwrap()
+    NaiveDateTime::parse_from_str(&datestring, "%y%m%d%H%M%S")
+        .ok()
 }
 
 impl Sinolink<'static> {
@@ -98,15 +99,20 @@ impl Sinolink<'static> {
         let device_info = Self::find_sinolink()?;
         let device = device_info.open().map_err(DeviceError::SetupError)?;
 
+        device.reset().map_err(DeviceError::SetupError)?;
+
+        sleep(Duration::from_secs(3));
+
+        let device_info = Self::find_sinolink()?;
+        let device = device_info.open().map_err(DeviceError::SetupError)?;
+
         for interface in device.configurations() {
             debug!("{:?}", interface);
         }
 
-        let config = device.configurations()
+        let _ = device.configurations()
             .find(|c| c.configuration_value() == SINOLINK_CONFIGURATION_VALUE)
             .ok_or(DeviceError::ConfigurationNotFound)?;
-
-        device.set_configuration(SINOLINK_CONFIGURATION_VALUE).unwrap();
 
         // let Some(config) = device
         //     .configurations()
@@ -164,8 +170,12 @@ impl Sinolink<'static> {
         // 313537c0fc00c00000000000000000000000000000000002002202091456000230000000000000
 
         let buf = self.read_control(0, 0, 0, 64)?;
-        let firmware_date = bcdtodt(&buf[0..6]).and_utc();
-        info!("Date: {}", firmware_date.format("%+"));
+        let firmware_date = bcdtodt(&buf[0..6]).map(|d| d.and_utc());
+        if let Some(firmware_date) = firmware_date {
+            info!("Date: {}", firmware_date.format("%+"));
+        } else {
+            info!("Firmware date: Unknown");
+        }
 
         let version_major: u8 = bcdtoi(buf[6]);
         let version_minor: u8 = bcdtoi(buf[7]);
@@ -227,7 +237,7 @@ impl Sinolink<'static> {
     }
 
     pub fn write_init(&self) -> Result<(), IOError> {
-        self.get_info()?; // actully done multiple times (13 times??)
+        self.get_info()?; // actually done multiple times (13 times??)
 
         self.read_chip(17, 0, 0, 0x0000, 0x0400)?;
 
