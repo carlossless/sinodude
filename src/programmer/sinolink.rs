@@ -1,14 +1,12 @@
 use super::super::part::*;
 use super::*;
 use chrono::*;
-use futures_lite::future::block_on;
 use hex_literal::*;
 use nusb::{
     self,
-    descriptors::ActiveConfigurationError,
     list_devices,
-    transfer::{Control, ControlType, Recipient, RequestBuffer, TransferError},
-    DeviceInfo, Error, Interface,
+    transfer::{Buffer, Bulk, ControlIn, ControlOut, ControlType, In, Out, Recipient, TransferError},
+    ActiveConfigurationError, DeviceInfo, Endpoint, Error, Interface, MaybeFuture,
 };
 use std::{thread::sleep, time::Duration};
 use thiserror::Error;
@@ -69,7 +67,7 @@ fn bcdtodt(src: &[u8]) -> Option<NaiveDateTime> {
 
 impl Sinolink<'static> {
     fn find_sinolink() -> Result<DeviceInfo, DeviceError> {
-        for device in list_devices().unwrap() {
+        for device in list_devices().wait().unwrap() {
             if device.vendor_id() == SINOLINK_DEVICE_ID && device.product_id() == SINOLINK_VENDOR_ID
             {
                 return Ok(device);
@@ -97,21 +95,24 @@ impl Sinolink<'static> {
         // sleep(Duration::from_secs(3));
 
         let device_info = Self::find_sinolink()?;
-        let device = device_info.open().map_err(DeviceError::SetupError)?;
+        let device = device_info.open().wait().map_err(DeviceError::SetupError)?;
 
-        device.reset().map_err(DeviceError::SetupError)?;
+        device.reset().wait().map_err(DeviceError::SetupError)?;
 
         sleep(Duration::from_secs(3));
 
         let device_info = Self::find_sinolink()?;
-        let device = device_info.open().map_err(DeviceError::SetupError)?;
+        let device = device_info.open().wait().map_err(DeviceError::SetupError)?;
 
         for interface in device.configurations() {
             debug!("{:?}", interface);
         }
 
-        let _ = device.configurations()
-            .find(|c| c.configuration_value() == SINOLINK_CONFIGURATION_VALUE)
+        let _ = device
+            .configurations()
+            .find(|c: &nusb::descriptors::ConfigurationDescriptor| {
+                c.configuration_value() == SINOLINK_CONFIGURATION_VALUE
+            })
             .ok_or(DeviceError::ConfigurationNotFound)?;
 
         // let Some(config) = device
@@ -125,17 +126,22 @@ impl Sinolink<'static> {
         //     .set_configuration(config.configuration_value())
         //     .map_err(DeviceError::SetupError)?;
 
-        let config = device
-            .active_configuration();
+        let config = device.active_configuration();
 
         match config {
             Ok(config) => {
                 if config.configuration_value() != SINOLINK_CONFIGURATION_VALUE {
-                    device.set_configuration(SINOLINK_CONFIGURATION_VALUE).map_err(DeviceError::SetupError)?;
+                    device
+                        .set_configuration(SINOLINK_CONFIGURATION_VALUE)
+                        .wait()
+                        .map_err(DeviceError::SetupError)?;
                 }
             }
-            Err(e) => {
-                device.set_configuration(SINOLINK_CONFIGURATION_VALUE).map_err(DeviceError::SetupError)?;
+            Err(_e) => {
+                device
+                    .set_configuration(SINOLINK_CONFIGURATION_VALUE)
+                    .wait()
+                    .map_err(DeviceError::SetupError)?;
             }
         };
 
@@ -145,13 +151,16 @@ impl Sinolink<'static> {
 
         let Some(interface) = config
             .interfaces()
-            .find(|i| i.interface_number() == SINOLINK_INTERFACE_NUMBER)
+            .find(|i: &nusb::descriptors::InterfaceDescriptors| {
+                i.interface_number() == SINOLINK_INTERFACE_NUMBER
+            })
         else {
             return Err(DeviceError::InterfaceNotFound);
         };
 
         let interface = device
             .claim_interface(interface.interface_number())
+            .wait()
             .map_err(DeviceError::SetupError)?;
 
         Ok(Self {
@@ -304,20 +313,19 @@ impl Sinolink<'static> {
         length: u16,
     ) -> Result<Vec<u8>, IOError> {
         debug!("Read CONTROL: {:02} {:04x} {:04x}", request, value, index);
-        let mut data = vec![0; length as usize];
         self.interface
-            .control_in_blocking(
-                Control {
+            .control_in(
+                ControlIn {
                     control_type: ControlType::Vendor,
                     recipient: Recipient::Device,
                     request,
                     value,
                     index,
+                    length,
                 },
-                &mut data,
                 TIMEOUT,
             )
-            .map(|_| data)
+            .wait()
             .map_err(IOError::ReadControlError)
     }
 
@@ -331,18 +339,18 @@ impl Sinolink<'static> {
         debug!("Write CONTROL: {:02} {:04x} {:04x}", request, value, index);
         debug!("COMMAND {:02x?}", data);
         self.interface
-            .control_out_blocking(
-                Control {
+            .control_out(
+                ControlOut {
                     control_type: ControlType::Vendor,
                     recipient: Recipient::Device,
                     request,
                     value,
                     index,
+                    data,
                 },
-                data,
                 TIMEOUT,
             )
-            .map(|_| ())
+            .wait()
             .map_err(IOError::WriteControlError)
     }
 
@@ -378,12 +386,24 @@ impl Sinolink<'static> {
         ];
 
         self.write_control(request, 0, 0, &write_buf)?;
-        let future = self
+
+        let mut endpoint: Endpoint<Bulk, In> = self
             .interface
-            .bulk_in(0x81, RequestBuffer::new(length.into()));
-        block_on(future)
-            .into_result()
-            .map_err(IOError::ReadBulkError)
+            .endpoint(0x81)
+            .map_err(|_e| IOError::ReadBulkError(TransferError::Unknown(0)))?;
+
+        let buffer_length = if length % 64 == 0 {
+            length
+        } else {
+            length + (64 - (length % 64))
+        };
+
+        let buffer = Buffer::new(buffer_length.into());
+        let completion = endpoint.transfer_blocking(buffer, TIMEOUT);
+        completion
+            .status
+            .map_err(IOError::ReadBulkError)?;
+        Ok(completion.buffer.iter().take(length as usize).cloned().collect())
     }
 
     pub fn write_chip(
@@ -420,10 +440,23 @@ impl Sinolink<'static> {
 
         self.write_control(request, 0, 0, &write_buf)?;
         debug!("WRITING: {:?}", buf);
-        let future = self.interface.bulk_out(0x02, buf);
-        block_on(future)
-            .into_result()
-            .map(|_| ())
+
+        let mut endpoint: Endpoint<Bulk, Out> = self
+            .interface
+            .endpoint(0x02)
+            .map_err(|_e| IOError::WriteBulkError(TransferError::Unknown(0)))?;
+
+        let buffer_length = if buf.len() % 64 == 0 {
+            buf.len()
+        } else {
+            buf.len() + (64 - (buf.len() % 64))
+        };
+
+        let mut buffer = Buffer::new(buffer_length.into());
+        buffer.extend_from_slice(&buf);
+        let completion = endpoint.transfer_blocking(buffer, TIMEOUT);
+        completion
+            .status
             .map_err(IOError::WriteBulkError)
     }
 
@@ -437,23 +470,37 @@ impl Sinolink<'static> {
         self.write_control(16, 0, 0, &buf)?;
 
         let mut config = vec![0; 1024];
+        // Config structure:
+        // 0-1: header (7887)
+        // 2: checksum (bd)
+        // 3: Chip Type (07)
+        // 4: (00)
+        // 5: Power setting - 0x02 - 5V, 0x01 - 3.3V, 0x03 - External
+        // 6-13: (0402040000050000)
+        // 14: CustomBlock (03)
+        // 15: ProductBlock (01)
+        // 16-47: (0620000000000000000800000000000000000000000000000000000000000008)
+        // 47-55: code options (a4e063c00f000088)
+        // 162-167: chip model (06080f09000a)
+        // 181-185: PartNumber (68f90a0000)
+        // 1008-1013: current date (230308203607 = 2023-03-08 20:36:07)
         config.copy_from_slice(&hex!("
             7887
-            bd // checksum???
-            07 // Chip Type
+            bd
+            07
             00
-            02 // Power setting - 0x02 - 5V, 0x01 - 3.3V, 0x03 - External (3.3V or 5V seems to not matter)
+            02
             0402040000050000
-            03 // CustomBlock
-            01 // ProductBlock
+            03
+            01
             0620000000000000000800000000000000000000000000000000000000000008
-            a4e063c00f000088 // code options
+            a4e063c00f000088
             00000000000000000000010040ff0000fd8f3600000000000000000000000100b36300000000000000000000000000000000000000000000000000000000000000000000000000000002000080000000000000000000000000000000000000000000000000000000081c11
-            06080f09000a // looks like chip model
+            06080f09000a
             ff000000000000091200000500
-            68f90a0000 // PartNumber
+            68f90a0000
             0000000000040000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000012000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-            230308203607 // current date 2023-03-08 20:36:07
+            230308203607
             05500000000000000000
         "));
 
@@ -481,10 +528,16 @@ impl Sinolink<'static> {
             .collect();
         config[1008..1008 + 6].clone_from_slice(&date_bytes);
 
-        let future = self.interface.bulk_out(0x02, config);
-        block_on(future)
-            .into_result()
-            .map(|_| ())
+        let mut endpoint: Endpoint<Bulk, Out> = self
+            .interface
+            .endpoint(0x02)
+            .map_err(|_e| IOError::WriteBulkError(TransferError::Unknown(0)))?;
+
+        let mut buffer = Buffer::new(config.len());
+        buffer.extend_from_slice(&config);
+        let completion = endpoint.transfer_blocking(buffer, TIMEOUT);
+        completion
+            .status
             .map_err(IOError::WriteBulkError)
     }
 
@@ -543,10 +596,16 @@ impl Sinolink<'static> {
             .collect();
         config[1008..1008 + 6].clone_from_slice(&date_bytes);
 
-        let future = self.interface.bulk_out(0x02, config);
-        block_on(future)
-            .into_result()
-            .map(|_| ())
+        let mut endpoint: Endpoint<Bulk, Out> = self
+            .interface
+            .endpoint(0x02)
+            .map_err(|_e| IOError::WriteBulkError(TransferError::Unknown(0)))?;
+
+        let mut buffer = Buffer::new(config.len());
+        buffer.extend_from_slice(&config);
+        let completion = endpoint.transfer_blocking(buffer, TIMEOUT);
+        completion
+            .status
             .map_err(IOError::WriteBulkError)
     }
 

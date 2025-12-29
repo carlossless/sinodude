@@ -5,21 +5,14 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-nusb = "0.1"
-futures-lite = "2.3"
-hex-literal = "0.3"
-clap = "4.1"
+nusb = "0.2"
+futures-lite = "2.6"
+hex-literal = "1.1"
+clap = "4.5"
 chrono = "0.4"
-phf = { version = "0.11", features = ["macros"] }
+phf = { version = "0.13", features = ["macros"] }
 ihex = "3.0"
-thiserror = "1.0"
-md5 = "0.7"
-
-[dependencies.log]
-version = "0.4"
-features = ["max_level_debug"]
-
-[dependencies.simple_logger]
-version = "4.3"
-default-features = false
-features = ["stderr", "colors"]
+thiserror = "2.0"
+md5 = "0.8"
+log = { version = "0.4", features = ["max_level_debug"] }
+simple_logger = { version = "5.1", default-features = false, features = ["stderr", "colors"] }
