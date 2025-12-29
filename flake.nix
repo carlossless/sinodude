@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     utils.url = "github:numtide/flake-utils";
     naersk.url = "github:nix-community/naersk";
     rust-overlay.url = "github:oxalica/rust-overlay";
@@ -33,8 +33,6 @@
           udev
         ]) ++
         (lib.optionals (stdenv.hostPlatform.isDarwin) [
-          darwin.apple_sdk.frameworks.IOKit
-          darwin.apple_sdk.frameworks.AppKit
           iconv
         ]);
       in
@@ -43,7 +41,7 @@
 
         packages = {
           # For `nix build` `nix run`, & `nix profile install`:
-          default = naersk'.buildPackage rec {
+          default = naersk'.buildPackage {
             pname = "sinodude";
             version = "latest";
 

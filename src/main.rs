@@ -29,7 +29,7 @@ fn cli() -> Command {
                 )
                 .arg(
                     arg!(-p --part <PART>)
-                        .value_parser(PARTS.keys().map(|&s| s).collect::<Vec<_>>())
+                        .value_parser(PARTS.keys().copied().collect::<Vec<_>>())
                         .required(true),
                 )
                 .arg(
@@ -50,7 +50,7 @@ fn cli() -> Command {
                 )
                 .arg(
                     arg!(-p --part <PART>)
-                        .value_parser(PARTS.keys().map(|&s| s).collect::<Vec<_>>())
+                        .value_parser(PARTS.keys().copied().collect::<Vec<_>>())
                         .required(true),
                 )
                 .arg(
@@ -76,9 +76,13 @@ fn get_log_level() -> log::LevelFilter {
         }
     } else {
         #[cfg(debug_assertions)]
-        return log::LevelFilter::Debug;
+        {
+            return log::LevelFilter::Debug;
+        }
         #[cfg(not(debug_assertions))]
-        log::LevelFilter::Info
+        {
+            return log::LevelFilter::Info;
+        }
     };
 }
 
@@ -129,10 +133,10 @@ fn main() {
                 .unwrap();
 
             let part = PARTS.get(part_name).unwrap();
-            let sinolink = Sinolink::new(part, power_setting);
-            sinolink.read_init();
+            let sinolink = Sinolink::new(part, power_setting).unwrap();
+            sinolink.read_init().unwrap();
 
-            let result = sinolink.read_flash();
+            let result = sinolink.read_flash().unwrap();
 
             let digest = md5::compute(&result);
             info!("MD5: {:x}", digest);
@@ -170,8 +174,8 @@ fn main() {
                 firmware.resize(part.flash_size, 0);
             }
 
-            let sinolink = Sinolink::new(part, power_setting);
-            sinolink.write_init();
+            let sinolink = Sinolink::new(part, power_setting).unwrap();
+            sinolink.write_init().unwrap();
             sinolink.write_flash(&firmware[0..65536]).unwrap();
         }
         Some(("decrypt", sub_matches)) => {
