@@ -16,6 +16,13 @@
           inherit system overlays;
         };
 
+        ravedude = pkgs.ravedude.overrideAttrs (oldAttrs: {
+          buildInputs = pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.udev ];
+          meta = oldAttrs.meta // {
+            platforms = pkgs.lib.platforms.unix;
+          };
+        });
+
         toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
         naersk' = pkgs.callPackage naersk {
@@ -62,7 +69,12 @@
 
         devShells.default = pkgs.mkShell {
           inherit buildInputs;
-          nativeBuildInputs = with pkgs; [ rustup toolchain ];
+          nativeBuildInputs = [
+            pkgs.rustup
+            toolchain
+            pkgs.avrdude
+            ravedude
+          ];
         };
       }
     );

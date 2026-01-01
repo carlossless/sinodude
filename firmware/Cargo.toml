@@ -1,0 +1,33 @@
+[package]
+name = "sinodude-firmware"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+avr-device = { version = "0.5", features = ["atmega328p"] }
+embedded-hal = "1.0"
+ufmt = "0.2"
+nb = "1.1"
+
+[dependencies.atmega-hal]
+git = "https://github.com/rahix/avr-hal"
+rev = "ff4909c00ceee76d60f8bd7cc95bc0f3e2ab673f"
+features = ["atmega328p", "rt"]
+
+[[bin]]
+name = "sinodude-firmware"
+test = false
+bench = false
+
+[profile.dev]
+panic = "abort"
+lto = true
+opt-level = "s"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+debug = true
+lto = true
+opt-level = 2

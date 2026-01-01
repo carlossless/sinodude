@@ -1,0 +1,6 @@
+[general]
+board = "nano-new"
+# After flashing, open the serial console at 115200 baud.
+open-console = false
+serial-baudrate = 115200
+port = "/dev/cu.usbserial-AQ01L73V"

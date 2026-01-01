@@ -1,4 +1,6 @@
+pub mod serial;
 pub mod sinolink;
+pub use serial::*;
 pub use sinolink::*;
 
 pub enum PowerSetting {

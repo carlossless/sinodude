@@ -16,3 +16,4 @@ thiserror = "2.0"
 md5 = "0.8"
 log = { version = "0.4", features = ["max_level_debug"] }
 simple_logger = { version = "5.1", default-features = false, features = ["stderr", "colors"] }
+serialport = "4.6"

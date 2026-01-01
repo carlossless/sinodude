@@ -23,8 +23,8 @@ fn cli() -> Command {
                 .about("Read the chips flash contents")
                 .arg(arg!(output_file: <OUTPUT_FILE> "file to write flash contents to"))
                 .arg(
-                    arg!(-c --programmer <PART>)
-                        .value_parser(["sinolink"])
+                    arg!(-c --programmer <PROGRAMMER>)
+                        .value_parser(["sinolink", "serial"])
                         .required(true),
                 )
                 .arg(
@@ -36,16 +36,20 @@ fn cli() -> Command {
                     arg!(-t --power <POWER_SETTING>)
                         .value_parser(["3v3", "5v", "external"])
                         .required(true),
+                )
+                .arg(
+                    arg!(--port <PORT> "Serial port for serial programmer (e.g., /dev/ttyUSB0)")
+                        .required(false),
                 ),
         )
         .subcommand(
             Command::new("write")
                 .short_flag('w')
                 .about("Write to flash")
-                .arg(arg!(input_file: <OUTPUT_FILE> "file to write to flash"))
+                .arg(arg!(input_file: <INPUT_FILE> "file to write to flash"))
                 .arg(
-                    arg!(-c --programmer <PART>)
-                        .value_parser(["sinolink"])
+                    arg!(-c --programmer <PROGRAMMER>)
+                        .value_parser(["sinolink", "serial"])
                         .required(true),
                 )
                 .arg(
@@ -57,6 +61,10 @@ fn cli() -> Command {
                     arg!(-t --power <POWER_SETTING>)
                         .value_parser(["3v3", "5v", "external"])
                         .required(true),
+                )
+                .arg(
+                    arg!(--port <PORT> "Serial port for serial programmer (e.g., /dev/ttyUSB0)")
+                        .required(false),
                 ),
         )
         .subcommand(
@@ -132,11 +140,32 @@ fn main() {
                 .map(|s| s.as_str())
                 .unwrap();
 
-            let part = PARTS.get(part_name).unwrap();
-            let sinolink = Sinolink::new(part, power_setting).unwrap();
-            sinolink.read_init().unwrap();
+            let programmer_name = sub_matches
+                .get_one::<String>("programmer")
+                .map(|s| s.as_str())
+                .unwrap();
 
-            let result = sinolink.read_flash().unwrap();
+            let part = PARTS.get(part_name).unwrap();
+
+            let result = match programmer_name {
+                "sinolink" => {
+                    let sinolink = Sinolink::new(part, power_setting).unwrap();
+                    sinolink.read_init().unwrap();
+                    sinolink.read_flash().unwrap()
+                }
+                "serial" => {
+                    let port = sub_matches
+                        .get_one::<String>("port")
+                        .expect("--port is required for serial programmer");
+                    let mut programmer =
+                        SerialProgrammer::new(port, part, power_setting).unwrap();
+                    programmer.read_init().unwrap();
+                    let result = programmer.read_flash().unwrap();
+                    programmer.finish().unwrap();
+                    result
+                }
+                _ => unreachable!(),
+            };
 
             let digest = md5::compute(&result);
             info!("MD5: {:x}", digest);
@@ -162,6 +191,11 @@ fn main() {
                 .map(|s| s.as_str())
                 .unwrap();
 
+            let programmer_name = sub_matches
+                .get_one::<String>("programmer")
+                .map(|s| s.as_str())
+                .unwrap();
+
             let part = PARTS.get(part_name).unwrap();
 
             let mut file = fs::File::open(input_file).unwrap();
@@ -174,9 +208,24 @@ fn main() {
                 firmware.resize(part.flash_size, 0);
             }
 
-            let sinolink = Sinolink::new(part, power_setting).unwrap();
-            sinolink.write_init().unwrap();
-            sinolink.write_flash(&firmware[0..65536]).unwrap();
+            match programmer_name {
+                "sinolink" => {
+                    let sinolink = Sinolink::new(part, power_setting).unwrap();
+                    sinolink.write_init().unwrap();
+                    sinolink.write_flash(&firmware[0..65536]).unwrap();
+                }
+                "serial" => {
+                    let port = sub_matches
+                        .get_one::<String>("port")
+                        .expect("--port is required for serial programmer");
+                    let mut programmer =
+                        SerialProgrammer::new(port, part, power_setting).unwrap();
+                    programmer.write_init().unwrap();
+                    programmer.write_flash(&firmware).unwrap();
+                    programmer.finish().unwrap();
+                }
+                _ => unreachable!(),
+            }
         }
         Some(("decrypt", sub_matches)) => {
             let output_file = sub_matches
