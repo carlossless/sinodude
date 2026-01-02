@@ -172,7 +172,7 @@ impl SerialProgrammer {
 
     pub fn read_init(&mut self) -> Result<(), SerialProgrammerError> {
         self.ping()?;
-        // self.power_on()?;
+        self.power_on()?;
         self.connect()?;
         Ok(())
     }

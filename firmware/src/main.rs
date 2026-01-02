@@ -92,7 +92,6 @@ impl IcpController {
 
     fn power_on(&mut self) {
         self.pins.power.set_low();
-        self.delay.delay_ms(100u8);
     }
 
     fn power_off(&mut self) {
@@ -182,11 +181,6 @@ impl IcpController {
     }
 
     fn connect(&mut self) -> bool {
-    // fn connect(&mut self) -> u8 {
-        self.power_on();
-
-        self.delay.delay_ms(1u16);
-
         // Initial setup: Set TCK, TDI, TMS high
         self.tck_high();
         self.tdi_high();
@@ -340,21 +334,6 @@ impl IcpController {
         self.receive_icp_byte();
 
         response == 0x69
-    }
-
-    fn check_2(&mut self) -> u8 {
-        self.switch_mode(Mode::ICP);
-
-        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
-        self.send_icp_byte(0x69);
-        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_H);
-        self.send_icp_byte(0xFF);
-
-        self.send_icp_byte(icp_cmd::ICP_GET_IB_OFFSET);
-        let response = self.receive_icp_byte();
-        self.receive_icp_byte();
-
-        response
     }
 
     fn switch_mode(&mut self, mode: Mode) {
@@ -559,12 +538,6 @@ fn send_data(serial: &mut Serial, data: &[u8]) {
     }
 }
 
-fn byte_to_hex(byte: u8, out: &mut [u8; 2]) {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    out[0] = HEX[(byte >> 4) as usize];
-    out[1] = HEX[(byte & 0x0F) as usize];
-}
-
 #[atmega_hal::entry]
 fn main() -> ! {
     let dp = pac::Peripherals::take().unwrap();
@@ -598,119 +571,118 @@ fn main() -> ! {
 
     loop {
         // Wait for command
-        if let Ok(cmd_byte) = nb::block!(rx.read()) {
-            match cmd_byte {
-                cmd::CMD_PING => {
-                    // Simple ping response
+        let Ok(cmd_byte) = nb::block!(rx.read());
+        match cmd_byte {
+            cmd::CMD_PING => {
+                // Simple ping response
+                let _ = nb::block!(tx.write(cmd::RSP_OK));
+                let _ = nb::block!(tx.write(b'S'));
+                let _ = nb::block!(tx.write(b'W'));
+            }
+
+            cmd::CMD_POWER_ON => {
+                icp.power_on();
+                let _ = nb::block!(tx.write(cmd::RSP_OK));
+            }
+
+            cmd::CMD_POWER_OFF => {
+                icp.power_off();
+                let _ = nb::block!(tx.write(cmd::RSP_OK));
+            }
+
+            cmd::CMD_CONNECT => {
+                if icp.connect() {
                     let _ = nb::block!(tx.write(cmd::RSP_OK));
-                    let _ = nb::block!(tx.write(b'S'));
-                    let _ = nb::block!(tx.write(b'W'));
-                }
-
-                cmd::CMD_POWER_ON => {
-                    icp.power_on();
-                    let _ = nb::block!(tx.write(cmd::RSP_OK));
-                }
-
-                cmd::CMD_POWER_OFF => {
-                    icp.power_off();
-                    let _ = nb::block!(tx.write(cmd::RSP_OK));
-                }
-
-                cmd::CMD_CONNECT => {
-                    if icp.connect() {
-                        let _ = nb::block!(tx.write(cmd::RSP_OK));
-                    } else {
-                        let _ = nb::block!(tx.write(cmd::RSP_ERR));
-                    }
-                }
-
-                cmd::CMD_DISCONNECT => {
-                    icp.disconnect();
-                    let _ = nb::block!(tx.write(cmd::RSP_OK));
-                }
-
-                cmd::CMD_READ_FLASH => {
-                    // Read address (4 bytes) and length (2 bytes)
-                    let addr = {
-                        let b0 = nb::block!(rx.read()).unwrap_or(0);
-                        let b1 = nb::block!(rx.read()).unwrap_or(0);
-                        let b2 = nb::block!(rx.read()).unwrap_or(0);
-                        let b3 = nb::block!(rx.read()).unwrap_or(0);
-                        u32::from_le_bytes([b0, b1, b2, b3])
-                    };
-                    let len = {
-                        let low = nb::block!(rx.read()).unwrap_or(0);
-                        let high = nb::block!(rx.read()).unwrap_or(0);
-                        u16::from_le_bytes([low, high]) as usize
-                    };
-
-                    // Clamp length to buffer size
-                    let read_len = len.min(buffer.len());
-
-                    if icp.read_flash(addr, &mut buffer[..read_len]) {
-                        let _ = nb::block!(tx.write(cmd::RSP_DATA));
-                        let _ = nb::block!(tx.write(read_len as u8));
-                        let _ = nb::block!(tx.write((read_len >> 8) as u8));
-                        for i in 0..read_len {
-                            let _ = nb::block!(tx.write(buffer[i]));
-                        }
-                    } else {
-                        let _ = nb::block!(tx.write(cmd::RSP_ERR));
-                    }
-                }
-
-                cmd::CMD_WRITE_FLASH => {
-                    // Read address (4 bytes) and length (2 bytes)
-                    let addr = {
-                        let b0 = nb::block!(rx.read()).unwrap_or(0);
-                        let b1 = nb::block!(rx.read()).unwrap_or(0);
-                        let b2 = nb::block!(rx.read()).unwrap_or(0);
-                        let b3 = nb::block!(rx.read()).unwrap_or(0);
-                        u32::from_le_bytes([b0, b1, b2, b3])
-                    };
-                    let len = {
-                        let low = nb::block!(rx.read()).unwrap_or(0);
-                        let high = nb::block!(rx.read()).unwrap_or(0);
-                        u16::from_le_bytes([low, high]) as usize
-                    };
-
-                    // Clamp length to buffer size
-                    let write_len = len.min(buffer.len());
-
-                    // Read data into buffer
-                    for i in 0..write_len {
-                        buffer[i] = nb::block!(rx.read()).unwrap_or(0);
-                    }
-
-                    if icp.write_flash(addr, &buffer[..write_len]) {
-                        let _ = nb::block!(tx.write(cmd::RSP_OK));
-                    } else {
-                        let _ = nb::block!(tx.write(cmd::RSP_ERR));
-                    }
-                }
-
-                cmd::CMD_ERASE_FLASH => {
-                    // Read address (4 bytes)
-                    let addr = {
-                        let b0 = nb::block!(rx.read()).unwrap_or(0);
-                        let b1 = nb::block!(rx.read()).unwrap_or(0);
-                        let b2 = nb::block!(rx.read()).unwrap_or(0);
-                        let b3 = nb::block!(rx.read()).unwrap_or(0);
-                        u32::from_le_bytes([b0, b1, b2, b3])
-                    };
-
-                    if icp.erase_flash(addr) {
-                        let _ = nb::block!(tx.write(cmd::RSP_OK));
-                    } else {
-                        let _ = nb::block!(tx.write(cmd::RSP_ERR));
-                    }
-                }
-
-                _ => {
-                    // Unknown command
+                } else {
                     let _ = nb::block!(tx.write(cmd::RSP_ERR));
                 }
+            }
+
+            cmd::CMD_DISCONNECT => {
+                icp.disconnect();
+                let _ = nb::block!(tx.write(cmd::RSP_OK));
+            }
+
+            cmd::CMD_READ_FLASH => {
+                // Read address (4 bytes) and length (2 bytes)
+                let addr = {
+                    let b0 = nb::block!(rx.read()).unwrap_or(0);
+                    let b1 = nb::block!(rx.read()).unwrap_or(0);
+                    let b2 = nb::block!(rx.read()).unwrap_or(0);
+                    let b3 = nb::block!(rx.read()).unwrap_or(0);
+                    u32::from_le_bytes([b0, b1, b2, b3])
+                };
+                let len = {
+                    let low = nb::block!(rx.read()).unwrap_or(0);
+                    let high = nb::block!(rx.read()).unwrap_or(0);
+                    u16::from_le_bytes([low, high]) as usize
+                };
+
+                // Clamp length to buffer size
+                let read_len = len.min(buffer.len());
+
+                if icp.read_flash(addr, &mut buffer[..read_len]) {
+                    let _ = nb::block!(tx.write(cmd::RSP_DATA));
+                    let _ = nb::block!(tx.write(read_len as u8));
+                    let _ = nb::block!(tx.write((read_len >> 8) as u8));
+                    for i in 0..read_len {
+                        let _ = nb::block!(tx.write(buffer[i]));
+                    }
+                } else {
+                    let _ = nb::block!(tx.write(cmd::RSP_ERR));
+                }
+            }
+
+            cmd::CMD_WRITE_FLASH => {
+                // Read address (4 bytes) and length (2 bytes)
+                let addr = {
+                    let b0 = nb::block!(rx.read()).unwrap_or(0);
+                    let b1 = nb::block!(rx.read()).unwrap_or(0);
+                    let b2 = nb::block!(rx.read()).unwrap_or(0);
+                    let b3 = nb::block!(rx.read()).unwrap_or(0);
+                    u32::from_le_bytes([b0, b1, b2, b3])
+                };
+                let len = {
+                    let low = nb::block!(rx.read()).unwrap_or(0);
+                    let high = nb::block!(rx.read()).unwrap_or(0);
+                    u16::from_le_bytes([low, high]) as usize
+                };
+
+                // Clamp length to buffer size
+                let write_len = len.min(buffer.len());
+
+                // Read data into buffer
+                for i in 0..write_len {
+                    buffer[i] = nb::block!(rx.read()).unwrap_or(0);
+                }
+
+                if icp.write_flash(addr, &buffer[..write_len]) {
+                    let _ = nb::block!(tx.write(cmd::RSP_OK));
+                } else {
+                    let _ = nb::block!(tx.write(cmd::RSP_ERR));
+                }
+            }
+
+            cmd::CMD_ERASE_FLASH => {
+                // Read address (4 bytes)
+                let addr = {
+                    let b0 = nb::block!(rx.read()).unwrap_or(0);
+                    let b1 = nb::block!(rx.read()).unwrap_or(0);
+                    let b2 = nb::block!(rx.read()).unwrap_or(0);
+                    let b3 = nb::block!(rx.read()).unwrap_or(0);
+                    u32::from_le_bytes([b0, b1, b2, b3])
+                };
+
+                if icp.erase_flash(addr) {
+                    let _ = nb::block!(tx.write(cmd::RSP_OK));
+                } else {
+                    let _ = nb::block!(tx.write(cmd::RSP_ERR));
+                }
+            }
+
+            _ => {
+                // Unknown command
+                let _ = nb::block!(tx.write(cmd::RSP_ERR));
             }
         }
     }
@@ -729,7 +701,7 @@ fn panic(_info: &PanicInfo) -> ! {
         Baudrate::<MHz16>::new(115200),
     );
 
-    let (mut rx, mut tx) = serial.split();
+    let (mut _rx, mut tx) = serial.split();
 
     loop {
         let _ = nb::block!(tx.write(b'S'));
