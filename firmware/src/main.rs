@@ -280,7 +280,11 @@ impl IcpController {
                 self.delay_us(2);
             }
             Mode::JTAG => {
-                // JTAG reset sequence (not implemented)
+                for _ in 0..35 {
+                    self.jtag_next_state(true);
+                }
+                self.pins.tck.set_high();
+                self.pins.tms.set_low();
             }
         }
 
@@ -363,6 +367,7 @@ impl IcpController {
 
         if self.mode == Mode::ICP {
             self.delay_us(800);
+
             self.ping_icp();
         } else if self.mode == Mode::JTAG {
             // reset JTAG state
@@ -393,7 +398,7 @@ impl IcpController {
             }
 
             self.jtag_send_instruction(2);
-            self.jtag_send_data(4, 4u8);
+            self.jtag_send_data(4, 1u8);
 
             self.jtag_send_instruction(12);
         } else {
@@ -606,16 +611,6 @@ impl IcpController {
         self.reset();
 
         true
-    }
-
-    fn write_flash(&mut self, addr: u32, data: &[u8]) -> bool {
-        true
-    }
-
-    fn erase_flash(&mut self, addr: u32) -> bool {
-        // Check status
-        let status = self.receive_byte();
-        (status & 0x01) == 0
     }
 }
 

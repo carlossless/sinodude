@@ -201,13 +201,13 @@ impl SerialProgrammer {
     }
 
     pub fn get_part_number(&mut self) -> Result<(), SerialProgrammerError> {
-        self.send_command(cmd::CMD_READ_FLASH)?;
         let custom_block_addr: u32 = match self.chip_type.custom_block {
             0x02 => 0x0A00,
             0x03 => 0x1200,
             0x04 => 0x2200,
             _ => return Err(SerialProgrammerError::OperationFailed),
         };
+        self.send_command(cmd::CMD_READ_FLASH)?;
         self.send_bytes(&custom_block_addr.to_le_bytes())?; // Address
         self.send_bytes(&(16u16.to_le_bytes()))?; // Length
         self.send_bytes(&[0x01])?; // Custom block read
@@ -223,12 +223,61 @@ impl SerialProgrammer {
         }
 
         let data = self.read_bytes(16)?;
-        let mut part_number = [0u8; 16];
-        part_number.copy_from_slice(&data[0..16]);
+        let mut part_number = [0u8; 4];
+        part_number.copy_from_slice(&data[9..13]);
         info!(
             "Target Part Number: {}",
             part_number.iter().map(|b| format!("{:02x}", b)).collect::<String>()
         );
+        Ok(())
+    }
+
+    pub fn get_code_options(&mut self) -> Result<(), SerialProgrammerError> {
+        let (options_addr, flash, size): (u32, bool, u16) = match (self.chip_type.custom_block, self.chip_type.chip_type) {
+            (0x02, 0x02) => (0x0800, false, 64),
+            (0x03, 0x02) => (0x1000, false, 64),
+            (0x03, 0x07) => (0x1000, false, 512),
+            (0x04, _) => (0x2000, false, 64),
+            (0x06, _) => ((self.chip_type.flash_size - 32) as u32, true, 32),
+            (_, _) => ((self.chip_type.flash_size - 64) as u32, true, 64),
+        };
+
+        debug!(
+            "Reading code options from address {:#06x}, flash: {}, size: {}",
+            options_addr,
+            flash,
+            size
+        );
+
+        let buffer_size = 16;
+        let mut data = vec![0u8; 0];
+
+        for addr in (options_addr..(options_addr + size as u32)).step_by(buffer_size) {
+            debug!("Reading code options at address {:#06x}", addr);
+            self.send_command(cmd::CMD_READ_FLASH)?;
+            self.send_bytes(&addr.to_le_bytes())?; // Address
+            self.send_bytes(&(buffer_size as u16).to_le_bytes())?; // Length
+            self.send_bytes(&[if flash { 0x00 } else { 0x01 }])?; // Custom block read
+            let response = self.read_byte()?;
+            if response != cmd::RSP_DATA {
+                return Err(SerialProgrammerError::OperationFailed);
+            }
+            let recv_len_l = self.read_byte()?; // Data length (low byte)
+            let recv_len_h = self.read_byte()?; // Data length (high byte)
+            let recv_len = u16::from_le_bytes([recv_len_l, recv_len_h]) as usize;
+            if recv_len != buffer_size {
+                return Err(SerialProgrammerError::InvalidResponse);
+            }
+
+            let result = self.read_bytes(buffer_size)?;
+            data.extend_from_slice(&result);
+        }
+
+        info!(
+            "Code options:\n{}",
+            data.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+        );
+
         Ok(())
     }
 
@@ -239,6 +288,7 @@ impl SerialProgrammer {
         self.get_id()?;
         self.set_config()?;
         self.get_part_number()?;
+        self.get_code_options()?;
         Ok(())
     }
 
