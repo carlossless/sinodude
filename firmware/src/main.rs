@@ -8,6 +8,7 @@ use atmega_hal::pac;
 use atmega_hal::port::{mode, Pin, Pins, PD2, PD3, PD4, PD5, PD6};
 use atmega_hal::prelude::*;
 use atmega_hal::usart::{Baudrate, Usart};
+use core::ops::{self, BitOrAssign};
 use core::panic::PanicInfo;
 
 type Serial = Usart<pac::USART0, Pin<mode::Input, PD0>, Pin<mode::Output, PD1>, MHz16>;
@@ -48,6 +49,10 @@ mod icp_cmd {
     pub const ICP_ERASE_FLASH: u8 = 0x46;
     pub const ICP_PING: u8 = 0x49;
     pub const ICP_SET_XPAGE: u8 = 0x4C;
+}
+
+mod jtag_instructions {
+    pub const JTAG_IDCODE: u8 = 14;
 }
 
 #[derive(PartialEq)]
@@ -352,7 +357,37 @@ impl IcpController {
             self.delay_us(800);
             self.ping_icp();
         } else if self.mode == Mode::JTAG {
-            // JTAG mode initialization (not implemented)
+            // reset JTAG state
+            for _ in 0..8 {
+                self.jtag_next_state(true);
+            }
+
+            self.jtag_send_instruction(2);
+            self.jtag_send_data(4, 4);
+
+            self.jtag_send_instruction(3);
+            self.jtag_send_data(23, 0x403000u32);
+            self.delay_us(50);
+            self.jtag_send_data(23, 0x402000);
+            self.jtag_send_data(23, 0x400000);
+
+            // most likely breakpoints initialization
+            // SH68F881W works without it, but maybe for other chips it's mandatory
+            {
+                self.jtag_send_data(23, 0x630000);
+                self.jtag_send_data(23, 0x670000);
+                self.jtag_send_data(23, 0x6B0000);
+                self.jtag_send_data(23, 0x6F0000);
+                self.jtag_send_data(23, 0x730000);
+                self.jtag_send_data(23, 0x770000);
+                self.jtag_send_data(23, 0x7B0000);
+                self.jtag_send_data(23, 0x7F0000);
+            }
+
+            self.jtag_send_instruction(2);
+            self.jtag_send_data(4, 1);
+
+            self.jtag_send_instruction(12);
         } else {
             panic!("Invalid mode switch");
         }
@@ -414,6 +449,120 @@ impl IcpController {
         self.tck_low();
 
         byte
+    }
+
+    fn jtag_get_id(&mut self) -> u16 {
+        self.switch_mode(Mode::JTAG);
+
+        self.jtag_send_instruction(jtag_instructions::JTAG_IDCODE);
+        self.jtag_receive_data(16)
+    }
+
+    fn jtag_send_instruction(&mut self, instruction: u8) {
+        self.jtag_next_state(false); // Idle
+        self.jtag_next_state(true); // Select-DR
+        self.jtag_next_state(true); // Select-IR
+        self.jtag_next_state(false); // Capture-IR
+        self.jtag_next_state(false); // Shift-IR
+        self.jtag_send_bits(4, instruction);
+        self.jtag_next_state(true); // Update-IR
+        self.jtag_next_state(false); // Idle
+    }
+
+    fn jtag_receive_data<T>(&mut self, bit_length: u8) -> T
+    where
+        T: Copy
+            + From<u8>
+            + ops::Shl<u8, Output = T>
+            + ops::BitOrAssign<T>
+    {
+        self.jtag_next_state(true); // Select-DR
+        self.jtag_next_state(false); // Capture-DR
+        self.jtag_next_state(false); // Shift-DR
+        let data: T = self.jtag_receive_bits(bit_length);
+        self.jtag_next_state(true); // Update-DR
+        self.jtag_next_state(false); // Idle
+        data
+    }
+
+    fn jtag_send_data<T>(&mut self, bit_length: u8, data: T)
+    where
+        T: Copy
+            + From<u8>
+            + ops::BitAnd<Output = T>
+            + ops::Shr<u8, Output = T>
+            + PartialEq<u8>,
+    {
+        self.jtag_next_state(true); // Select-DR
+        self.jtag_next_state(false); // Capture-DR
+        self.jtag_next_state(false); // Shift-DR
+        self.jtag_send_bits(bit_length, data);
+        self.jtag_next_state(true); // Update-DR
+        self.jtag_next_state(false); // Idle
+        self.jtag_next_state(false); // Idle? Needed, don't know why
+    }
+    
+    fn jtag_next_state(&mut self, tms: bool) -> bool {
+        if tms {
+            self.tms_high();
+        } else {
+            self.tms_low();
+        }
+
+        self.pins.tck.set_high();
+        self.delay_us(2);
+
+        let b = self.pins.tdo.is_high();
+        self.pins.tck.set_low();
+        self.delay_us(2);
+
+        return b;
+    }
+
+    fn jtag_next_state_out(&mut self, tms: bool, out: bool) -> bool {
+        if out {
+            self.tdi_high();
+        } else {
+            self.tdi_low();
+        }
+
+        return self.jtag_next_state(tms)
+    }
+
+    fn jtag_send_bits<T>(&mut self, bit_length: u8, value: T)
+    where
+        T: Copy
+            + From<u8>
+            + ops::BitAnd<Output = T>
+            + ops::Shr<u8, Output = T>
+            + PartialEq<u8>,
+    {
+        for i in 0..bit_length {
+            let bit = (value >> i) & 1.into();
+            let last_bit = i == (bit_length - 1);
+            self.jtag_next_state_out(last_bit, bit != 0);
+        }
+
+        self.pins.tdi.set_low();
+    }
+
+    fn jtag_receive_bits<T>(&mut self, bit_length: u8) -> T
+    where
+        T: Copy
+            + From<u8>
+            + ops::Shl<u8, Output = T>
+            + ops::BitOrAssign<T>
+    {
+        let mut value: T = 0.into();
+        for i in 0..bit_length {
+            let last_bit = i == (bit_length - 1);
+            let bit = self.jtag_next_state(last_bit);
+            if bit {
+                value |= T::from(1) << i;
+            }
+        }
+
+        return value;
     }
 
     fn set_address(&mut self, addr: u32) {
