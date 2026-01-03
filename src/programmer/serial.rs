@@ -16,6 +16,8 @@ mod cmd {
     pub const CMD_ERASE_FLASH: u8 = 0x06;
     pub const CMD_POWER_ON: u8 = 0x07;
     pub const CMD_POWER_OFF: u8 = 0x08;
+    pub const CMD_GET_ID: u8 = 0x09;
+    pub const CMD_SET_CONFIG: u8 = 0x0A;
 
     pub const RSP_OK: u8 = 0x00;
     pub const RSP_ERR: u8 = 0xFF;
@@ -170,10 +172,73 @@ impl SerialProgrammer {
         Ok(())
     }
 
+    pub fn get_id(&mut self) -> Result<(), SerialProgrammerError> {
+        info!("Getting target MCU ID...");
+        self.send_command(cmd::CMD_GET_ID)?;
+
+        // Read response
+        let response = self.read_byte()?;
+        if response != cmd::RSP_DATA {
+            return Err(SerialProgrammerError::OperationFailed);
+        }
+
+        let mut id_bytes = [0u8; 2];
+        for i in 0..2 {
+            id_bytes[i] = self.read_byte()?;
+        }
+
+        let id = u16::from_le_bytes(id_bytes);
+        info!("Target MCU ID: {:#06x}", id);
+        Ok(())
+    }
+
+    pub fn set_config(&mut self) -> Result<(), SerialProgrammerError> {
+        self.send_command(cmd::CMD_SET_CONFIG)?;
+        self.send_bytes(&[self.chip_type.chip_type])?;
+        self.expect_ok()?;
+        info!("Configuration set for chip type: {:#04x}", self.chip_type.chip_type);
+        Ok(())
+    }
+
+    pub fn get_part_number(&mut self) -> Result<(), SerialProgrammerError> {
+        self.send_command(cmd::CMD_READ_FLASH)?;
+        let custom_block_addr: u32 = match self.chip_type.custom_block {
+            0x02 => 0x0A00,
+            0x03 => 0x1200,
+            0x04 => 0x2200,
+            _ => return Err(SerialProgrammerError::OperationFailed),
+        };
+        self.send_bytes(&custom_block_addr.to_le_bytes())?; // Address
+        self.send_bytes(&(16u16.to_le_bytes()))?; // Length
+        self.send_bytes(&[0x01])?; // Custom block read
+        let response = self.read_byte()?;
+        if response != cmd::RSP_DATA {
+            return Err(SerialProgrammerError::OperationFailed);
+        }
+        let recv_len_l = self.read_byte()?; // Data length (low byte)
+        let recv_len_h = self.read_byte()?; // Data length (high byte)
+        let recv_len = u16::from_le_bytes([recv_len_l, recv_len_h]) as usize;
+        if recv_len != 16 {
+            return Err(SerialProgrammerError::InvalidResponse);
+        }
+
+        let data = self.read_bytes(16)?;
+        let mut part_number = [0u8; 16];
+        part_number.copy_from_slice(&data[0..16]);
+        info!(
+            "Target Part Number: {}",
+            part_number.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+        );
+        Ok(())
+    }
+
     pub fn read_init(&mut self) -> Result<(), SerialProgrammerError> {
         self.ping()?;
         self.power_on()?;
         self.connect()?;
+        self.get_id()?;
+        self.set_config()?;
+        self.get_part_number()?;
         Ok(())
     }
 

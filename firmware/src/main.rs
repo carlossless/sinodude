@@ -8,8 +8,10 @@ use atmega_hal::pac;
 use atmega_hal::port::{mode, Pin, Pins, PD2, PD3, PD4, PD5, PD6};
 use atmega_hal::prelude::*;
 use atmega_hal::usart::{Baudrate, Usart};
-use core::ops::{self, BitOrAssign};
+use core::ops;
 use core::panic::PanicInfo;
+
+use crate::icp_cmd::{ICP_SET_IB_OFFSET_H, ICP_SET_IB_OFFSET_L};
 
 type Serial = Usart<pac::USART0, Pin<mode::Input, PD0>, Pin<mode::Output, PD1>, MHz16>;
 type PD0 = atmega_hal::port::PD0;
@@ -32,6 +34,8 @@ mod cmd {
     pub const CMD_ERASE_FLASH: u8 = 0x06;
     pub const CMD_POWER_ON: u8 = 0x07;
     pub const CMD_POWER_OFF: u8 = 0x08;
+    pub const CMD_GET_ID: u8 = 0x09;
+    pub const CMD_SET_CONFIG: u8 = 0x0A;
 
     pub const RSP_OK: u8 = 0x00;
     pub const RSP_ERR: u8 = 0xFF;
@@ -42,12 +46,10 @@ mod cmd {
 mod icp_cmd {
     pub const ICP_SET_IB_OFFSET_L: u8 = 0x40;
     pub const ICP_SET_IB_OFFSET_H: u8 = 0x41;
-    pub const ICP_SET_IB_DATA: u8 = 0x42;
     pub const ICP_GET_IB_OFFSET: u8 = 0x43;
     pub const ICP_READ_FLASH: u8 = 0x44;
-    pub const ICP_WRITE_FLASH: u8 = 0x45;
-    pub const ICP_ERASE_FLASH: u8 = 0x46;
     pub const ICP_PING: u8 = 0x49;
+    pub const ICP_READ_CUSTOM_BLOCK: u8 = 0x4A;
     pub const ICP_SET_XPAGE: u8 = 0x4C;
 }
 
@@ -76,6 +78,7 @@ struct IcpController {
     delay: Delay<MHz16>,
     connected: bool,
     mode: Mode,
+    chip_type: Option<u8>,
 }
 
 impl IcpController {
@@ -85,6 +88,7 @@ impl IcpController {
             delay: Delay::<MHz16>::new(),
             connected: false,
             mode: Mode::READY,
+            chip_type: None,
         }
     }
 
@@ -141,6 +145,10 @@ impl IcpController {
         self.tck_high();
         self.delay_us(1);
         self.tck_low();
+    }
+
+    fn set_chip_type(&mut self, chip_type: u8) {
+        self.chip_type = Some(chip_type);
     }
 
     fn send_byte(&mut self, mut byte: u8) {
@@ -283,7 +291,7 @@ impl IcpController {
         self.tck_low();
         self.delay_us(2);
 
-        let mut mode = match self.mode {
+        let mut mode: u8 = match self.mode {
             Mode::ERROR => 0,
             Mode::READY => 1,
             Mode::ICP => 150,
@@ -363,29 +371,29 @@ impl IcpController {
             }
 
             self.jtag_send_instruction(2);
-            self.jtag_send_data(4, 4);
+            self.jtag_send_data(4, 4u8);
 
             self.jtag_send_instruction(3);
             self.jtag_send_data(23, 0x403000u32);
             self.delay_us(50);
-            self.jtag_send_data(23, 0x402000);
-            self.jtag_send_data(23, 0x400000);
+            self.jtag_send_data(23, 0x402000u32);
+            self.jtag_send_data(23, 0x400000u32);
 
             // most likely breakpoints initialization
             // SH68F881W works without it, but maybe for other chips it's mandatory
             {
-                self.jtag_send_data(23, 0x630000);
-                self.jtag_send_data(23, 0x670000);
-                self.jtag_send_data(23, 0x6B0000);
-                self.jtag_send_data(23, 0x6F0000);
-                self.jtag_send_data(23, 0x730000);
-                self.jtag_send_data(23, 0x770000);
-                self.jtag_send_data(23, 0x7B0000);
-                self.jtag_send_data(23, 0x7F0000);
+                self.jtag_send_data(23, 0x630000u32);
+                self.jtag_send_data(23, 0x670000u32);
+                self.jtag_send_data(23, 0x6B0000u32);
+                self.jtag_send_data(23, 0x6F0000u32);
+                self.jtag_send_data(23, 0x730000u32);
+                self.jtag_send_data(23, 0x770000u32);
+                self.jtag_send_data(23, 0x7B0000u32);
+                self.jtag_send_data(23, 0x7F0000u32);
             }
 
             self.jtag_send_instruction(2);
-            self.jtag_send_data(4, 1);
+            self.jtag_send_data(4, 4u8);
 
             self.jtag_send_instruction(12);
         } else {
@@ -491,7 +499,7 @@ impl IcpController {
             + From<u8>
             + ops::BitAnd<Output = T>
             + ops::Shr<u8, Output = T>
-            + PartialEq<u8>,
+            + PartialEq,
     {
         self.jtag_next_state(true); // Select-DR
         self.jtag_next_state(false); // Capture-DR
@@ -535,12 +543,12 @@ impl IcpController {
             + From<u8>
             + ops::BitAnd<Output = T>
             + ops::Shr<u8, Output = T>
-            + PartialEq<u8>,
+            + PartialEq,
     {
         for i in 0..bit_length {
-            let bit = (value >> i) & 1.into();
+            let bit = (value >> i) & T::from(1);
             let last_bit = i == (bit_length - 1);
-            self.jtag_next_state_out(last_bit, bit != 0);
+            self.jtag_next_state_out(last_bit, bit != T::from(0));
         }
 
         self.pins.tdi.set_low();
@@ -558,101 +566,53 @@ impl IcpController {
             let last_bit = i == (bit_length - 1);
             let bit = self.jtag_next_state(last_bit);
             if bit {
-                value |= T::from(1) << i;
+                value |= T::from(1) << (bit_length - 1 - i);
             }
         }
 
         return value;
     }
 
-    fn set_address(&mut self, addr: u32) {
-        // Set low byte
-        self.send_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
-        self.send_byte(addr as u8);
+    fn icp_read_flash(&mut self, addr: u32, buffer: &mut [u8], custom_block: bool) -> bool {
+        self.switch_mode(Mode::ICP); 
 
-        // Set high byte
-        self.send_byte(icp_cmd::ICP_SET_IB_OFFSET_H);
-        self.send_byte((addr >> 8) as u8);
-
-        // Set extended page if needed
-        if addr > 0xFFFF {
-            self.send_byte(icp_cmd::ICP_SET_XPAGE);
-            self.send_byte((addr >> 16) as u8);
-        }
-    }
-
-    fn read_flash(&mut self, addr: u32, buffer: &mut [u8]) -> bool {
-        if !self.connected {
+        let Some(chip_type) = self.chip_type else {
             return false;
+        };
+
+        if chip_type != 1 {
+            self.send_icp_byte(0x46);
+            self.send_icp_byte(0xFE);
+            self.send_icp_byte(0xFF);
         }
 
-        self.set_address(addr);
-        self.send_byte(icp_cmd::ICP_READ_FLASH);
+        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
+        self.send_icp_byte((addr & 0xFF) as u8);
+        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_H);
+        self.send_icp_byte(((addr & 0xFF00) >> 8) as u8);
 
-        for byte in buffer.iter_mut() {
-            *byte = Self::reverse_bits(self.receive_byte());
+        if chip_type == 4 || chip_type == 7 {
+            self.send_icp_byte(icp_cmd::ICP_SET_XPAGE);
+            self.send_icp_byte(((addr & 0xFF0000) >> 16) as u8);
         }
 
-        // Reset address
-        self.send_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
-        self.send_byte(0);
-        self.send_byte(icp_cmd::ICP_SET_IB_OFFSET_H);
-        self.send_byte(0);
+        let region = if custom_block { icp_cmd::ICP_READ_CUSTOM_BLOCK } else { icp_cmd::ICP_READ_FLASH };
+        self.send_icp_byte(region);
+
+        for i in 0..buffer.len() {
+            buffer[i] = self.receive_icp_byte();
+        }
+
+        self.reset();
 
         true
     }
 
     fn write_flash(&mut self, addr: u32, data: &[u8]) -> bool {
-        if !self.connected || data.is_empty() {
-            return false;
-        }
-
-        self.set_address(addr);
-
-        // Send first byte
-        self.send_byte(icp_cmd::ICP_SET_IB_DATA);
-        self.send_byte(data[0]);
-
-        // Programming sequence
-        self.send_byte(icp_cmd::ICP_WRITE_FLASH);
-        self.send_byte(0x6E);
-        self.send_byte(0x15);
-        self.send_byte(0x0A);
-        self.send_byte(0x09);
-        self.send_byte(0x06);
-
-        // Send remaining bytes
-        for &byte in &data[1..] {
-            self.send_byte(icp_cmd::ICP_SET_IB_DATA);
-            self.send_byte(byte);
-            self.delay_us(5);
-        }
-
         true
     }
 
     fn erase_flash(&mut self, addr: u32) -> bool {
-        if !self.connected {
-            return false;
-        }
-
-        self.set_address(addr);
-
-        // Set data to 0
-        self.send_byte(icp_cmd::ICP_SET_IB_DATA);
-        self.send_byte(0x00);
-
-        // Erase sequence
-        self.send_byte(icp_cmd::ICP_ERASE_FLASH);
-        self.send_byte(0xE6);
-        self.send_byte(0x15);
-        self.send_byte(0x0A);
-        self.send_byte(0x09);
-        self.send_byte(0x06);
-
-        // Wait for erase to complete (300ms typical)
-        self.delay.delay_ms(300u16);
-
         // Check status
         let status = self.receive_byte();
         (status & 0x01) == 0
@@ -752,8 +712,21 @@ fn main() -> ! {
                 let _ = nb::block!(tx.write(cmd::RSP_OK));
             }
 
+            cmd::CMD_GET_ID => {
+                let id = icp.jtag_get_id();
+                let _ = nb::block!(tx.write(cmd::RSP_DATA));
+                let _ = nb::block!(tx.write((id & 0xFF) as u8));
+                let _ = nb::block!(tx.write((id >> 8) as u8));
+            }
+
+            cmd::CMD_SET_CONFIG => {
+                let chip_type = nb::block!(rx.read()).unwrap_or(0);
+                icp.set_chip_type(chip_type);
+                let _ = nb::block!(tx.write(cmd::RSP_OK));
+            }
+
             cmd::CMD_READ_FLASH => {
-                // Read address (4 bytes) and length (2 bytes)
+                // Read address (4 bytes), length (2 bytes) and region (custom_block flag) (1 byte)
                 let addr = {
                     let b0 = nb::block!(rx.read()).unwrap_or(0);
                     let b1 = nb::block!(rx.read()).unwrap_or(0);
@@ -766,11 +739,13 @@ fn main() -> ! {
                     let high = nb::block!(rx.read()).unwrap_or(0);
                     u16::from_le_bytes([low, high]) as usize
                 };
+                let region = nb::block!(rx.read()).unwrap_or(0);
+                let custom_block = region == 1;
 
                 // Clamp length to buffer size
                 let read_len = len.min(buffer.len());
 
-                if icp.read_flash(addr, &mut buffer[..read_len]) {
+                if icp.icp_read_flash(addr, &mut buffer[..read_len], custom_block) {
                     let _ = nb::block!(tx.write(cmd::RSP_DATA));
                     let _ = nb::block!(tx.write(read_len as u8));
                     let _ = nb::block!(tx.write((read_len >> 8) as u8));
@@ -783,50 +758,9 @@ fn main() -> ! {
             }
 
             cmd::CMD_WRITE_FLASH => {
-                // Read address (4 bytes) and length (2 bytes)
-                let addr = {
-                    let b0 = nb::block!(rx.read()).unwrap_or(0);
-                    let b1 = nb::block!(rx.read()).unwrap_or(0);
-                    let b2 = nb::block!(rx.read()).unwrap_or(0);
-                    let b3 = nb::block!(rx.read()).unwrap_or(0);
-                    u32::from_le_bytes([b0, b1, b2, b3])
-                };
-                let len = {
-                    let low = nb::block!(rx.read()).unwrap_or(0);
-                    let high = nb::block!(rx.read()).unwrap_or(0);
-                    u16::from_le_bytes([low, high]) as usize
-                };
-
-                // Clamp length to buffer size
-                let write_len = len.min(buffer.len());
-
-                // Read data into buffer
-                for i in 0..write_len {
-                    buffer[i] = nb::block!(rx.read()).unwrap_or(0);
-                }
-
-                if icp.write_flash(addr, &buffer[..write_len]) {
-                    let _ = nb::block!(tx.write(cmd::RSP_OK));
-                } else {
-                    let _ = nb::block!(tx.write(cmd::RSP_ERR));
-                }
             }
 
             cmd::CMD_ERASE_FLASH => {
-                // Read address (4 bytes)
-                let addr = {
-                    let b0 = nb::block!(rx.read()).unwrap_or(0);
-                    let b1 = nb::block!(rx.read()).unwrap_or(0);
-                    let b2 = nb::block!(rx.read()).unwrap_or(0);
-                    let b3 = nb::block!(rx.read()).unwrap_or(0);
-                    u32::from_le_bytes([b0, b1, b2, b3])
-                };
-
-                if icp.erase_flash(addr) {
-                    let _ = nb::block!(tx.write(cmd::RSP_OK));
-                } else {
-                    let _ = nb::block!(tx.write(cmd::RSP_ERR));
-                }
             }
 
             _ => {

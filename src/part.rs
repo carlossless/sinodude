@@ -9,6 +9,7 @@ pub struct Part {
     pub product_block: u8,
     pub flash_size: usize,
     pub default_code_options: [u8; 8],
+    pub jtag_id: u16,
 }
 
 pub const PART_68F90A: Part = Part {
@@ -19,6 +20,7 @@ pub const PART_68F90A: Part = Part {
     product_block: 0x01,
     flash_size: 65536,
     default_code_options: hex!("a4e063c00f000088"),
+    jtag_id: 0xf690,
 };
 
 pub static PARTS: phf::Map<&'static str, Part> = phf_map! {
