@@ -160,10 +160,9 @@ fn main() {
                     let mut programmer =
                         SerialProgrammer::new(port, part, power_setting).unwrap();
                     programmer.read_init().unwrap();
-                    // let result = programmer.read_flash().unwrap();
+                    let result = programmer.read_flash().unwrap();
                     programmer.finish().unwrap();
-                    // result
-                    vec![]
+                    result
                 }
                 _ => unreachable!(),
             };

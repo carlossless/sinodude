@@ -299,128 +299,114 @@ impl SerialProgrammer {
         Ok(())
     }
 
-    fn read_chunk(&mut self, addr: u32, len: u16) -> Result<Vec<u8>, SerialProgrammerError> {
-        self.send_command(cmd::CMD_READ_FLASH)?;
-
-        // Send address (4 bytes, little endian)
-        let addr_bytes = addr.to_le_bytes();
-        self.send_bytes(&addr_bytes)?;
-
-        // Send length (2 bytes, little endian)
-        let len_bytes = len.to_le_bytes();
-        self.send_bytes(&len_bytes)?;
-
-        // Read response
-        let response = self.read_byte()?;
-        if response != cmd::RSP_DATA {
-            return Err(SerialProgrammerError::OperationFailed);
-        }
-
-        // Read data length
-        let data_len = {
-            let len_buf = self.read_bytes(2)?;
-            u16::from_le_bytes([len_buf[0], len_buf[1]]) as usize
-        };
-
-        // Read data
-        let data = self.read_bytes(data_len)?;
-        Ok(data)
-    }
-
     pub fn read_flash(&mut self) -> Result<Vec<u8>, SerialProgrammerError> {
-        let flash_size = self.chip_type.flash_size;
-        let mut contents = vec![0u8; flash_size];
+        let flash_size: u32 = self.chip_type.flash_size as u32;
+        let mut contents = vec![0u8; 0];
 
         info!("Reading {} bytes from flash...", flash_size);
 
-        for addr in (0..flash_size).step_by(CHUNK_SIZE) {
-            let chunk = self.read_chunk(addr as u32, CHUNK_SIZE as u16)?;
-            contents[addr..addr + chunk.len()].copy_from_slice(&chunk);
+        let buffer_size = 16;
 
-            if addr % 4096 == 0 {
-                info!("Read progress: {}/{} bytes", addr, flash_size);
+        for addr in (0..flash_size).step_by(buffer_size) {
+            debug!("Reading code options at address {:#06x}", addr);
+            self.send_command(cmd::CMD_READ_FLASH)?;
+            self.send_bytes(&addr.to_le_bytes())?; // Address
+            self.send_bytes(&(buffer_size as u16).to_le_bytes())?; // Length
+            self.send_bytes(&[0x00])?; // Flash read
+            let response = self.read_byte()?;
+            if response != cmd::RSP_DATA {
+                return Err(SerialProgrammerError::OperationFailed);
             }
+            let recv_len_l = self.read_byte()?; // Data length (low byte)
+            let recv_len_h = self.read_byte()?; // Data length (high byte)
+            let recv_len = u16::from_le_bytes([recv_len_l, recv_len_h]) as usize;
+            if recv_len != buffer_size {
+                return Err(SerialProgrammerError::InvalidResponse);
+            }
+
+            let result = self.read_bytes(buffer_size)?;
+            contents.extend_from_slice(&result);
         }
 
         info!("Flash read complete");
         Ok(contents)
     }
 
-    fn erase_sector(&mut self, addr: u32) -> Result<(), SerialProgrammerError> {
-        debug!("Erasing sector at {:#x}", addr);
-        self.send_command(cmd::CMD_ERASE_FLASH)?;
+    // fn erase_sector(&mut self, addr: u32) -> Result<(), SerialProgrammerError> {
+    //     debug!("Erasing sector at {:#x}", addr);
+    //     self.send_command(cmd::CMD_ERASE_FLASH)?;
 
-        // Send address (4 bytes, little endian)
-        let addr_bytes = addr.to_le_bytes();
-        self.send_bytes(&addr_bytes)?;
+    //     // Send address (4 bytes, little endian)
+    //     let addr_bytes = addr.to_le_bytes();
+    //     self.send_bytes(&addr_bytes)?;
 
-        self.expect_ok().map_err(|_| SerialProgrammerError::EraseFailed(addr))
-    }
+    //     self.expect_ok().map_err(|_| SerialProgrammerError::EraseFailed(addr))
+    // }
 
-    fn write_chunk(&mut self, addr: u32, data: &[u8]) -> Result<(), SerialProgrammerError> {
-        debug!("Writing {} bytes at {:#x}", data.len(), addr);
-        self.send_command(cmd::CMD_WRITE_FLASH)?;
+    // fn write_chunk(&mut self, addr: u32, data: &[u8]) -> Result<(), SerialProgrammerError> {
+    //     debug!("Writing {} bytes at {:#x}", data.len(), addr);
+    //     self.send_command(cmd::CMD_WRITE_FLASH)?;
 
-        // Send address (4 bytes, little endian)
-        let addr_bytes = addr.to_le_bytes();
-        self.send_bytes(&addr_bytes)?;
+    //     // Send address (4 bytes, little endian)
+    //     let addr_bytes = addr.to_le_bytes();
+    //     self.send_bytes(&addr_bytes)?;
 
-        // Send length (2 bytes, little endian)
-        let len = data.len() as u16;
-        let len_bytes = len.to_le_bytes();
-        self.send_bytes(&len_bytes)?;
+    //     // Send length (2 bytes, little endian)
+    //     let len = data.len() as u16;
+    //     let len_bytes = len.to_le_bytes();
+    //     self.send_bytes(&len_bytes)?;
 
-        // Send data
-        self.send_bytes(data)?;
+    //     // Send data
+    //     self.send_bytes(data)?;
 
-        self.expect_ok().map_err(|_| SerialProgrammerError::WriteFailed(addr))
-    }
+    //     self.expect_ok().map_err(|_| SerialProgrammerError::WriteFailed(addr))
+    // }
 
     pub fn write_flash(&mut self, firmware: &[u8]) -> Result<(), SerialProgrammerError> {
-        let flash_size = self.chip_type.flash_size.min(firmware.len());
+        // let flash_size = self.chip_type.flash_size.min(firmware.len());
 
-        info!("Writing {} bytes to flash...", flash_size);
+        // info!("Writing {} bytes to flash...", flash_size);
 
-        // First, erase all sectors
-        info!("Erasing flash...");
-        for addr in (0..flash_size).step_by(SECTOR_SIZE) {
-            self.erase_sector(addr as u32)?;
-            if addr % 4096 == 0 {
-                info!("Erase progress: {}/{} bytes", addr, flash_size);
-            }
-        }
-        info!("Erase complete");
+        // // First, erase all sectors
+        // info!("Erasing flash...");
+        // for addr in (0..flash_size).step_by(SECTOR_SIZE) {
+        //     self.erase_sector(addr as u32)?;
+        //     if addr % 4096 == 0 {
+        //         info!("Erase progress: {}/{} bytes", addr, flash_size);
+        //     }
+        // }
+        // info!("Erase complete");
 
-        // Then write data in chunks
-        info!("Programming flash...");
-        for addr in (0..flash_size).step_by(CHUNK_SIZE) {
-            let end = (addr + CHUNK_SIZE).min(flash_size);
-            let chunk = &firmware[addr..end];
-            self.write_chunk(addr as u32, chunk)?;
+        // // Then write data in chunks
+        // info!("Programming flash...");
+        // for addr in (0..flash_size).step_by(CHUNK_SIZE) {
+        //     let end = (addr + CHUNK_SIZE).min(flash_size);
+        //     let chunk = &firmware[addr..end];
+        //     self.write_chunk(addr as u32, chunk)?;
 
-            if addr % 4096 == 0 {
-                info!("Write progress: {}/{} bytes", addr, flash_size);
-            }
-        }
-        info!("Programming complete");
+        //     if addr % 4096 == 0 {
+        //         info!("Write progress: {}/{} bytes", addr, flash_size);
+        //     }
+        // }
+        // info!("Programming complete");
 
-        // Verify
-        info!("Verifying flash...");
-        for addr in (0..flash_size).step_by(CHUNK_SIZE) {
-            let end = (addr + CHUNK_SIZE).min(flash_size);
-            let expected = &firmware[addr..end];
-            let actual = self.read_chunk(addr as u32, (end - addr) as u16)?;
+        // // Verify
+        // info!("Verifying flash...");
+        // for addr in (0..flash_size).step_by(CHUNK_SIZE) {
+        //     let end = (addr + CHUNK_SIZE).min(flash_size);
+        //     let expected = &firmware[addr..end];
+        //     let actual = self.read_chunk(addr as u32, (end - addr) as u16)?;
 
-            if expected != actual.as_slice() {
-                warn!("Verification failed at address {:#x}", addr);
-                return Err(SerialProgrammerError::VerificationFailed(addr as u32));
-            }
+        //     if expected != actual.as_slice() {
+        //         warn!("Verification failed at address {:#x}", addr);
+        //         return Err(SerialProgrammerError::VerificationFailed(addr as u32));
+        //     }
 
-            if addr % 4096 == 0 {
-                info!("Verify progress: {}/{} bytes", addr, flash_size);
-            }
-        }
-        info!("Verification complete");
+        //     if addr % 4096 == 0 {
+        //         info!("Verify progress: {}/{} bytes", addr, flash_size);
+        //     }
+        // }
+        // info!("Verification complete");
 
         Ok(())
     }
