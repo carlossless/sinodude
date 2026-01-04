@@ -4,8 +4,7 @@ AVR-based programmer firmware for SinoWealth 8051 microcontrollers using the ICP
 
 ## Supported Boards
 
-- Arduino Uno (ATmega328P)
-- Other ATmega328P-based boards
+- Arduino Nano (ATmega328P)
 
 ## Pin Connections
 
@@ -21,8 +20,8 @@ AVR-based programmer firmware for SinoWealth 8051 microcontrollers using the ICP
 ### Wiring Diagram
 
 ```
-Arduino Uno          SinoWealth MCU
------------          --------------
+Arduino Nano         SinoWealth MCU
+------------         --------------
    D2  <------------>  TDO
    D3  ------------->  TMS
    D4  ------------->  TDI
@@ -105,17 +104,3 @@ Or with ravedude (if installed):
 ```bash
 cargo run --release
 ```
-
-## Usage with sinodude
-
-```bash
-# Read flash
-sinodude read output.hex -c sinodude-serial --port /dev/ttyUSB0 -p 68f90a
-
-# Write flash
-sinodude write firmware.hex -c sinodude-serial --port /dev/ttyUSB0 -p 68f90a
-```
-
-## References
-
-- [sinowealth-8051-bl-updater](https://github.com/gashtaan/sinowealth-8051-bl-updater) - Reference implementation
