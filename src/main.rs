@@ -192,7 +192,11 @@ fn main() {
                 .get_one::<String>("gpt_file")
                 .map(|s| s.as_str())
                 .unwrap();
-            let keypair = GPTDecryptor::keypair(output_file);
+            let file_name = std::path::Path::new(output_file)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(output_file);
+            let keypair = GPTDecryptor::keypair(file_name);
 
             let file = fs::File::open(output_file).unwrap();
             let decrypted = GPTDecryptor::decrypt(file.bytes().scan((), |_, x| x.ok()), keypair);
