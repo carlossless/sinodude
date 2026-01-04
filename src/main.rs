@@ -147,7 +147,7 @@ fn main() {
                         .map(|s| s.as_str())
                         .expect("--power is required for sinolink programmer");
                     let power_setting = PowerSetting::from_option(power_setting_name);
-                    let sinolink = SinodudeSinolink::new(part, power_setting).unwrap();
+                    let sinolink = SinolinkProgrammer::new(part, power_setting).unwrap();
                     sinolink.read_init().unwrap();
                     sinolink.read_flash().unwrap()
                 }
@@ -206,7 +206,7 @@ fn main() {
                         .map(|s| s.as_str())
                         .expect("--power is required for sinolink programmer");
                     let power_setting = PowerSetting::from_option(power_setting_name);
-                    let sinolink = SinodudeSinolink::new(part, power_setting).unwrap();
+                    let sinolink = SinolinkProgrammer::new(part, power_setting).unwrap();
                     sinolink.write_init().unwrap();
                     sinolink.write_flash(&firmware[0..65536]).unwrap();
                 }

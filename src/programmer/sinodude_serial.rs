@@ -52,6 +52,10 @@ pub enum SinodudeSerialProgrammerError {
     VerificationFailed(u32),
     #[error("Firmware version mismatch: expected major version {expected}, got {actual}")]
     VersionMismatch { expected: u8, actual: u8 },
+    #[error("JTAG ID mismatch: expected {expected:#06x}, got {actual:#06x}")]
+    JtagIdMismatch { expected: u16, actual: u16 },
+    #[error("Part number mismatch: expected {expected}, got {actual}")]
+    PartNumberMismatch { expected: String, actual: String },
 }
 
 pub struct SinodudeSerialProgrammer {
@@ -218,6 +222,15 @@ impl SinodudeSerialProgrammer {
 
         let id = u16::from_le_bytes(id_bytes);
         info!("Target MCU ID: {:#06x}", id);
+
+        let expected_id = self.chip_type.jtag_id;
+        if id != expected_id {
+            return Err(SinodudeSerialProgrammerError::JtagIdMismatch {
+                expected: expected_id,
+                actual: id,
+            });
+        }
+
         Ok(())
     }
 
@@ -252,12 +265,21 @@ impl SinodudeSerialProgrammer {
         }
 
         let data = self.read_bytes(16)?;
-        let mut part_number = [0u8; 4];
-        part_number.copy_from_slice(&data[9..13]);
-        info!(
-            "Target Part Number: {}",
-            part_number.iter().map(|b| format!("{:02x}", b)).collect::<String>()
-        );
+        let mut part_number = [0u8; 5];
+        part_number.copy_from_slice(&data[9..14]);
+
+        let actual_str = part_number.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+        info!("Target Part Number: {}", actual_str);
+
+        let expected_part_number = self.chip_type.part_number;
+        if part_number != expected_part_number {
+            let expected_str = expected_part_number.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+            return Err(SinodudeSerialProgrammerError::PartNumberMismatch {
+                expected: expected_str,
+                actual: actual_str,
+            });
+        }
+
         Ok(())
     }
 
