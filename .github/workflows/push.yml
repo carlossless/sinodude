@@ -43,7 +43,7 @@ jobs:
       - name: Run tests
         run: cargo test --verbose
 
-  build-firmware:
+  build-sinodude-serial-firmware:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -61,6 +61,23 @@ jobs:
           key: firmware-cargo-registry
       - name: Build firmware
         run: cargo build --release --verbose
+      - name: Generate hex file
+        run: avr-objcopy -O ihex target/avr-none/release/sinodude-serial.elf sinodude-serial.hex
+      - name: Compress
+        run: |
+          mkdir -p ./artifacts
+          if [[ $GITHUB_REF_TYPE =~ ^tag$ ]]; then
+            TAG=$GITHUB_REF_NAME
+          else
+            TAG=$GITHUB_SHA
+          fi
+          tar -czf ./artifacts/sinodude-serial-$TAG.tar.gz sinodude-serial.hex
+      - name: Archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-firmware
+          path: |
+            ./firmware/artifacts
 
   build:
     strategy:
@@ -120,7 +137,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, build-sinodude-serial-firmware]
     runs-on: ubuntu-latest
     permissions:
       contents: write
