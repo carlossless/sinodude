@@ -62,6 +62,9 @@ jobs:
       OS: ${{ matrix.OS }}
     steps:
       - uses: actions/checkout@v3
+      - name: Install libudev (Linux only)
+        if: matrix.OS == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev
       - name: Cargo cache
         uses: actions/cache@v3
         with:
@@ -90,7 +93,7 @@ jobs:
           mv ./target/$TARGET/release/$EXEC ./$EXEC
           tar -czf ./artifacts/$NAME-$TARGET-$TAG.tar.gz $EXEC
       - name: Archive artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: result
           path: |
@@ -104,7 +107,7 @@ jobs:
       contents: write
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: result
           path: ./artifacts
