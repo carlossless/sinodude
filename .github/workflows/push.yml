@@ -43,6 +43,23 @@ jobs:
       - name: Run tests
         run: cargo test --verbose
 
+  build-firmware:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: firmware
+    steps:
+      - uses: actions/checkout@v3
+      - name: Cargo cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ./firmware/target
+          key: firmware-cargo-registry
+      - name: Build firmware
+        run: cargo build --release --verbose
+
   build:
     strategy:
       fail-fast: false
