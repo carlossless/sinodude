@@ -1,4 +1,5 @@
 use super::super::part::*;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, info, warn};
 use std::io::{Read, Write};
 use std::time::Duration;
@@ -364,28 +365,40 @@ impl SinodudeSerialProgrammer {
 
         let buffer_size = 16;
 
+        let progress = ProgressBar::new(flash_size as u64);
+        progress.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                .unwrap()
+                .progress_chars("=>-"),
+        );
+        progress.set_message("Reading");
+
         for addr in (0..flash_size).step_by(buffer_size) {
-            debug!("Reading code options at address {:#06x}", addr);
+            debug!("Reading flash at address {:#06x}", addr);
             self.send_command(cmd::CMD_READ_FLASH)?;
             self.send_bytes(&addr.to_le_bytes())?; // Address
             self.send_bytes(&(buffer_size as u16).to_le_bytes())?; // Length
             self.send_bytes(&[0x00])?; // Flash read
             let response = self.read_byte()?;
             if response != cmd::RSP_DATA {
+                progress.abandon_with_message("Read failed");
                 return Err(SinodudeSerialProgrammerError::OperationFailed);
             }
             let recv_len_l = self.read_byte()?; // Data length (low byte)
             let recv_len_h = self.read_byte()?; // Data length (high byte)
             let recv_len = u16::from_le_bytes([recv_len_l, recv_len_h]) as usize;
             if recv_len != buffer_size {
+                progress.abandon_with_message("Read failed");
                 return Err(SinodudeSerialProgrammerError::InvalidResponse);
             }
 
             let result = self.read_bytes(buffer_size)?;
             contents.extend_from_slice(&result);
+            progress.set_position(addr as u64 + buffer_size as u64);
         }
 
-        info!("Flash read complete");
+        progress.finish_with_message("Read complete");
         Ok(contents)
     }
 
@@ -455,51 +468,65 @@ impl SinodudeSerialProgrammer {
 
     pub fn write_flash(&mut self, firmware: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
         let flash_size = self.chip_type.flash_size.min(firmware.len());
+        let sector_size = self.chip_type.sector_size;
 
         info!("Writing {} bytes to flash...", flash_size);
 
+        let style = ProgressStyle::default_bar()
+            .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+            .unwrap()
+            .progress_chars("=>-");
+
         // First, erase all sectors
-        info!("Erasing flash...");
-        for addr in (0..flash_size).step_by(self.chip_type.sector_size) {
-            self.erase_sector(addr as u32)?;
-            if addr % 4096 == 0 {
-                info!("Erase progress: {}/{} bytes", addr, flash_size);
-            }
+        let erase_progress = ProgressBar::new(flash_size as u64);
+        erase_progress.set_style(style.clone());
+        erase_progress.set_message("Erasing");
+
+        for addr in (0..flash_size).step_by(sector_size) {
+            self.erase_sector(addr as u32).map_err(|e| {
+                erase_progress.abandon_with_message("Erase failed");
+                e
+            })?;
+            erase_progress.set_position((addr + sector_size) as u64);
         }
-        info!("Erase complete");
+        erase_progress.finish_with_message("Erase complete");
 
         // Then write data in chunks
-        info!("Programming flash...");
+        let write_progress = ProgressBar::new(flash_size as u64);
+        write_progress.set_style(style.clone());
+        write_progress.set_message("Writing");
+
         for addr in (0..flash_size).step_by(CHUNK_SIZE) {
             let end = (addr + CHUNK_SIZE).min(flash_size);
             let chunk = &firmware[addr..end];
-            self.write_chunk(addr as u32, chunk)?;
-
-            if addr % 4096 == 0 {
-                info!("Write progress: {}/{} bytes", addr, flash_size);
-            }
+            self.write_chunk(addr as u32, chunk).map_err(|e| {
+                write_progress.abandon_with_message("Write failed");
+                e
+            })?;
+            write_progress.set_position(end as u64);
         }
-        info!("Programming complete");
+        write_progress.finish_with_message("Write complete");
 
         // Verify
-        info!("Verifying flash...");
+        let verify_progress = ProgressBar::new(flash_size as u64);
+        verify_progress.set_style(style);
+        verify_progress.set_message("Verifying");
+
         for addr in (0..flash_size).step_by(CHUNK_SIZE) {
             let end = (addr + CHUNK_SIZE).min(flash_size);
             let expected = &firmware[addr..end];
             let actual = self.read_chunk(addr as u32, (end - addr) as u16)?;
 
             if expected != actual.as_slice() {
+                verify_progress.abandon_with_message("Verify failed");
                 warn!("Verification failed at address {:#x}", addr);
                 warn!("Expected: {:02x?}", expected);
                 warn!("Actual:   {:02x?}", actual);
                 return Err(SinodudeSerialProgrammerError::VerificationFailed(addr as u32));
             }
-
-            if addr % 4096 == 0 {
-                info!("Verify progress: {}/{} bytes", addr, flash_size);
-            }
+            verify_progress.set_position(end as u64);
         }
-        info!("Verification complete");
+        verify_progress.finish_with_message("Verify complete");
 
         Ok(())
     }
