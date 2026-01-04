@@ -24,8 +24,7 @@ mod cmd {
     pub const RSP_DATA: u8 = 0x01;
 }
 
-const CHUNK_SIZE: usize = 64;
-const SECTOR_SIZE: usize = 1024;
+const CHUNK_SIZE: usize = 16;
 const BAUD_RATE: u32 = 115200;
 const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -296,6 +295,10 @@ impl SerialProgrammer {
         self.ping()?;
         self.power_on()?;
         self.connect()?;
+        self.get_id()?;
+        self.set_config()?;
+        self.get_part_number()?;
+        self.get_code_options()?;
         Ok(())
     }
 
@@ -332,81 +335,117 @@ impl SerialProgrammer {
         Ok(contents)
     }
 
-    // fn erase_sector(&mut self, addr: u32) -> Result<(), SerialProgrammerError> {
-    //     debug!("Erasing sector at {:#x}", addr);
-    //     self.send_command(cmd::CMD_ERASE_FLASH)?;
+    pub fn read_chunk(&mut self, addr: u32, length: u16) -> Result<Vec<u8>, SerialProgrammerError> {
+        debug!("Reading {} bytes at {:#x}", length, addr);
+        self.send_command(cmd::CMD_READ_FLASH)?;
 
-    //     // Send address (4 bytes, little endian)
-    //     let addr_bytes = addr.to_le_bytes();
-    //     self.send_bytes(&addr_bytes)?;
+        // Send address (4 bytes, little endian)
+        let addr_bytes = addr.to_le_bytes();
+        self.send_bytes(&addr_bytes)?;
 
-    //     self.expect_ok().map_err(|_| SerialProgrammerError::EraseFailed(addr))
-    // }
+        // Send length (2 bytes, little endian)
+        let len_bytes = length.to_le_bytes();
+        self.send_bytes(&len_bytes)?;
 
-    // fn write_chunk(&mut self, addr: u32, data: &[u8]) -> Result<(), SerialProgrammerError> {
-    //     debug!("Writing {} bytes at {:#x}", data.len(), addr);
-    //     self.send_command(cmd::CMD_WRITE_FLASH)?;
+        // Send flash read indicator
+        self.send_bytes(&[0x00])?;
 
-    //     // Send address (4 bytes, little endian)
-    //     let addr_bytes = addr.to_le_bytes();
-    //     self.send_bytes(&addr_bytes)?;
+        // Expect data response
+        let response = self.read_byte()?;
+        if response != cmd::RSP_DATA {
+            return Err(SerialProgrammerError::OperationFailed);
+        }
 
-    //     // Send length (2 bytes, little endian)
-    //     let len = data.len() as u16;
-    //     let len_bytes = len.to_le_bytes();
-    //     self.send_bytes(&len_bytes)?;
+        // Read length
+        let recv_len_l = self.read_byte()?; // Data length (low byte)
+        let recv_len_h = self.read_byte()?; // Data length (high byte)
+        let recv_len = u16::from_le_bytes([recv_len_l, recv_len_h]);
+        if recv_len != length {
+            return Err(SerialProgrammerError::InvalidResponse);
+        }
 
-    //     // Send data
-    //     self.send_bytes(data)?;
+        // Read data
+        let data = self.read_bytes(length as usize)?;
+        Ok(data)
+    }
 
-    //     self.expect_ok().map_err(|_| SerialProgrammerError::WriteFailed(addr))
-    // }
+    fn erase_sector(&mut self, addr: u32) -> Result<(), SerialProgrammerError> {
+        debug!("Erasing sector at {:#x}", addr);
+        self.send_command(cmd::CMD_ERASE_FLASH)?;
+
+        // Send address (4 bytes, little endian)
+        let addr_bytes = addr.to_le_bytes();
+        self.send_bytes(&addr_bytes)?;
+
+        self.expect_ok().map_err(|_| SerialProgrammerError::EraseFailed(addr))
+    }
+
+    fn write_chunk(&mut self, addr: u32, data: &[u8]) -> Result<(), SerialProgrammerError> {
+        debug!("Writing {} bytes at {:#x}", data.len(), addr);
+        self.send_command(cmd::CMD_WRITE_FLASH)?;
+
+        // Send address (4 bytes, little endian)
+        let addr_bytes = addr.to_le_bytes();
+        self.send_bytes(&addr_bytes)?;
+
+        // Send length (2 bytes, little endian)
+        let len = data.len() as u16;
+        let len_bytes = len.to_le_bytes();
+        self.send_bytes(&len_bytes)?;
+
+        // Send data
+        self.send_bytes(data)?;
+
+        self.expect_ok().map_err(|_| SerialProgrammerError::WriteFailed(addr))
+    }
 
     pub fn write_flash(&mut self, firmware: &[u8]) -> Result<(), SerialProgrammerError> {
-        // let flash_size = self.chip_type.flash_size.min(firmware.len());
+        let flash_size = self.chip_type.flash_size.min(firmware.len());
 
-        // info!("Writing {} bytes to flash...", flash_size);
+        info!("Writing {} bytes to flash...", flash_size);
 
-        // // First, erase all sectors
-        // info!("Erasing flash...");
-        // for addr in (0..flash_size).step_by(SECTOR_SIZE) {
-        //     self.erase_sector(addr as u32)?;
-        //     if addr % 4096 == 0 {
-        //         info!("Erase progress: {}/{} bytes", addr, flash_size);
-        //     }
-        // }
-        // info!("Erase complete");
+        // First, erase all sectors
+        info!("Erasing flash...");
+        for addr in (0..flash_size).step_by(self.chip_type.sector_size) {
+            self.erase_sector(addr as u32)?;
+            if addr % 4096 == 0 {
+                info!("Erase progress: {}/{} bytes", addr, flash_size);
+            }
+        }
+        info!("Erase complete");
 
-        // // Then write data in chunks
-        // info!("Programming flash...");
-        // for addr in (0..flash_size).step_by(CHUNK_SIZE) {
-        //     let end = (addr + CHUNK_SIZE).min(flash_size);
-        //     let chunk = &firmware[addr..end];
-        //     self.write_chunk(addr as u32, chunk)?;
+        // Then write data in chunks
+        info!("Programming flash...");
+        for addr in (0..flash_size).step_by(CHUNK_SIZE) {
+            let end = (addr + CHUNK_SIZE).min(flash_size);
+            let chunk = &firmware[addr..end];
+            self.write_chunk(addr as u32, chunk)?;
 
-        //     if addr % 4096 == 0 {
-        //         info!("Write progress: {}/{} bytes", addr, flash_size);
-        //     }
-        // }
-        // info!("Programming complete");
+            if addr % 4096 == 0 {
+                info!("Write progress: {}/{} bytes", addr, flash_size);
+            }
+        }
+        info!("Programming complete");
 
-        // // Verify
-        // info!("Verifying flash...");
-        // for addr in (0..flash_size).step_by(CHUNK_SIZE) {
-        //     let end = (addr + CHUNK_SIZE).min(flash_size);
-        //     let expected = &firmware[addr..end];
-        //     let actual = self.read_chunk(addr as u32, (end - addr) as u16)?;
+        // Verify
+        info!("Verifying flash...");
+        for addr in (0..flash_size).step_by(CHUNK_SIZE) {
+            let end = (addr + CHUNK_SIZE).min(flash_size);
+            let expected = &firmware[addr..end];
+            let actual = self.read_chunk(addr as u32, (end - addr) as u16)?;
 
-        //     if expected != actual.as_slice() {
-        //         warn!("Verification failed at address {:#x}", addr);
-        //         return Err(SerialProgrammerError::VerificationFailed(addr as u32));
-        //     }
+            if expected != actual.as_slice() {
+                warn!("Verification failed at address {:#x}", addr);
+                warn!("Expected: {:02x?}", expected);
+                warn!("Actual:   {:02x?}", actual);
+                return Err(SerialProgrammerError::VerificationFailed(addr as u32));
+            }
 
-        //     if addr % 4096 == 0 {
-        //         info!("Verify progress: {}/{} bytes", addr, flash_size);
-        //     }
-        // }
-        // info!("Verification complete");
+            if addr % 4096 == 0 {
+                info!("Verify progress: {}/{} bytes", addr, flash_size);
+            }
+        }
+        info!("Verification complete");
 
         Ok(())
     }
