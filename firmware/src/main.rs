@@ -18,6 +18,10 @@ use core::panic::PanicInfo;
 // TCK - D5 (output)
 // Power - D6 (output)
 
+// Firmware version
+const VERSION_MAJOR: u8 = 1;
+const VERSION_MINOR: u8 = 0;
+
 // Serial protocol commands
 mod cmd {
     pub const CMD_PING: u8 = 0x01;
@@ -30,6 +34,7 @@ mod cmd {
     pub const CMD_POWER_OFF: u8 = 0x08;
     pub const CMD_GET_ID: u8 = 0x09;
     pub const CMD_SET_CONFIG: u8 = 0x0A;
+    pub const CMD_GET_VERSION: u8 = 0x0B;
 
     pub const RSP_OK: u8 = 0x00;
     pub const RSP_ERR: u8 = 0xFF;
@@ -704,6 +709,13 @@ fn main() -> ! {
                 let _ = nb::block!(tx.write(cmd::RSP_OK));
                 let _ = nb::block!(tx.write(b'S'));
                 let _ = nb::block!(tx.write(b'W'));
+            }
+
+            cmd::CMD_GET_VERSION => {
+                // Return firmware version (major, minor)
+                let _ = nb::block!(tx.write(cmd::RSP_DATA));
+                let _ = nb::block!(tx.write(VERSION_MAJOR));
+                let _ = nb::block!(tx.write(VERSION_MINOR));
             }
 
             cmd::CMD_POWER_ON => {

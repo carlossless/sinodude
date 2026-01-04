@@ -4,6 +4,9 @@ use std::io::{Read, Write};
 use std::time::Duration;
 use thiserror::Error;
 
+// Expected firmware version (must match firmware)
+const EXPECTED_VERSION_MAJOR: u8 = 1;
+
 // Serial protocol commands (must match firmware)
 mod cmd {
     pub const CMD_PING: u8 = 0x01;
@@ -16,6 +19,7 @@ mod cmd {
     pub const CMD_POWER_OFF: u8 = 0x08;
     pub const CMD_GET_ID: u8 = 0x09;
     pub const CMD_SET_CONFIG: u8 = 0x0A;
+    pub const CMD_GET_VERSION: u8 = 0x0B;
 
     pub const RSP_OK: u8 = 0x00;
     pub const RSP_ERR: u8 = 0xFF;
@@ -46,6 +50,8 @@ pub enum SinodudeSerialProgrammerError {
     WriteFailed(u32),
     #[error("Verification failed at address {0:#x}")]
     VerificationFailed(u32),
+    #[error("Firmware version mismatch: expected major version {expected}, got {actual}")]
+    VersionMismatch { expected: u8, actual: u8 },
 }
 
 pub struct SinodudeSerialProgrammer {
@@ -129,6 +135,36 @@ impl SinodudeSerialProgrammer {
         }
 
         info!("Programmer responded successfully");
+        Ok(())
+    }
+
+    pub fn get_version(&mut self) -> Result<(u8, u8), SinodudeSerialProgrammerError> {
+        info!("Getting firmware version...");
+        self.send_command(cmd::CMD_GET_VERSION)?;
+
+        let response = self.read_byte()?;
+        if response != cmd::RSP_DATA {
+            return Err(SinodudeSerialProgrammerError::OperationFailed);
+        }
+
+        let major = self.read_byte()?;
+        let minor = self.read_byte()?;
+
+        info!("Firmware version: {}.{}", major, minor);
+
+        Ok((major, minor))
+    }
+
+    pub fn check_version(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
+        let (major, _minor) = self.get_version()?;
+
+        if major != EXPECTED_VERSION_MAJOR {
+            return Err(SinodudeSerialProgrammerError::VersionMismatch {
+                expected: EXPECTED_VERSION_MAJOR,
+                actual: major,
+            });
+        }
+
         Ok(())
     }
 
@@ -276,6 +312,7 @@ impl SinodudeSerialProgrammer {
 
     pub fn read_init(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         self.ping()?;
+        self.check_version()?;
         self.power_on()?;
         self.connect()?;
         self.get_id()?;
@@ -287,6 +324,7 @@ impl SinodudeSerialProgrammer {
 
     pub fn write_init(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         self.ping()?;
+        self.check_version()?;
         self.power_on()?;
         self.connect()?;
         self.get_id()?;
