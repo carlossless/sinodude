@@ -79,10 +79,7 @@ impl SinodudeSerialProgrammer {
         // Give the Arduino time to reset after serial connection
         std::thread::sleep(Duration::from_secs(2));
 
-        Ok(Self {
-            port,
-            chip_type,
-        })
+        Ok(Self { port, chip_type })
     }
 
     fn send_command(&mut self, cmd: u8) -> Result<(), SinodudeSerialProgrammerError> {
@@ -193,7 +190,8 @@ impl SinodudeSerialProgrammer {
     pub fn connect(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         info!("Connecting to target MCU...");
         self.send_command(cmd::CMD_CONNECT)?;
-        self.expect_ok().map_err(|_| SinodudeSerialProgrammerError::ConnectionFailed)?;
+        self.expect_ok()
+            .map_err(|_| SinodudeSerialProgrammerError::ConnectionFailed)?;
         info!("Connected to target MCU");
         Ok(())
     }
@@ -239,7 +237,10 @@ impl SinodudeSerialProgrammer {
         self.send_command(cmd::CMD_SET_CONFIG)?;
         self.send_bytes(&[self.chip_type.chip_type])?;
         self.expect_ok()?;
-        info!("Configuration set for chip type: {:#04x}", self.chip_type.chip_type);
+        info!(
+            "Configuration set for chip type: {:#04x}",
+            self.chip_type.chip_type
+        );
         Ok(())
     }
 
@@ -269,12 +270,18 @@ impl SinodudeSerialProgrammer {
         let mut part_number = [0u8; 5];
         part_number.copy_from_slice(&data[9..14]);
 
-        let actual_str = part_number.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+        let actual_str = part_number
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
         info!("Target Part Number: {}", actual_str);
 
         let expected_part_number = self.chip_type.part_number;
         if part_number != expected_part_number {
-            let expected_str = expected_part_number.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+            let expected_str = expected_part_number
+                .iter()
+                .map(|b| format!("{:02x}", b))
+                .collect::<String>();
             return Err(SinodudeSerialProgrammerError::PartNumberMismatch {
                 expected: expected_str,
                 actual: actual_str,
@@ -285,20 +292,19 @@ impl SinodudeSerialProgrammer {
     }
 
     pub fn get_code_options(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
-        let (options_addr, flash, size): (u32, bool, u16) = match (self.chip_type.custom_block, self.chip_type.chip_type) {
-            (0x02, 0x02) => (0x0800, false, 64),
-            (0x03, 0x02) => (0x1000, false, 64),
-            (0x03, 0x07) => (0x1000, false, 512),
-            (0x04, _) => (0x2000, false, 64),
-            (0x06, _) => ((self.chip_type.flash_size - 32) as u32, true, 32),
-            (_, _) => ((self.chip_type.flash_size - 64) as u32, true, 64),
-        };
+        let (options_addr, flash, size): (u32, bool, u16) =
+            match (self.chip_type.custom_block, self.chip_type.chip_type) {
+                (0x02, 0x02) => (0x0800, false, 64),
+                (0x03, 0x02) => (0x1000, false, 64),
+                (0x03, 0x07) => (0x1000, false, 512),
+                (0x04, _) => (0x2000, false, 64),
+                (0x06, _) => ((self.chip_type.flash_size - 32) as u32, true, 32),
+                (_, _) => ((self.chip_type.flash_size - 64) as u32, true, 64),
+            };
 
         debug!(
             "Reading code options from address {:#06x}, flash: {}, size: {}",
-            options_addr,
-            flash,
-            size
+            options_addr, flash, size
         );
 
         let buffer_size = 16;
@@ -327,7 +333,9 @@ impl SinodudeSerialProgrammer {
 
         info!(
             "Code options:\n{}",
-            data.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+            data.iter()
+                .map(|b| format!("{:02x}", b))
+                .collect::<String>()
         );
 
         Ok(())
@@ -402,7 +410,11 @@ impl SinodudeSerialProgrammer {
         Ok(contents)
     }
 
-    pub fn read_chunk(&mut self, addr: u32, length: u16) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
+    pub fn read_chunk(
+        &mut self,
+        addr: u32,
+        length: u16,
+    ) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
         debug!("Reading {} bytes at {:#x}", length, addr);
         self.send_command(cmd::CMD_READ_FLASH)?;
 
@@ -444,7 +456,8 @@ impl SinodudeSerialProgrammer {
         let addr_bytes = addr.to_le_bytes();
         self.send_bytes(&addr_bytes)?;
 
-        self.expect_ok().map_err(|_| SinodudeSerialProgrammerError::EraseFailed(addr))
+        self.expect_ok()
+            .map_err(|_| SinodudeSerialProgrammerError::EraseFailed(addr))
     }
 
     fn write_chunk(&mut self, addr: u32, data: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
@@ -463,7 +476,8 @@ impl SinodudeSerialProgrammer {
         // Send data
         self.send_bytes(data)?;
 
-        self.expect_ok().map_err(|_| SinodudeSerialProgrammerError::WriteFailed(addr))
+        self.expect_ok()
+            .map_err(|_| SinodudeSerialProgrammerError::WriteFailed(addr))
     }
 
     pub fn write_flash(&mut self, firmware: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
@@ -522,7 +536,9 @@ impl SinodudeSerialProgrammer {
                 warn!("Verification failed at address {:#x}", addr);
                 warn!("Expected: {:02x?}", expected);
                 warn!("Actual:   {:02x?}", actual);
-                return Err(SinodudeSerialProgrammerError::VerificationFailed(addr as u32));
+                return Err(SinodudeSerialProgrammerError::VerificationFailed(
+                    addr as u32,
+                ));
             }
             verify_progress.set_position(end as u64);
         }

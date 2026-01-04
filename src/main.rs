@@ -119,8 +119,7 @@ fn main() {
                     let port = sub_matches
                         .get_one::<String>("port")
                         .expect("--port is required for sinodude-serial programmer");
-                    let mut programmer =
-                        SinodudeSerialProgrammer::new(port, part).unwrap();
+                    let mut programmer = SinodudeSerialProgrammer::new(port, part).unwrap();
                     programmer.read_init().unwrap();
                     let result = programmer.read_flash().unwrap();
                     programmer.finish().unwrap();
@@ -178,8 +177,7 @@ fn main() {
                     let port = sub_matches
                         .get_one::<String>("port")
                         .expect("--port is required for sinodude-serial programmer");
-                    let mut programmer =
-                        SinodudeSerialProgrammer::new(port, part).unwrap();
+                    let mut programmer = SinodudeSerialProgrammer::new(port, part).unwrap();
                     programmer.write_init().unwrap();
                     programmer.write_flash(&firmware).unwrap();
                     programmer.finish().unwrap();

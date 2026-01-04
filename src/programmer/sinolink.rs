@@ -3,9 +3,10 @@ use super::*;
 use chrono::*;
 use hex_literal::*;
 use nusb::{
-    self,
-    list_devices,
-    transfer::{Buffer, Bulk, ControlIn, ControlOut, ControlType, In, Out, Recipient, TransferError},
+    self, list_devices,
+    transfer::{
+        Buffer, Bulk, ControlIn, ControlOut, ControlType, In, Out, Recipient, TransferError,
+    },
     ActiveConfigurationError, DeviceInfo, Endpoint, Error, Interface, MaybeFuture,
 };
 use std::{thread::sleep, time::Duration};
@@ -61,8 +62,7 @@ fn bcdtodt(src: &[u8]) -> Option<NaiveDateTime> {
     println!("{:04x?}", src);
     let s: Vec<String> = src.iter().map(|x| format!("{:02x}", x)).collect();
     let datestring = s.join("");
-    NaiveDateTime::parse_from_str(&datestring, "%y%m%d%H%M%S")
-        .ok()
+    NaiveDateTime::parse_from_str(&datestring, "%y%m%d%H%M%S").ok()
 }
 
 impl SinolinkProgrammer<'static> {
@@ -149,11 +149,12 @@ impl SinolinkProgrammer<'static> {
             .active_configuration()
             .map_err(DeviceError::ConfigurationError)?;
 
-        let Some(interface) = config
-            .interfaces()
-            .find(|i: &nusb::descriptors::InterfaceDescriptors| {
-                i.interface_number() == SINOLINK_INTERFACE_NUMBER
-            })
+        let Some(interface) =
+            config
+                .interfaces()
+                .find(|i: &nusb::descriptors::InterfaceDescriptors| {
+                    i.interface_number() == SINOLINK_INTERFACE_NUMBER
+                })
         else {
             return Err(DeviceError::InterfaceNotFound);
         };
@@ -400,10 +401,13 @@ impl SinolinkProgrammer<'static> {
 
         let buffer = Buffer::new(buffer_length.into());
         let completion = endpoint.transfer_blocking(buffer, TIMEOUT);
-        completion
-            .status
-            .map_err(IOError::ReadBulkError)?;
-        Ok(completion.buffer.iter().take(length as usize).cloned().collect())
+        completion.status.map_err(IOError::ReadBulkError)?;
+        Ok(completion
+            .buffer
+            .iter()
+            .take(length as usize)
+            .cloned()
+            .collect())
     }
 
     pub fn write_chip(
@@ -455,9 +459,7 @@ impl SinolinkProgrammer<'static> {
         let mut buffer = Buffer::new(buffer_length.into());
         buffer.extend_from_slice(&buf);
         let completion = endpoint.transfer_blocking(buffer, TIMEOUT);
-        completion
-            .status
-            .map_err(IOError::WriteBulkError)
+        completion.status.map_err(IOError::WriteBulkError)
     }
 
     pub fn configure_read(&self) -> Result<(), IOError> {
@@ -536,9 +538,7 @@ impl SinolinkProgrammer<'static> {
         let mut buffer = Buffer::new(config.len());
         buffer.extend_from_slice(&config);
         let completion = endpoint.transfer_blocking(buffer, TIMEOUT);
-        completion
-            .status
-            .map_err(IOError::WriteBulkError)
+        completion.status.map_err(IOError::WriteBulkError)
     }
 
     pub fn configure_write(&self) -> Result<(), IOError> {
@@ -604,9 +604,7 @@ impl SinolinkProgrammer<'static> {
         let mut buffer = Buffer::new(config.len());
         buffer.extend_from_slice(&config);
         let completion = endpoint.transfer_blocking(buffer, TIMEOUT);
-        completion
-            .status
-            .map_err(IOError::WriteBulkError)
+        completion.status.map_err(IOError::WriteBulkError)
     }
 
     pub fn read_flash(&self) -> Result<Vec<u8>, IOError> {
