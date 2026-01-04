@@ -1,8 +1,6 @@
 use super::super::part::*;
-use super::*;
 use log::{debug, info, warn};
 use std::io::{Read, Write};
-use std::thread;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -29,7 +27,7 @@ const BAUD_RATE: u32 = 115200;
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Error)]
-pub enum SerialProgrammerError {
+pub enum SinodudeSerialProgrammerError {
     #[error("Failed to open serial port: {0}")]
     PortOpenError(String),
     #[error("Serial I/O error: {0}")]
@@ -50,25 +48,22 @@ pub enum SerialProgrammerError {
     VerificationFailed(u32),
 }
 
-pub struct SerialProgrammer {
+pub struct SinodudeSerialProgrammer {
     port: Box<dyn serialport::SerialPort>,
     chip_type: &'static Part,
-    #[allow(dead_code)]
-    power_setting: PowerSetting,
 }
 
-impl SerialProgrammer {
+impl SinodudeSerialProgrammer {
     pub fn new(
         port_name: &str,
         chip_type: &'static Part,
-        power_setting: PowerSetting,
-    ) -> Result<Self, SerialProgrammerError> {
+    ) -> Result<Self, SinodudeSerialProgrammerError> {
         info!("Opening serial port: {}", port_name);
 
         let port = serialport::new(port_name, BAUD_RATE)
             .timeout(TIMEOUT)
             .open()
-            .map_err(|e| SerialProgrammerError::PortOpenError(e.to_string()))?;
+            .map_err(|e| SinodudeSerialProgrammerError::PortOpenError(e.to_string()))?;
 
         // Give the Arduino time to reset after serial connection
         std::thread::sleep(Duration::from_secs(2));
@@ -76,69 +71,68 @@ impl SerialProgrammer {
         Ok(Self {
             port,
             chip_type,
-            power_setting,
         })
     }
 
-    fn send_command(&mut self, cmd: u8) -> Result<(), SerialProgrammerError> {
+    fn send_command(&mut self, cmd: u8) -> Result<(), SinodudeSerialProgrammerError> {
         debug!("Sending command: {:#04x}", cmd);
         self.port.write_all(&[cmd])?;
         self.port.flush()?;
         Ok(())
     }
 
-    fn send_bytes(&mut self, data: &[u8]) -> Result<(), SerialProgrammerError> {
+    fn send_bytes(&mut self, data: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
         debug!("Sending {} bytes", data.len());
         self.port.write_all(data)?;
         self.port.flush()?;
         Ok(())
     }
 
-    fn read_byte(&mut self) -> Result<u8, SerialProgrammerError> {
+    fn read_byte(&mut self) -> Result<u8, SinodudeSerialProgrammerError> {
         let mut buf = [0u8; 1];
         self.port.read_exact(&mut buf)?;
         debug!("Received byte: {:#04x}", buf[0]);
         Ok(buf[0])
     }
 
-    fn read_bytes(&mut self, len: usize) -> Result<Vec<u8>, SerialProgrammerError> {
+    fn read_bytes(&mut self, len: usize) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
         let mut buf = vec![0u8; len];
         self.port.read_exact(&mut buf)?;
         debug!("Received {} bytes", len);
         Ok(buf)
     }
 
-    fn expect_ok(&mut self) -> Result<(), SerialProgrammerError> {
+    fn expect_ok(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         let response = self.read_byte()?;
         if response == cmd::RSP_OK {
             Ok(())
         } else if response == cmd::RSP_ERR {
-            Err(SerialProgrammerError::OperationFailed)
+            Err(SinodudeSerialProgrammerError::OperationFailed)
         } else {
-            Err(SerialProgrammerError::InvalidResponse)
+            Err(SinodudeSerialProgrammerError::InvalidResponse)
         }
     }
 
-    pub fn ping(&mut self) -> Result<(), SerialProgrammerError> {
+    pub fn ping(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         info!("Pinging programmer...");
         self.send_command(cmd::CMD_PING)?;
 
         let response = self.read_byte()?;
         if response != cmd::RSP_OK {
-            return Err(SerialProgrammerError::NoResponse);
+            return Err(SinodudeSerialProgrammerError::NoResponse);
         }
 
         // Read signature bytes "SW"
         let sig = self.read_bytes(2)?;
         if sig != [b'S', b'W'] {
-            return Err(SerialProgrammerError::InvalidResponse);
+            return Err(SinodudeSerialProgrammerError::InvalidResponse);
         }
 
         info!("Programmer responded successfully");
         Ok(())
     }
 
-    pub fn power_on(&mut self) -> Result<(), SerialProgrammerError> {
+    pub fn power_on(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         info!("Powering on target...");
         self.send_command(cmd::CMD_POWER_ON)?;
         self.expect_ok()?;
@@ -147,7 +141,7 @@ impl SerialProgrammer {
         Ok(())
     }
 
-    pub fn power_off(&mut self) -> Result<(), SerialProgrammerError> {
+    pub fn power_off(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         info!("Powering off target...");
         self.send_command(cmd::CMD_POWER_OFF)?;
         self.expect_ok()?;
@@ -155,15 +149,15 @@ impl SerialProgrammer {
         Ok(())
     }
 
-    pub fn connect(&mut self) -> Result<(), SerialProgrammerError> {
+    pub fn connect(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         info!("Connecting to target MCU...");
         self.send_command(cmd::CMD_CONNECT)?;
-        self.expect_ok().map_err(|_| SerialProgrammerError::ConnectionFailed)?;
+        self.expect_ok().map_err(|_| SinodudeSerialProgrammerError::ConnectionFailed)?;
         info!("Connected to target MCU");
         Ok(())
     }
 
-    pub fn disconnect(&mut self) -> Result<(), SerialProgrammerError> {
+    pub fn disconnect(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         info!("Disconnecting from target MCU...");
         self.send_command(cmd::CMD_DISCONNECT)?;
         self.expect_ok()?;
@@ -171,14 +165,14 @@ impl SerialProgrammer {
         Ok(())
     }
 
-    pub fn get_id(&mut self) -> Result<(), SerialProgrammerError> {
+    pub fn get_id(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         info!("Getting target MCU ID...");
         self.send_command(cmd::CMD_GET_ID)?;
 
         // Read response
         let response = self.read_byte()?;
         if response != cmd::RSP_DATA {
-            return Err(SerialProgrammerError::OperationFailed);
+            return Err(SinodudeSerialProgrammerError::OperationFailed);
         }
 
         let mut id_bytes = [0u8; 2];
@@ -191,7 +185,7 @@ impl SerialProgrammer {
         Ok(())
     }
 
-    pub fn set_config(&mut self) -> Result<(), SerialProgrammerError> {
+    pub fn set_config(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         self.send_command(cmd::CMD_SET_CONFIG)?;
         self.send_bytes(&[self.chip_type.chip_type])?;
         self.expect_ok()?;
@@ -199,12 +193,12 @@ impl SerialProgrammer {
         Ok(())
     }
 
-    pub fn get_part_number(&mut self) -> Result<(), SerialProgrammerError> {
+    pub fn get_part_number(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         let custom_block_addr: u32 = match self.chip_type.custom_block {
             0x02 => 0x0A00,
             0x03 => 0x1200,
             0x04 => 0x2200,
-            _ => return Err(SerialProgrammerError::OperationFailed),
+            _ => return Err(SinodudeSerialProgrammerError::OperationFailed),
         };
         self.send_command(cmd::CMD_READ_FLASH)?;
         self.send_bytes(&custom_block_addr.to_le_bytes())?; // Address
@@ -212,13 +206,13 @@ impl SerialProgrammer {
         self.send_bytes(&[0x01])?; // Custom block read
         let response = self.read_byte()?;
         if response != cmd::RSP_DATA {
-            return Err(SerialProgrammerError::OperationFailed);
+            return Err(SinodudeSerialProgrammerError::OperationFailed);
         }
         let recv_len_l = self.read_byte()?; // Data length (low byte)
         let recv_len_h = self.read_byte()?; // Data length (high byte)
         let recv_len = u16::from_le_bytes([recv_len_l, recv_len_h]) as usize;
         if recv_len != 16 {
-            return Err(SerialProgrammerError::InvalidResponse);
+            return Err(SinodudeSerialProgrammerError::InvalidResponse);
         }
 
         let data = self.read_bytes(16)?;
@@ -231,7 +225,7 @@ impl SerialProgrammer {
         Ok(())
     }
 
-    pub fn get_code_options(&mut self) -> Result<(), SerialProgrammerError> {
+    pub fn get_code_options(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         let (options_addr, flash, size): (u32, bool, u16) = match (self.chip_type.custom_block, self.chip_type.chip_type) {
             (0x02, 0x02) => (0x0800, false, 64),
             (0x03, 0x02) => (0x1000, false, 64),
@@ -259,13 +253,13 @@ impl SerialProgrammer {
             self.send_bytes(&[if flash { 0x00 } else { 0x01 }])?; // Custom block read
             let response = self.read_byte()?;
             if response != cmd::RSP_DATA {
-                return Err(SerialProgrammerError::OperationFailed);
+                return Err(SinodudeSerialProgrammerError::OperationFailed);
             }
             let recv_len_l = self.read_byte()?; // Data length (low byte)
             let recv_len_h = self.read_byte()?; // Data length (high byte)
             let recv_len = u16::from_le_bytes([recv_len_l, recv_len_h]) as usize;
             if recv_len != buffer_size {
-                return Err(SerialProgrammerError::InvalidResponse);
+                return Err(SinodudeSerialProgrammerError::InvalidResponse);
             }
 
             let result = self.read_bytes(buffer_size)?;
@@ -280,7 +274,7 @@ impl SerialProgrammer {
         Ok(())
     }
 
-    pub fn read_init(&mut self) -> Result<(), SerialProgrammerError> {
+    pub fn read_init(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         self.ping()?;
         self.power_on()?;
         self.connect()?;
@@ -291,7 +285,7 @@ impl SerialProgrammer {
         Ok(())
     }
 
-    pub fn write_init(&mut self) -> Result<(), SerialProgrammerError> {
+    pub fn write_init(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         self.ping()?;
         self.power_on()?;
         self.connect()?;
@@ -302,7 +296,7 @@ impl SerialProgrammer {
         Ok(())
     }
 
-    pub fn read_flash(&mut self) -> Result<Vec<u8>, SerialProgrammerError> {
+    pub fn read_flash(&mut self) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
         let flash_size: u32 = self.chip_type.flash_size as u32;
         let mut contents = vec![0u8; 0];
 
@@ -318,13 +312,13 @@ impl SerialProgrammer {
             self.send_bytes(&[0x00])?; // Flash read
             let response = self.read_byte()?;
             if response != cmd::RSP_DATA {
-                return Err(SerialProgrammerError::OperationFailed);
+                return Err(SinodudeSerialProgrammerError::OperationFailed);
             }
             let recv_len_l = self.read_byte()?; // Data length (low byte)
             let recv_len_h = self.read_byte()?; // Data length (high byte)
             let recv_len = u16::from_le_bytes([recv_len_l, recv_len_h]) as usize;
             if recv_len != buffer_size {
-                return Err(SerialProgrammerError::InvalidResponse);
+                return Err(SinodudeSerialProgrammerError::InvalidResponse);
             }
 
             let result = self.read_bytes(buffer_size)?;
@@ -335,7 +329,7 @@ impl SerialProgrammer {
         Ok(contents)
     }
 
-    pub fn read_chunk(&mut self, addr: u32, length: u16) -> Result<Vec<u8>, SerialProgrammerError> {
+    pub fn read_chunk(&mut self, addr: u32, length: u16) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
         debug!("Reading {} bytes at {:#x}", length, addr);
         self.send_command(cmd::CMD_READ_FLASH)?;
 
@@ -353,7 +347,7 @@ impl SerialProgrammer {
         // Expect data response
         let response = self.read_byte()?;
         if response != cmd::RSP_DATA {
-            return Err(SerialProgrammerError::OperationFailed);
+            return Err(SinodudeSerialProgrammerError::OperationFailed);
         }
 
         // Read length
@@ -361,7 +355,7 @@ impl SerialProgrammer {
         let recv_len_h = self.read_byte()?; // Data length (high byte)
         let recv_len = u16::from_le_bytes([recv_len_l, recv_len_h]);
         if recv_len != length {
-            return Err(SerialProgrammerError::InvalidResponse);
+            return Err(SinodudeSerialProgrammerError::InvalidResponse);
         }
 
         // Read data
@@ -369,7 +363,7 @@ impl SerialProgrammer {
         Ok(data)
     }
 
-    fn erase_sector(&mut self, addr: u32) -> Result<(), SerialProgrammerError> {
+    fn erase_sector(&mut self, addr: u32) -> Result<(), SinodudeSerialProgrammerError> {
         debug!("Erasing sector at {:#x}", addr);
         self.send_command(cmd::CMD_ERASE_FLASH)?;
 
@@ -377,10 +371,10 @@ impl SerialProgrammer {
         let addr_bytes = addr.to_le_bytes();
         self.send_bytes(&addr_bytes)?;
 
-        self.expect_ok().map_err(|_| SerialProgrammerError::EraseFailed(addr))
+        self.expect_ok().map_err(|_| SinodudeSerialProgrammerError::EraseFailed(addr))
     }
 
-    fn write_chunk(&mut self, addr: u32, data: &[u8]) -> Result<(), SerialProgrammerError> {
+    fn write_chunk(&mut self, addr: u32, data: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
         debug!("Writing {} bytes at {:#x}", data.len(), addr);
         self.send_command(cmd::CMD_WRITE_FLASH)?;
 
@@ -396,10 +390,10 @@ impl SerialProgrammer {
         // Send data
         self.send_bytes(data)?;
 
-        self.expect_ok().map_err(|_| SerialProgrammerError::WriteFailed(addr))
+        self.expect_ok().map_err(|_| SinodudeSerialProgrammerError::WriteFailed(addr))
     }
 
-    pub fn write_flash(&mut self, firmware: &[u8]) -> Result<(), SerialProgrammerError> {
+    pub fn write_flash(&mut self, firmware: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
         let flash_size = self.chip_type.flash_size.min(firmware.len());
 
         info!("Writing {} bytes to flash...", flash_size);
@@ -438,7 +432,7 @@ impl SerialProgrammer {
                 warn!("Verification failed at address {:#x}", addr);
                 warn!("Expected: {:02x?}", expected);
                 warn!("Actual:   {:02x?}", actual);
-                return Err(SerialProgrammerError::VerificationFailed(addr as u32));
+                return Err(SinodudeSerialProgrammerError::VerificationFailed(addr as u32));
             }
 
             if addr % 4096 == 0 {
@@ -450,14 +444,14 @@ impl SerialProgrammer {
         Ok(())
     }
 
-    pub fn finish(&mut self) -> Result<(), SerialProgrammerError> {
+    pub fn finish(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         self.disconnect()?;
         self.power_off()?;
         Ok(())
     }
 }
 
-impl Drop for SerialProgrammer {
+impl Drop for SinodudeSerialProgrammer {
     fn drop(&mut self) {
         // Best effort cleanup
         let _ = self.disconnect();

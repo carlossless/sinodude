@@ -1,4 +1,4 @@
-# SinoDude AVR Programmer Firmware
+# SinoDude Serial Programmer Firmware
 
 AVR-based programmer firmware for SinoWealth 8051 microcontrollers using the ICP (In-Circuit Programming) protocol.
 
@@ -90,14 +90,14 @@ rustup override set nightly
 cargo build --release
 ```
 
-The output ELF file will be in `target/avr-atmega328p/release/sinodude-firmware.elf`.
+The output ELF file will be in `target/avr-atmega328p/release/sinodude-serial.elf`.
 
 ## Flashing
 
 Using avrdude:
 
 ```bash
-avrdude -p atmega328p -c arduino -P /dev/ttyUSB0 -b 115200 -U flash:w:target/avr-atmega328p/release/sinodude-firmware.elf
+avrdude -p atmega328p -c arduino -P /dev/ttyUSB0 -b 115200 -U flash:w:target/avr-atmega328p/release/sinodude-serial.elf
 ```
 
 Or with ravedude (if installed):
@@ -110,10 +110,10 @@ cargo run --release
 
 ```bash
 # Read flash
-sinodude read output.hex -c serial --port /dev/ttyUSB0 -p 68f90a -t external
+sinodude read output.hex -c sinodude-serial --port /dev/ttyUSB0 -p 68f90a
 
 # Write flash
-sinodude write firmware.hex -c serial --port /dev/ttyUSB0 -p 68f90a -t external
+sinodude write firmware.hex -c sinodude-serial --port /dev/ttyUSB0 -p 68f90a
 ```
 
 ## References

@@ -24,7 +24,7 @@ fn cli() -> Command {
                 .arg(arg!(output_file: <OUTPUT_FILE> "file to write flash contents to"))
                 .arg(
                     arg!(-c --programmer <PROGRAMMER>)
-                        .value_parser(["sinolink", "serial"])
+                        .value_parser(["sinolink", "sinodude-serial"])
                         .required(true),
                 )
                 .arg(
@@ -33,12 +33,12 @@ fn cli() -> Command {
                         .required(true),
                 )
                 .arg(
-                    arg!(-t --power <POWER_SETTING>)
+                    arg!(-t --power <POWER_SETTING> "Power setting for sinolink programmer")
                         .value_parser(["3v3", "5v", "external"])
-                        .required(true),
+                        .required(false),
                 )
                 .arg(
-                    arg!(--port <PORT> "Serial port for serial programmer (e.g., /dev/ttyUSB0)")
+                    arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
                         .required(false),
                 ),
         )
@@ -49,7 +49,7 @@ fn cli() -> Command {
                 .arg(arg!(input_file: <INPUT_FILE> "file to write to flash"))
                 .arg(
                     arg!(-c --programmer <PROGRAMMER>)
-                        .value_parser(["sinolink", "serial"])
+                        .value_parser(["sinolink", "sinodude-serial"])
                         .required(true),
                 )
                 .arg(
@@ -58,12 +58,12 @@ fn cli() -> Command {
                         .required(true),
                 )
                 .arg(
-                    arg!(-t --power <POWER_SETTING>)
+                    arg!(-t --power <POWER_SETTING> "Power setting for sinolink programmer")
                         .value_parser(["3v3", "5v", "external"])
-                        .required(true),
+                        .required(false),
                 )
                 .arg(
-                    arg!(--port <PORT> "Serial port for serial programmer (e.g., /dev/ttyUSB0)")
+                    arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
                         .required(false),
                 ),
         )
@@ -128,13 +128,6 @@ fn main() {
                 .map(|s| s.as_str())
                 .unwrap();
 
-            let power_setting_name = sub_matches
-                .get_one::<String>("power")
-                .map(|s| s.as_str())
-                .unwrap();
-
-            let power_setting = PowerSetting::from_option(power_setting_name);
-
             let part_name = sub_matches
                 .get_one::<String>("part")
                 .map(|s| s.as_str())
@@ -149,16 +142,21 @@ fn main() {
 
             let result = match programmer_name {
                 "sinolink" => {
-                    let sinolink = Sinolink::new(part, power_setting).unwrap();
+                    let power_setting_name = sub_matches
+                        .get_one::<String>("power")
+                        .map(|s| s.as_str())
+                        .expect("--power is required for sinolink programmer");
+                    let power_setting = PowerSetting::from_option(power_setting_name);
+                    let sinolink = SinodudeSinolink::new(part, power_setting).unwrap();
                     sinolink.read_init().unwrap();
                     sinolink.read_flash().unwrap()
                 }
-                "serial" => {
+                "sinodude-serial" => {
                     let port = sub_matches
                         .get_one::<String>("port")
-                        .expect("--port is required for serial programmer");
+                        .expect("--port is required for sinodude-serial programmer");
                     let mut programmer =
-                        SerialProgrammer::new(port, part, power_setting).unwrap();
+                        SinodudeSerialProgrammer::new(port, part).unwrap();
                     programmer.read_init().unwrap();
                     let result = programmer.read_flash().unwrap();
                     programmer.finish().unwrap();
@@ -178,13 +176,6 @@ fn main() {
                 .get_one::<String>("input_file")
                 .map(|s| s.as_str())
                 .unwrap();
-
-            let power_setting_name = sub_matches
-                .get_one::<String>("power")
-                .map(|s| s.as_str())
-                .unwrap();
-
-            let power_setting = PowerSetting::from_option(power_setting_name);
 
             let part_name = sub_matches
                 .get_one::<String>("part")
@@ -210,16 +201,21 @@ fn main() {
 
             match programmer_name {
                 "sinolink" => {
-                    let sinolink = Sinolink::new(part, power_setting).unwrap();
+                    let power_setting_name = sub_matches
+                        .get_one::<String>("power")
+                        .map(|s| s.as_str())
+                        .expect("--power is required for sinolink programmer");
+                    let power_setting = PowerSetting::from_option(power_setting_name);
+                    let sinolink = SinodudeSinolink::new(part, power_setting).unwrap();
                     sinolink.write_init().unwrap();
                     sinolink.write_flash(&firmware[0..65536]).unwrap();
                 }
-                "serial" => {
+                "sinodude-serial" => {
                     let port = sub_matches
                         .get_one::<String>("port")
-                        .expect("--port is required for serial programmer");
+                        .expect("--port is required for sinodude-serial programmer");
                     let mut programmer =
-                        SerialProgrammer::new(port, part, power_setting).unwrap();
+                        SinodudeSerialProgrammer::new(port, part).unwrap();
                     programmer.write_init().unwrap();
                     programmer.write_flash(&firmware).unwrap();
                     programmer.finish().unwrap();

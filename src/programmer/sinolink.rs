@@ -13,7 +13,7 @@ use thiserror::Error;
 
 use log::{debug, info};
 
-pub struct Sinolink<'a> {
+pub struct SinodudeSinolink<'a> {
     interface: Interface,
     chip_type: &'a Part,
     power_setting: PowerSetting,
@@ -65,8 +65,8 @@ fn bcdtodt(src: &[u8]) -> Option<NaiveDateTime> {
         .ok()
 }
 
-impl Sinolink<'static> {
-    fn find_sinolink() -> Result<DeviceInfo, DeviceError> {
+impl SinodudeSinolink<'static> {
+    fn find_device() -> Result<DeviceInfo, DeviceError> {
         for device in list_devices().wait().unwrap() {
             if device.vendor_id() == SINOLINK_DEVICE_ID && device.product_id() == SINOLINK_VENDOR_ID
             {
@@ -94,14 +94,14 @@ impl Sinolink<'static> {
         // // Wait for device to be reeunmerated
         // sleep(Duration::from_secs(3));
 
-        let device_info = Self::find_sinolink()?;
+        let device_info = Self::find_device()?;
         let device = device_info.open().wait().map_err(DeviceError::SetupError)?;
 
         device.reset().wait().map_err(DeviceError::SetupError)?;
 
         sleep(Duration::from_secs(3));
 
-        let device_info = Self::find_sinolink()?;
+        let device_info = Self::find_device()?;
         let device = device_info.open().wait().map_err(DeviceError::SetupError)?;
 
         for interface in device.configurations() {

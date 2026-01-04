@@ -1,5 +1,5 @@
 [package]
-name = "sinodude-firmware"
+name = "sinodude-serial"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
@@ -16,7 +16,7 @@ rev = "ff4909c00ceee76d60f8bd7cc95bc0f3e2ab673f"
 features = ["atmega328p", "rt"]
 
 [[bin]]
-name = "sinodude-firmware"
+name = "sinodude-serial"
 test = false
 bench = false
 

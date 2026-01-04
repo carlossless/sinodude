@@ -11,12 +11,6 @@ use atmega_hal::usart::{Baudrate, Usart};
 use core::ops;
 use core::panic::PanicInfo;
 
-use crate::icp_cmd::{ICP_SET_IB_OFFSET_H, ICP_SET_IB_OFFSET_L};
-
-type Serial = Usart<pac::USART0, Pin<mode::Input, PD0>, Pin<mode::Output, PD1>, MHz16>;
-type PD0 = atmega_hal::port::PD0;
-type PD1 = atmega_hal::port::PD1;
-
 // ICP Pin assignments (matching reference implementation)
 // TDO - D2 (input)
 // TMS - D3 (output)
@@ -141,13 +135,6 @@ impl IcpController {
         self.pins.tdo.is_high()
     }
 
-    fn clock_pulse(&mut self) {
-        self.delay_us(1);
-        self.tck_high();
-        self.delay_us(1);
-        self.tck_low();
-    }
-
     fn set_chip_type(&mut self, chip_type: u8) {
         self.chip_type = Some(chip_type);
     }
@@ -168,30 +155,6 @@ impl IcpController {
 
             byte <<= 1;
         }
-    }
-
-    fn receive_byte(&mut self) -> u8 {
-        let mut byte: u8 = 0;
-        for _ in 0..8 {
-            self.clock_pulse();
-
-            if self.tdo_read() {
-                byte |= 1;
-            }
-
-            byte <<= 1;
-        }
-        self.clock_pulse();
-        byte
-    }
-
-    fn reverse_bits(mut byte: u8) -> u8 {
-        let mut result: u8 = 0;
-        for _ in 0..8 {
-            result = (result << 1) | (byte & 1);
-            byte >>= 1;
-        }
-        result
     }
 
     fn connect(&mut self) -> bool {
