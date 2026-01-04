@@ -25,6 +25,18 @@ pub const PART_68F90A: Part = Part {
     sector_size: 512,
 };
 
+// pub const PART_68F881: Part = Part {
+//     part_number: hex!("68f8810000"),
+//     // model: hex!("06080f09000a"), // unkownn, sinolink specific
+//     chip_type: 0x02,
+//     custom_block: 0x03,
+//     product_block: 0x01,
+//     flash_size: 32768,
+//     // default_code_options: hex!("0x80000000"), // order not checked
+//     jtag_id: 0xf648,
+//     sector_size: 1024,
+// };
+
 pub static PARTS: phf::Map<&'static str, Part> = phf_map! {
     "68f90a" => PART_68F90A
 };
