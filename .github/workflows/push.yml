@@ -95,7 +95,7 @@ jobs:
       - name: Archive artifact
         uses: actions/upload-artifact@v4
         with:
-          name: result
+          name: result-${{ matrix.TARGET }}
           path: |
             ./artifacts
 
@@ -109,8 +109,9 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: result
+          pattern: result-*
           path: ./artifacts
+          merge-multiple: true
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
