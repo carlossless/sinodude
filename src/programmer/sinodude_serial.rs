@@ -371,7 +371,7 @@ impl SinodudeSerialProgrammer {
 
         info!("Reading {} bytes from flash...", flash_size);
 
-        let buffer_size = 16;
+        let buffer_size: u16 = 16;
 
         let progress = ProgressBar::new(flash_size as u64);
         progress.set_style(
@@ -382,26 +382,11 @@ impl SinodudeSerialProgrammer {
         );
         progress.set_message("Reading");
 
-        for addr in (0..flash_size).step_by(buffer_size) {
-            debug!("Reading flash at address {:#06x}", addr);
-            self.send_command(cmd::CMD_READ_FLASH)?;
-            self.send_bytes(&addr.to_le_bytes())?; // Address
-            self.send_bytes(&(buffer_size as u16).to_le_bytes())?; // Length
-            self.send_bytes(&[0x00])?; // Flash read
-            let response = self.read_byte()?;
-            if response != cmd::RSP_DATA {
+        for addr in (0..flash_size).step_by(buffer_size as usize) {
+            let result = self.read_chunk(addr, buffer_size).map_err(|e| {
                 progress.abandon_with_message("Read failed");
-                return Err(SinodudeSerialProgrammerError::OperationFailed);
-            }
-            let recv_len_l = self.read_byte()?; // Data length (low byte)
-            let recv_len_h = self.read_byte()?; // Data length (high byte)
-            let recv_len = u16::from_le_bytes([recv_len_l, recv_len_h]) as usize;
-            if recv_len != buffer_size {
-                progress.abandon_with_message("Read failed");
-                return Err(SinodudeSerialProgrammerError::InvalidResponse);
-            }
-
-            let result = self.read_bytes(buffer_size)?;
+                e
+            })?;
             contents.extend_from_slice(&result);
             progress.set_position(addr as u64 + buffer_size as u64);
         }
