@@ -846,7 +846,7 @@
 	)
 	(symbol
 		(lib_id "Regulator_Linear:AMS1117-3.3")
-		(at 96.52 92.71 0)
+		(at 83.82 102.87 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -855,7 +855,7 @@
 		(fields_autoplaced yes)
 		(uuid "349effb6-e524-4baf-830c-e06c57ec71ee")
 		(property "Reference" "U2"
-			(at 96.52 86.36 0)
+			(at 83.82 96.52 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -863,7 +863,7 @@
 			)
 		)
 		(property "Value" "AMS1117-3.3"
-			(at 96.52 88.9 0)
+			(at 83.82 99.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -871,7 +871,7 @@
 			)
 		)
 		(property "Footprint" "Package_TO_SOT_SMD:SOT-223-3_TabPin2"
-			(at 96.52 87.63 0)
+			(at 83.82 97.79 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -880,7 +880,7 @@
 			)
 		)
 		(property "Datasheet" "http://www.advanced-monolithic.com/pdf/ds1117.pdf"
-			(at 99.06 99.06 0)
+			(at 86.36 109.22 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -889,7 +889,7 @@
 			)
 		)
 		(property "Description" "1A Low Dropout regulator, positive, 3.3V fixed output, SOT-223"
-			(at 96.52 92.71 0)
+			(at 83.82 102.87 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -917,7 +917,7 @@
 	)
 	(symbol
 		(lib_id "carlossless:SN74LVCC3245A-TSSOP24")
-		(at 133.35 83.82 0)
+		(at 127 74.93 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -926,7 +926,7 @@
 		(fields_autoplaced yes)
 		(uuid "87270f55-16eb-4c12-8e33-4ce6cfe0db58")
 		(property "Reference" "U1"
-			(at 133.35 60.96 0)
+			(at 127 52.07 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -934,7 +934,7 @@
 			)
 		)
 		(property "Value" "SN74LVCC3245A-TSSOP24"
-			(at 133.35 63.5 0)
+			(at 127 54.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -942,7 +942,7 @@
 			)
 		)
 		(property "Footprint" "Package_SO:TSSOP-24_4.4x7.8mm_P0.65mm"
-			(at 113.03 71.12 0)
+			(at 106.68 62.23 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -951,7 +951,7 @@
 			)
 		)
 		(property "Datasheet" "https://www.ti.com/lit/ds/symlink/sn74lvcc3245a.pdf"
-			(at 113.03 71.12 0)
+			(at 106.68 62.23 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -960,7 +960,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 133.35 83.82 0)
+			(at 127 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)

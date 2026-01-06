@@ -10,18 +10,31 @@ const EXPECTED_VERSION_MAJOR: u8 = 1;
 
 // Serial protocol commands (must match firmware)
 mod cmd {
+    // System commands
     pub const CMD_PING: u8 = 0x01;
-    pub const CMD_CONNECT: u8 = 0x02;
-    pub const CMD_DISCONNECT: u8 = 0x03;
-    pub const CMD_READ_FLASH: u8 = 0x04;
-    pub const CMD_WRITE_FLASH: u8 = 0x05;
-    pub const CMD_ERASE_FLASH: u8 = 0x06;
-    pub const CMD_POWER_ON: u8 = 0x07;
-    pub const CMD_POWER_OFF: u8 = 0x08;
-    pub const CMD_GET_ID: u8 = 0x09;
-    pub const CMD_SET_CONFIG: u8 = 0x0A;
-    pub const CMD_GET_VERSION: u8 = 0x0B;
+    pub const CMD_GET_VERSION: u8 = 0x02;
 
+    // Power control
+    pub const CMD_POWER_ON: u8 = 0x03;
+    pub const CMD_POWER_OFF: u8 = 0x04;
+
+    // Connection
+    pub const CMD_CONNECT: u8 = 0x05;
+    pub const CMD_DISCONNECT: u8 = 0x06;
+
+    // Identification
+    pub const CMD_GET_ID: u8 = 0x07;
+
+    // Configuration
+    pub const CMD_SET_CONFIG: u8 = 0x08;
+    pub const CMD_GET_CONFIG: u8 = 0x09;
+
+    // Flash operations
+    pub const CMD_READ_FLASH: u8 = 0x0A;
+    pub const CMD_WRITE_FLASH: u8 = 0x0B;
+    pub const CMD_ERASE_FLASH: u8 = 0x0C;
+
+    // Response codes
     pub const RSP_OK: u8 = 0x00;
     pub const RSP_ERR: u8 = 0xFF;
     pub const RSP_DATA: u8 = 0x01;
@@ -242,6 +255,21 @@ impl SinodudeSerialProgrammer {
             self.chip_type.chip_type
         );
         Ok(())
+    }
+
+    pub fn get_config(&mut self) -> Result<u8, SinodudeSerialProgrammerError> {
+        info!("Getting firmware config...");
+        self.send_command(cmd::CMD_GET_CONFIG)?;
+
+        let response = self.read_byte()?;
+        if response != cmd::RSP_DATA {
+            return Err(SinodudeSerialProgrammerError::OperationFailed);
+        }
+
+        let chip_type = self.read_byte()?;
+        info!("Firmware chip type: {:#04x}", chip_type);
+
+        Ok(chip_type)
     }
 
     pub fn get_part_number(&mut self) -> Result<(), SinodudeSerialProgrammerError> {

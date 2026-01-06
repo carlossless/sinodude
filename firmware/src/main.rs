@@ -24,18 +24,31 @@ const VERSION_MINOR: u8 = 0;
 
 // Serial protocol commands
 mod cmd {
+    // System commands
     pub const CMD_PING: u8 = 0x01;
-    pub const CMD_CONNECT: u8 = 0x02;
-    pub const CMD_DISCONNECT: u8 = 0x03;
-    pub const CMD_READ_FLASH: u8 = 0x04;
-    pub const CMD_WRITE_FLASH: u8 = 0x05;
-    pub const CMD_ERASE_FLASH: u8 = 0x06;
-    pub const CMD_POWER_ON: u8 = 0x07;
-    pub const CMD_POWER_OFF: u8 = 0x08;
-    pub const CMD_GET_ID: u8 = 0x09;
-    pub const CMD_SET_CONFIG: u8 = 0x0A;
-    pub const CMD_GET_VERSION: u8 = 0x0B;
+    pub const CMD_GET_VERSION: u8 = 0x02;
 
+    // Power control
+    pub const CMD_POWER_ON: u8 = 0x03;
+    pub const CMD_POWER_OFF: u8 = 0x04;
+
+    // Connection
+    pub const CMD_CONNECT: u8 = 0x05;
+    pub const CMD_DISCONNECT: u8 = 0x06;
+
+    // Identification
+    pub const CMD_GET_ID: u8 = 0x07;
+
+    // Configuration
+    pub const CMD_SET_CONFIG: u8 = 0x08;
+    pub const CMD_GET_CONFIG: u8 = 0x09;
+
+    // Flash operations
+    pub const CMD_READ_FLASH: u8 = 0x0A;
+    pub const CMD_WRITE_FLASH: u8 = 0x0B;
+    pub const CMD_ERASE_FLASH: u8 = 0x0C;
+
+    // Response codes
     pub const RSP_OK: u8 = 0x00;
     pub const RSP_ERR: u8 = 0xFF;
     pub const RSP_DATA: u8 = 0x01;
@@ -59,7 +72,7 @@ mod jtag_instructions {
 
 #[derive(PartialEq)]
 enum Mode {
-    ERROR,
+    UNSET,
     READY,
     ICP,
     JTAG,
@@ -87,7 +100,7 @@ impl IcpController {
             pins,
             delay: Delay::<MHz16>::new(),
             connected: false,
-            mode: Mode::READY,
+            mode: Mode::UNSET,
             chip_type: None,
         }
     }
@@ -239,7 +252,7 @@ impl IcpController {
     fn reset(&mut self) {
         // only implemented for ICP
         match self.mode {
-            Mode::ERROR => { return; }
+            Mode::UNSET => { return; }
             Mode::ICP | Mode::READY => {
                 self.tck_high();
 
@@ -265,7 +278,7 @@ impl IcpController {
         self.delay_us(2);
 
         let mut mode: u8 = match self.mode {
-            Mode::ERROR => 0,
+            Mode::UNSET => 0,
             Mode::READY => 1,
             Mode::ICP => 150,
             Mode::JTAG => 165,
@@ -752,6 +765,15 @@ fn main() -> ! {
                 let chip_type = nb::block!(rx.read()).unwrap_or(0);
                 icp.set_chip_type(chip_type);
                 let _ = nb::block!(tx.write(cmd::RSP_OK));
+            }
+
+            cmd::CMD_GET_CONFIG => {
+                if let Some(chip_type) = icp.chip_type {
+                    let _ = nb::block!(tx.write(cmd::RSP_DATA));
+                    let _ = nb::block!(tx.write(chip_type));
+                } else {
+                    let _ = nb::block!(tx.write(cmd::RSP_ERR));
+                }
             }
 
             cmd::CMD_READ_FLASH => {
