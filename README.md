@@ -1,4 +1,4 @@
-# Sinodude
+# sinodude
 
 A programming tool for SinoWealth 8051 microcontrollers.
 
