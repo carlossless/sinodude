@@ -44,30 +44,6 @@ The programmer controls power to the target using a P-channel MOSFET. This allow
 - When D6 is HIGH (or floating), gate is pulled high via 10K resistor, MOSFET turns OFF
 - The 10K pull-up ensures the MOSFET stays OFF during Arduino reset
 
-## Complete Wiring Diagram
-
-```
-Arduino Nano          P-MOS Power Switch          SinoWealth MCU
-------------          ------------------          --------------
-
-                             VCC
-                              |
-                             [R] 10K
-                              |
-    D6 ---------------+------'
-                      |
-                      G
-                   |--+--|
-             VCC --|S   D|-------------------------> VCC
-                   |-----|
-
-    D2 <------------------------------------------------> TDO
-    D3 --------------------------------------------------> TMS
-    D4 --------------------------------------------------> TDI
-    D5 --------------------------------------------------> TCK
-    GND <------------------------------------------------> GND
-```
-
 ## Serial Protocol
 
 The firmware communicates with the host at 115200 baud (8N1).
