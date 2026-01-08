@@ -312,12 +312,8 @@ impl IcpController {
     }
 
     fn disconnect(&mut self) {
-        // Reset to READY mode
-        self.send_byte(1); // READY mode
-        self.connected = false;
-        self.tck_low();
-        self.tdi_low();
-        self.tms_low();
+        // FIXME: a separate operation is uneccessary
+        self.switch_mode(Mode::ICP);
     }
 
     fn check(&mut self) -> bool {

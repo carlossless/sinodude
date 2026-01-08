@@ -1,4 +1,4 @@
-use super::super::part::*;
+use super::super::parts::*;
 use super::*;
 use chrono::*;
 use hex_literal::*;
@@ -12,7 +12,7 @@ use nusb::{
 use std::{thread::sleep, time::Duration};
 use thiserror::Error;
 
-use log::{debug, info};
+use log::debug;
 
 pub struct SinolinkProgrammer<'a> {
     interface: Interface,
@@ -59,7 +59,7 @@ fn bcdtoi(x: u8) -> u8 {
 }
 
 fn bcdtodt(src: &[u8]) -> Option<NaiveDateTime> {
-    println!("{:04x?}", src);
+    debug!("{:04x?}", src);
     let s: Vec<String> = src.iter().map(|x| format!("{:02x}", x)).collect();
     let datestring = s.join("");
     NaiveDateTime::parse_from_str(&datestring, "%y%m%d%H%M%S").ok()
@@ -182,19 +182,19 @@ impl SinolinkProgrammer<'static> {
         let buf = self.read_control(0, 0, 0, 64)?;
         let firmware_date = bcdtodt(&buf[0..6]).map(|d| d.and_utc());
         if let Some(firmware_date) = firmware_date {
-            info!("Date: {}", firmware_date.format("%+"));
+            eprintln!("Date: {}", firmware_date.format("%+"));
         } else {
-            info!("Firmware date: Unknown");
+            eprintln!("Firmware date: Unknown");
         }
 
         let version_major: u8 = bcdtoi(buf[6]);
         let version_minor: u8 = bcdtoi(buf[7]);
-        info!("Version: {}.{}", version_major, version_minor);
+        eprintln!("Version: {}.{}", version_major, version_minor);
 
         // unknown [8..16]
 
         let serial_chunks: Vec<String> = buf[16..25].iter().map(|x| format!("{:02x}", x)).collect();
-        info!("Serial: {}", serial_chunks.join("-"));
+        eprintln!("Serial: {}", serial_chunks.join("-"));
 
         // unknown [25..64]
         Ok(())
@@ -515,7 +515,8 @@ impl SinolinkProgrammer<'static> {
 
         config[47..47 + 8].clone_from_slice(&chip_type.default_code_options);
 
-        config[162..162 + 6].clone_from_slice(&chip_type.model);
+        // Model bytes blanked out - not available in GPT files
+        config[162..162 + 6].fill(0x00);
 
         config[181..181 + 5].clone_from_slice(&chip_type.part_number);
 
@@ -581,7 +582,8 @@ impl SinolinkProgrammer<'static> {
 
         config[47..47 + 8].clone_from_slice(&chip_type.default_code_options);
 
-        config[162..162 + 6].clone_from_slice(&chip_type.model);
+        // Model bytes blanked out - not available in GPT files
+        config[162..162 + 6].fill(0x00);
 
         config[181..181 + 5].clone_from_slice(&chip_type.part_number);
 

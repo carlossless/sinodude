@@ -3,6 +3,6 @@
 .direnv/
 result
 
-/private
+private/
 
-/target
+target/

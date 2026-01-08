@@ -1,8 +1,8 @@
-use super::super::part::*;
+use super::super::parts::{format_parsed_options, parse_code_options, Part};
 use indicatif::{ProgressBar, ProgressStyle};
-use log::{debug, info, warn};
+use log::debug;
 use std::io::{Read, Write};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 // Expected firmware version (must match firmware)
@@ -75,6 +75,8 @@ pub enum SinodudeSerialProgrammerError {
 pub struct SinodudeSerialProgrammer {
     port: Box<dyn serialport::SerialPort>,
     chip_type: &'static Part,
+    powered: bool,
+    connected: bool,
 }
 
 impl SinodudeSerialProgrammer {
@@ -82,7 +84,7 @@ impl SinodudeSerialProgrammer {
         port_name: &str,
         chip_type: &'static Part,
     ) -> Result<Self, SinodudeSerialProgrammerError> {
-        info!("Opening serial port: {}", port_name);
+        eprintln!("Opening serial port: {}", port_name);
 
         let port = serialport::new(port_name, BAUD_RATE)
             .timeout(TIMEOUT)
@@ -92,7 +94,7 @@ impl SinodudeSerialProgrammer {
         // Give the Arduino time to reset after serial connection
         std::thread::sleep(Duration::from_secs(2));
 
-        Ok(Self { port, chip_type })
+        Ok(Self { port, chip_type, powered: false, connected: false })
     }
 
     fn send_command(&mut self, cmd: u8) -> Result<(), SinodudeSerialProgrammerError> {
@@ -135,7 +137,7 @@ impl SinodudeSerialProgrammer {
     }
 
     pub fn ping(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
-        info!("Pinging programmer...");
+        eprintln!("Pinging programmer...");
         self.send_command(cmd::CMD_PING)?;
 
         let response = self.read_byte()?;
@@ -149,12 +151,12 @@ impl SinodudeSerialProgrammer {
             return Err(SinodudeSerialProgrammerError::InvalidResponse);
         }
 
-        info!("Programmer responded successfully");
+        eprintln!("Programmer responded successfully");
         Ok(())
     }
 
     pub fn get_version(&mut self) -> Result<(u8, u8), SinodudeSerialProgrammerError> {
-        info!("Getting firmware version...");
+        debug!("Getting firmware version...");
         self.send_command(cmd::CMD_GET_VERSION)?;
 
         let response = self.read_byte()?;
@@ -165,7 +167,7 @@ impl SinodudeSerialProgrammer {
         let major = self.read_byte()?;
         let minor = self.read_byte()?;
 
-        info!("Firmware version: {}.{}", major, minor);
+        eprintln!("Firmware version: {}.{}", major, minor);
 
         Ok((major, minor))
     }
@@ -184,41 +186,44 @@ impl SinodudeSerialProgrammer {
     }
 
     pub fn power_on(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
-        info!("Powering on target...");
+        eprintln!("Powering on target...");
         self.send_command(cmd::CMD_POWER_ON)?;
         self.expect_ok()?;
-        info!("Target powered on");
-        // thread::sleep(Duration::from_secs(10));
+        self.powered = true;
+        eprintln!("Target powered on");
         Ok(())
     }
 
     pub fn power_off(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
-        info!("Powering off target...");
+        eprintln!("Powering off target...");
         self.send_command(cmd::CMD_POWER_OFF)?;
         self.expect_ok()?;
-        info!("Target powered off");
+        self.powered = false;
+        eprintln!("Target powered off");
         Ok(())
     }
 
     pub fn connect(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
-        info!("Connecting to target MCU...");
+        eprintln!("Connecting to target MCU...");
         self.send_command(cmd::CMD_CONNECT)?;
         self.expect_ok()
             .map_err(|_| SinodudeSerialProgrammerError::ConnectionFailed)?;
-        info!("Connected to target MCU");
+        self.connected = true;
+        eprintln!("Connected to target MCU");
         Ok(())
     }
 
     pub fn disconnect(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
-        info!("Disconnecting from target MCU...");
+        eprintln!("Disconnecting from target MCU...");
         self.send_command(cmd::CMD_DISCONNECT)?;
         self.expect_ok()?;
-        info!("Disconnected from target MCU");
+        self.connected = false;
+        eprintln!("Disconnected from target MCU");
         Ok(())
     }
 
     pub fn get_id(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
-        info!("Getting target MCU ID...");
+        debug!("Getting target MCU ID...");
         self.send_command(cmd::CMD_GET_ID)?;
 
         // Read response
@@ -233,7 +238,7 @@ impl SinodudeSerialProgrammer {
         }
 
         let id = u16::from_le_bytes(id_bytes);
-        info!("Target MCU ID: {:#06x}", id);
+        eprintln!("Target MCU ID: {:#06x}", id);
 
         let expected_id = self.chip_type.jtag_id;
         if id != expected_id {
@@ -250,7 +255,7 @@ impl SinodudeSerialProgrammer {
         self.send_command(cmd::CMD_SET_CONFIG)?;
         self.send_bytes(&[self.chip_type.chip_type])?;
         self.expect_ok()?;
-        info!(
+        debug!(
             "Configuration set for chip type: {:#04x}",
             self.chip_type.chip_type
         );
@@ -258,7 +263,7 @@ impl SinodudeSerialProgrammer {
     }
 
     pub fn get_config(&mut self) -> Result<u8, SinodudeSerialProgrammerError> {
-        info!("Getting firmware config...");
+        debug!("Getting firmware config...");
         self.send_command(cmd::CMD_GET_CONFIG)?;
 
         let response = self.read_byte()?;
@@ -267,7 +272,7 @@ impl SinodudeSerialProgrammer {
         }
 
         let chip_type = self.read_byte()?;
-        info!("Firmware chip type: {:#04x}", chip_type);
+        debug!("Firmware chip type: {:#04x}", chip_type);
 
         Ok(chip_type)
     }
@@ -302,7 +307,7 @@ impl SinodudeSerialProgrammer {
             .iter()
             .map(|b| format!("{:02x}", b))
             .collect::<String>();
-        info!("Target Part Number: {}", actual_str);
+        eprintln!("Target Part Number: {}", actual_str);
 
         let expected_part_number = self.chip_type.part_number;
         if part_number != expected_part_number {
@@ -319,52 +324,75 @@ impl SinodudeSerialProgrammer {
         Ok(())
     }
 
+    fn read_region(&mut self, region: u8, address: u32, size: usize) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
+        debug!("Reading {} bytes from region {} at address {:#06x}", size, region, address);
+        self.send_command(cmd::CMD_READ_FLASH)?;
+        self.send_bytes(&address.to_le_bytes())?;
+        self.send_bytes(&(size as u16).to_le_bytes())?;
+        self.send_bytes(&[region-1])?;
+        let response = self.read_byte()?;
+        if response != cmd::RSP_DATA {
+            return Err(SinodudeSerialProgrammerError::OperationFailed);
+        }
+        let recv_len_l = self.read_byte()?;
+        let recv_len_h = self.read_byte()?;
+        let recv_len = u16::from_le_bytes([recv_len_l, recv_len_h]) as usize;
+        if recv_len != size {
+            return Err(SinodudeSerialProgrammerError::InvalidResponse);
+        }
+        self.read_bytes(size)
+    }
+
     pub fn get_code_options(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
-        let (options_addr, flash, size): (u32, bool, u16) =
-            match (self.chip_type.custom_block, self.chip_type.chip_type) {
-                (0x02, 0x02) => (0x0800, false, 64),
-                (0x03, 0x02) => (0x1000, false, 64),
-                (0x03, 0x07) => (0x1000, false, 512),
-                (0x04, _) => (0x2000, false, 64),
-                (0x06, _) => ((self.chip_type.flash_size - 32) as u32, true, 32),
-                (_, _) => ((self.chip_type.flash_size - 64) as u32, true, 64),
-            };
-
-        debug!(
-            "Reading code options from address {:#06x}, flash: {}, size: {}",
-            options_addr, flash, size
-        );
-
-        let buffer_size = 16;
-        let mut data = vec![0u8; 0];
-
-        for addr in (options_addr..(options_addr + size as u32)).step_by(buffer_size) {
-            debug!("Reading code options at address {:#06x}", addr);
-            self.send_command(cmd::CMD_READ_FLASH)?;
-            self.send_bytes(&addr.to_le_bytes())?; // Address
-            self.send_bytes(&(buffer_size as u16).to_le_bytes())?; // Length
-            self.send_bytes(&[if flash { 0x00 } else { 0x01 }])?; // Custom block read
-            let response = self.read_byte()?;
-            if response != cmd::RSP_DATA {
-                return Err(SinodudeSerialProgrammerError::OperationFailed);
-            }
-            let recv_len_l = self.read_byte()?; // Data length (low byte)
-            let recv_len_h = self.read_byte()?; // Data length (high byte)
-            let recv_len = u16::from_le_bytes([recv_len_l, recv_len_h]) as usize;
-            if recv_len != buffer_size {
-                return Err(SinodudeSerialProgrammerError::InvalidResponse);
-            }
-
-            let result = self.read_bytes(buffer_size)?;
-            data.extend_from_slice(&result);
+        // Read customer ID (4 bytes)
+        if let Some(ref addr_field) = self.chip_type.customer_id {
+            let customer_id = self.read_region(addr_field.region, addr_field.address, 4)?;
+            eprintln!(
+                "Customer ID: {}",
+                customer_id.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+            );
         }
 
-        info!(
-            "Code options:\n{}",
-            data.iter()
-                .map(|b| format!("{:02x}", b))
-                .collect::<String>()
-        );
+        // Read operation number (2 bytes)
+        if let Some(ref addr_field) = self.chip_type.operation_number {
+            let operation_number = self.read_region(addr_field.region, addr_field.address, 2)?;
+            eprintln!(
+                "Operation Number: {}",
+                operation_number.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+            );
+        }
+
+        // Read code options (option_byte_count bytes, split between customer_option address and address 512)
+        if let Some(ref addr_field) = self.chip_type.customer_option {
+            let option_byte_count = self.chip_type.option_byte_count;
+            let first_part_size = 4.min(option_byte_count);
+            let second_part_size = option_byte_count.saturating_sub(4);
+
+            let mut code_options = self.read_region(addr_field.region, addr_field.address, first_part_size)?;
+            if second_part_size > 0 {
+                let second_part = self.read_region(addr_field.region, 0x1100, second_part_size)?;
+                code_options.extend_from_slice(&second_part);
+            }
+
+            eprintln!(
+                "Code Options: {}",
+                code_options.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+            );
+
+            // Parse and display options in user-friendly format
+            let options_metadata = (self.chip_type.options)();
+            let parsed = parse_code_options(&code_options, &options_metadata);
+            eprintln!("Code Options (parsed):\n{}", format_parsed_options(&parsed));
+        }
+
+        // Read serial number (4 bytes)
+        if let Some(ref addr_field) = self.chip_type.serial_number {
+            let serial_number = self.read_region(addr_field.region, addr_field.address, 4)?;
+            eprintln!(
+                "Serial Number: {}",
+                serial_number.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+            );
+        }
 
         Ok(())
     }
@@ -397,7 +425,7 @@ impl SinodudeSerialProgrammer {
         let flash_size: u32 = self.chip_type.flash_size as u32;
         let mut contents = vec![0u8; 0];
 
-        info!("Reading {} bytes from flash...", flash_size);
+        eprintln!("Reading {} bytes from flash...", flash_size);
 
         let buffer_size: u16 = 16;
 
@@ -410,6 +438,7 @@ impl SinodudeSerialProgrammer {
         );
         progress.set_message("Reading");
 
+        let start = Instant::now();
         for addr in (0..flash_size).step_by(buffer_size as usize) {
             let result = self.read_chunk(addr, buffer_size).map_err(|e| {
                 progress.abandon_with_message("Read failed");
@@ -418,8 +447,9 @@ impl SinodudeSerialProgrammer {
             contents.extend_from_slice(&result);
             progress.set_position(addr as u64 + buffer_size as u64);
         }
+        let elapsed = start.elapsed();
 
-        progress.finish_with_message("Read complete");
+        progress.finish_with_message(format!("Read complete in {:.2?}", elapsed));
         Ok(contents)
     }
 
@@ -497,7 +527,7 @@ impl SinodudeSerialProgrammer {
         let flash_size = self.chip_type.flash_size.min(firmware.len());
         let sector_size = self.chip_type.sector_size;
 
-        info!("Writing {} bytes to flash...", flash_size);
+        eprintln!("Writing {} bytes to flash...", flash_size);
 
         let style = ProgressStyle::default_bar()
             .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
@@ -509,6 +539,7 @@ impl SinodudeSerialProgrammer {
         erase_progress.set_style(style.clone());
         erase_progress.set_message("Erasing");
 
+        let start = Instant::now();
         for addr in (0..flash_size).step_by(sector_size) {
             self.erase_sector(addr as u32).map_err(|e| {
                 erase_progress.abandon_with_message("Erase failed");
@@ -516,13 +547,15 @@ impl SinodudeSerialProgrammer {
             })?;
             erase_progress.set_position((addr + sector_size) as u64);
         }
-        erase_progress.finish_with_message("Erase complete");
+        let elapsed = start.elapsed();
+        erase_progress.finish_with_message(format!("Erase complete in {:.2?}", elapsed));
 
         // Then write data in chunks
         let write_progress = ProgressBar::new(flash_size as u64);
         write_progress.set_style(style.clone());
         write_progress.set_message("Writing");
 
+        let start = Instant::now();
         for addr in (0..flash_size).step_by(CHUNK_SIZE) {
             let end = (addr + CHUNK_SIZE).min(flash_size);
             let chunk = &firmware[addr..end];
@@ -532,13 +565,15 @@ impl SinodudeSerialProgrammer {
             })?;
             write_progress.set_position(end as u64);
         }
-        write_progress.finish_with_message("Write complete");
+        let elapsed = start.elapsed();
+        write_progress.finish_with_message(format!("Write complete in {:.2?}", elapsed));
 
         // Verify
         let verify_progress = ProgressBar::new(flash_size as u64);
         verify_progress.set_style(style);
         verify_progress.set_message("Verifying");
 
+        let start = Instant::now();
         for addr in (0..flash_size).step_by(CHUNK_SIZE) {
             let end = (addr + CHUNK_SIZE).min(flash_size);
             let expected = &firmware[addr..end];
@@ -546,16 +581,17 @@ impl SinodudeSerialProgrammer {
 
             if expected != actual.as_slice() {
                 verify_progress.abandon_with_message("Verify failed");
-                warn!("Verification failed at address {:#x}", addr);
-                warn!("Expected: {:02x?}", expected);
-                warn!("Actual:   {:02x?}", actual);
+                eprintln!("Verification failed at address {:#x}", addr);
+                eprintln!("Expected: {:02x?}", expected);
+                eprintln!("Actual:   {:02x?}", actual);
                 return Err(SinodudeSerialProgrammerError::VerificationFailed(
                     addr as u32,
                 ));
             }
             verify_progress.set_position(end as u64);
         }
-        verify_progress.finish_with_message("Verify complete");
+        let elapsed = start.elapsed();
+        verify_progress.finish_with_message(format!("Verify complete in {:.2?}", elapsed));
 
         Ok(())
     }
@@ -569,8 +605,12 @@ impl SinodudeSerialProgrammer {
 
 impl Drop for SinodudeSerialProgrammer {
     fn drop(&mut self) {
-        // Best effort cleanup
-        let _ = self.disconnect();
-        let _ = self.power_off();
+        // Best effort cleanup, only if needed
+        if self.connected {
+            let _ = self.disconnect();
+        }
+        if self.powered {
+            let _ = self.power_off();
+        }
     }
 }

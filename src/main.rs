@@ -3,12 +3,11 @@ use log::info;
 use simple_logger::SimpleLogger;
 use std::{env, fs, io::Read};
 
-mod gpt;
 mod ihex;
-pub mod part;
+pub mod parts;
 mod programmer;
 
-pub use crate::{gpt::*, ihex::*, part::*, programmer::*};
+pub use crate::{ihex::*, parts::*, programmer::*};
 
 fn cli() -> Command {
     return Command::new("sinodude")
@@ -67,12 +66,7 @@ fn cli() -> Command {
                         .required(false),
                 ),
         )
-        .subcommand(
-            Command::new("decrypt")
-                .long_flag("decrypt")
-                .about("Decrypt GPT file")
-                .arg(arg!(gpt_file: <GPT_FILE> "gpt file to decrypt")),
-        );
+;
 }
 
 fn main() {
@@ -185,22 +179,6 @@ fn main() {
                 _ => unreachable!(),
             }
         }
-        Some(("decrypt", sub_matches)) => {
-            let output_file = sub_matches
-                .get_one::<String>("gpt_file")
-                .map(|s| s.as_str())
-                .unwrap();
-            let file_name = std::path::Path::new(output_file)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or(output_file);
-            let keypair = GPTDecryptor::keypair(file_name);
-
-            let file = fs::File::open(output_file).unwrap();
-            let decrypted = GPTDecryptor::decrypt(file.bytes().scan((), |_, x| x.ok()), keypair);
-
-            fs::write(format!("{}.decrypted", output_file), decrypted).unwrap();
-        }
-        _ => unreachable!(),
+_ => unreachable!(),
     }
 }
