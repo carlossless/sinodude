@@ -157,24 +157,6 @@ impl IcpController {
         self.chip_type = Some(chip_type);
     }
 
-    fn send_byte(&mut self, mut byte: u8) {
-        // Send MSB first
-        for _ in 0..8 {
-            if byte & 0x80 != 0 {
-                self.tdi_high();
-            } else {
-                self.tdi_low();
-            }
-            
-            self.delay_us(1);
-            self.tck_high();
-            self.delay_us(1);
-            self.tck_low();
-
-            byte <<= 1;
-        }
-    }
-
     fn connect(&mut self) -> bool {
         // Initial setup: Set TCK, TDI, TMS high
         self.tck_high();

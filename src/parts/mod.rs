@@ -84,15 +84,15 @@ pub fn format_parsed_options(parsed: &[ParsedOption]) -> String {
 
     // Header
     output.push_str(&format!(
-        "{:<name_width$}  {:>5}  {:>4}  {:<desc_width$}\n",
-        "Name", "Value", "Edit", "Description",
+        "{:<name_width$}  {:>5}  {:>8}  {:<desc_width$}\n",
+        "Name", "Value", "Editable", "Description",
         name_width = name_width,
         desc_width = desc_width
     ));
 
     // Separator
     output.push_str(&format!(
-        "{:-<name_width$}  {:->5}  {:->4}  {:-<desc_width$}\n",
+        "{:-<name_width$}  {:->5}  {:->8}  {:-<desc_width$}\n",
         "", "", "", "",
         name_width = name_width,
         desc_width = desc_width
@@ -103,7 +103,7 @@ pub fn format_parsed_options(parsed: &[ParsedOption]) -> String {
         let desc = opt.description.unwrap_or("(unknown)");
         let editable = if opt.editable { "yes" } else { "no" };
         output.push_str(&format!(
-            "{:<name_width$}  {:>5}  {:>4}  {}\n",
+            "{:<name_width$}  {:>5}  {:>8}  {}\n",
             opt.name, opt.raw_value, editable, desc,
             name_width = name_width
         ));

@@ -238,7 +238,7 @@ impl SinodudeSerialProgrammer {
         }
 
         let id = u16::from_le_bytes(id_bytes);
-        eprintln!("Target MCU ID: {:#06x}", id);
+        eprintln!("Target MCU ID: {:04x}", id);
 
         let expected_id = self.chip_type.jtag_id;
         if id != expected_id {
