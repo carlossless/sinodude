@@ -47,7 +47,9 @@ fn keypair(filename: &str) -> Result<KeyPair, GptError> {
     let len = stem.len();
 
     if len < 4 {
-        return Err(GptError::Parse("Filename too short for key extraction".to_string()));
+        return Err(GptError::Parse(
+            "Filename too short for key extraction".to_string(),
+        ));
     }
     let key1 = u8::from_str_radix(&stem[len - 2..len], 16)
         .map_err(|_| GptError::Parse("Invalid key1 in filename".to_string()))?;
@@ -182,7 +184,10 @@ fn parse_gpt_content(content: &str) -> Result<PartDefinition, GptError> {
                     fields.insert(key.clone(), line.to_string());
                 }
                 // All values go to multi_fields
-                multi_fields.entry(key.clone()).or_default().push(line.to_string());
+                multi_fields
+                    .entry(key.clone())
+                    .or_default()
+                    .push(line.to_string());
             }
         }
     }
@@ -313,23 +318,41 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
 
     let mut output = String::new();
 
-    output.push_str(&format!("// Auto-generated from GPT file for {}\n\n", part.chip_name));
+    output.push_str(&format!(
+        "// Auto-generated from GPT file for {}\n\n",
+        part.chip_name
+    ));
     output.push_str("use super::{AddressField, OptionInfo, Options, Part};\n");
     output.push_str("use hex_literal::hex;\n");
     output.push_str("use indexmap::IndexMap;\n\n");
 
     // Part constant
     output.push_str("pub const PART: Part = Part {\n");
-    output.push_str(&format!("    part_number: hex!(\"{}\"),\n", part_number_bytes));
+    output.push_str(&format!(
+        "    part_number: hex!(\"{}\"),\n",
+        part_number_bytes
+    ));
     output.push_str(&format!("    chip_type: 0x{:02x},\n", part.chip_type));
     output.push_str(&format!("    custom_block: 0x{:02x},\n", part.custom_block));
-    output.push_str(&format!("    product_block: 0x{:02x},\n", part.product_block));
+    output.push_str(&format!(
+        "    product_block: 0x{:02x},\n",
+        part.product_block
+    ));
     output.push_str(&format!("    flash_size: {},\n", part.flash_size));
-    output.push_str(&format!("    default_code_options: &hex!(\"{}\"),\n", default_code_options));
-    output.push_str(&format!("    code_option_mask: &hex!(\"{}\"),\n", code_option_mask));
+    output.push_str(&format!(
+        "    default_code_options: &hex!(\"{}\"),\n",
+        default_code_options
+    ));
+    output.push_str(&format!(
+        "    code_option_mask: &hex!(\"{}\"),\n",
+        code_option_mask
+    ));
     output.push_str(&format!("    jtag_id: 0x{:04x},\n", part.jtag_id));
     output.push_str(&format!("    sector_size: {},\n", part.sector_size));
-    output.push_str(&format!("    option_byte_count: {},\n", part.option_byte_count));
+    output.push_str(&format!(
+        "    option_byte_count: {},\n",
+        part.option_byte_count
+    ));
 
     // Address fields
     fn format_address_field(addr: &Option<AddressField>) -> String {
@@ -338,11 +361,26 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
             None => "None".to_string(),
         }
     }
-    output.push_str(&format!("    customer_id: {},\n", format_address_field(&part.customer_id)));
-    output.push_str(&format!("    operation_number: {},\n", format_address_field(&part.operation_number)));
-    output.push_str(&format!("    customer_option: {},\n", format_address_field(&part.customer_option)));
-    output.push_str(&format!("    security: {},\n", format_address_field(&part.security)));
-    output.push_str(&format!("    serial_number: {},\n", format_address_field(&part.serial_number)));
+    output.push_str(&format!(
+        "    customer_id: {},\n",
+        format_address_field(&part.customer_id)
+    ));
+    output.push_str(&format!(
+        "    operation_number: {},\n",
+        format_address_field(&part.operation_number)
+    ));
+    output.push_str(&format!(
+        "    customer_option: {},\n",
+        format_address_field(&part.customer_option)
+    ));
+    output.push_str(&format!(
+        "    security: {},\n",
+        format_address_field(&part.security)
+    ));
+    output.push_str(&format!(
+        "    serial_number: {},\n",
+        format_address_field(&part.serial_number)
+    ));
     output.push_str("    options,\n");
 
     output.push_str("};\n\n");
@@ -354,26 +392,11 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
         output.push_str("    IndexMap::from([\n");
         for opt in &part.options {
             let name = opt.name.trim_end_matches(':');
-            output.push_str(&format!(
-                "        (\"{}\", OptionInfo {{\n",
-                name
-            ));
-            output.push_str(&format!(
-                "            byte_index: {},\n",
-                opt.byte_index
-            ));
-            output.push_str(&format!(
-                "            bits_start: {},\n",
-                opt.bits_start
-            ));
-            output.push_str(&format!(
-                "            bits_end: {},\n",
-                opt.bits_end
-            ));
-            output.push_str(&format!(
-                "            editable: {},\n",
-                opt.editable
-            ));
+            output.push_str(&format!("        (\"{}\", OptionInfo {{\n", name));
+            output.push_str(&format!("            byte_index: {},\n", opt.byte_index));
+            output.push_str(&format!("            bits_start: {},\n", opt.bits_start));
+            output.push_str(&format!("            bits_end: {},\n", opt.bits_end));
+            output.push_str(&format!("            editable: {},\n", opt.editable));
             output.push_str("            states: IndexMap::from([\n");
             for (value, desc) in &opt.items {
                 let escaped_desc = desc.replace('\\', "\\\\").replace('"', "\\\"");
@@ -400,12 +423,18 @@ fn format_part_number(part_number: &str) -> String {
 
 fn format_initial_options(initial_option: u64, byte_count: usize) -> String {
     let bytes = initial_option.to_le_bytes();
-    bytes.iter().take(byte_count).map(|b| format!("{:02x}", b)).collect()
+    bytes
+        .iter()
+        .take(byte_count)
+        .map(|b| format!("{:02x}", b))
+        .collect()
 }
 
 #[derive(Parser)]
 #[command(name = "generate-part")]
-#[command(about = "Decrypt GPT files and generate part definitions for Sinowealth microcontrollers")]
+#[command(
+    about = "Decrypt GPT files and generate part definitions for Sinowealth microcontrollers"
+)]
 struct Cli {
     /// GPT file(s) to process
     #[arg(required = true)]

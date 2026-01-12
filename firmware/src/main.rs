@@ -2,14 +2,16 @@
 #![no_main]
 #![feature(abi_avr_interrupt)]
 
-use atmega_hal::clock::MHz16;
-use atmega_hal::delay::Delay;
-use atmega_hal::pac;
-use atmega_hal::port::{mode, Pin, Pins, PD2, PD3, PD4, PD5, PD6};
-use atmega_hal::prelude::*;
-use atmega_hal::usart::{Baudrate, Usart};
-use core::ops;
-use core::panic::PanicInfo;
+use core::{ops, panic::PanicInfo};
+
+use atmega_hal::{
+    clock::MHz16,
+    delay::Delay,
+    pac,
+    port::{mode, Pin, Pins, PD2, PD3, PD4, PD5, PD6},
+    prelude::*,
+    usart::{Baudrate, Usart},
+};
 
 // ICP Pin assignments (matching reference implementation)
 // TDO - D2 (input)
@@ -158,7 +160,7 @@ impl IcpController {
 
         // Wait for power stabilization
         self.delay.delay_ms(5u8);
-        
+
         // Initial setup: Set TCK, TDI, TMS high
         self.tms_high();
         self.tdi_high();
@@ -236,7 +238,9 @@ impl IcpController {
     fn reset(&mut self) {
         // only implemented for ICP
         match self.mode {
-            Mode::UNSET => { return; }
+            Mode::UNSET => {
+                return;
+            }
             Mode::ICP | Mode::READY => {
                 self.tck_high();
 
@@ -277,7 +281,7 @@ impl IcpController {
             } else {
                 self.tdi_low();
             }
-            
+
             self.tck_high();
             self.delay_us(2);
             self.tck_low();
@@ -387,7 +391,7 @@ impl IcpController {
             } else {
                 self.tdi_low();
             }
-            
+
             self.delay_us(1);
             self.tck_high();
             self.delay_us(1);
@@ -448,10 +452,7 @@ impl IcpController {
 
     fn jtag_receive_data<T>(&mut self, bit_length: u8) -> T
     where
-        T: Copy
-            + From<u8>
-            + ops::Shl<u8, Output = T>
-            + ops::BitOrAssign<T>
+        T: Copy + From<u8> + ops::Shl<u8, Output = T> + ops::BitOrAssign<T>,
     {
         self.jtag_next_state(true); // Select-DR
         self.jtag_next_state(false); // Capture-DR
@@ -464,11 +465,7 @@ impl IcpController {
 
     fn jtag_send_data<T>(&mut self, bit_length: u8, data: T)
     where
-        T: Copy
-            + From<u8>
-            + ops::BitAnd<Output = T>
-            + ops::Shr<u8, Output = T>
-            + PartialEq,
+        T: Copy + From<u8> + ops::BitAnd<Output = T> + ops::Shr<u8, Output = T> + PartialEq,
     {
         self.jtag_next_state(true); // Select-DR
         self.jtag_next_state(false); // Capture-DR
@@ -478,7 +475,7 @@ impl IcpController {
         self.jtag_next_state(false); // Idle
         self.jtag_next_state(false); // Idle? Needed, don't know why
     }
-    
+
     fn jtag_next_state(&mut self, tms: bool) -> bool {
         if tms {
             self.tms_high();
@@ -503,16 +500,12 @@ impl IcpController {
             self.tdi_low();
         }
 
-        return self.jtag_next_state(tms)
+        return self.jtag_next_state(tms);
     }
 
     fn jtag_send_bits<T>(&mut self, bit_length: u8, value: T)
     where
-        T: Copy
-            + From<u8>
-            + ops::BitAnd<Output = T>
-            + ops::Shr<u8, Output = T>
-            + PartialEq,
+        T: Copy + From<u8> + ops::BitAnd<Output = T> + ops::Shr<u8, Output = T> + PartialEq,
     {
         for i in 0..bit_length {
             let bit = (value >> i) & T::from(1);
@@ -525,10 +518,7 @@ impl IcpController {
 
     fn jtag_receive_bits<T>(&mut self, bit_length: u8) -> T
     where
-        T: Copy
-            + From<u8>
-            + ops::Shl<u8, Output = T>
-            + ops::BitOrAssign<T>
+        T: Copy + From<u8> + ops::Shl<u8, Output = T> + ops::BitOrAssign<T>,
     {
         let mut value: T = 0.into();
         for i in 0..bit_length {
@@ -543,7 +533,7 @@ impl IcpController {
     }
 
     fn icp_read_flash(&mut self, addr: u32, buffer: &mut [u8], custom_block: bool) -> bool {
-        self.switch_mode(Mode::ICP); 
+        self.switch_mode(Mode::ICP);
 
         let Some(chip_type) = self.chip_type else {
             return false;
@@ -565,7 +555,11 @@ impl IcpController {
             self.send_icp_byte(((addr & 0xFF0000) >> 16) as u8);
         }
 
-        let region = if custom_block { icp_cmd::ICP_READ_CUSTOM_BLOCK } else { icp_cmd::ICP_READ_FLASH };
+        let region = if custom_block {
+            icp_cmd::ICP_READ_CUSTOM_BLOCK
+        } else {
+            icp_cmd::ICP_READ_FLASH
+        };
         self.send_icp_byte(region);
 
         for i in 0..buffer.len() {
