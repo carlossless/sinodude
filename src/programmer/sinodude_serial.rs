@@ -359,6 +359,18 @@ impl SinodudeSerialProgrammer {
             );
         }
 
+        // Read serial number (4 bytes)
+        if let Some(ref addr_field) = self.chip_type.serial_number {
+            let serial_number = self.read_region(region, addr_field.address, 4)?;
+            eprintln!(
+                "Serial Number: {}",
+                serial_number
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<String>()
+            );
+        }
+
         // Read code options (option_byte_count bytes, split between customer_option address and address 512)
         if let Some(ref addr_field) = self.chip_type.customer_option {
             let option_byte_count = self.chip_type.option_byte_count;
@@ -384,18 +396,6 @@ impl SinodudeSerialProgrammer {
             let options_metadata = (self.chip_type.options)();
             let parsed = parse_code_options(&code_options, &options_metadata);
             eprintln!("Code Options (parsed):\n{}", format_parsed_options(&parsed));
-        }
-
-        // Read serial number (4 bytes)
-        if let Some(ref addr_field) = self.chip_type.serial_number {
-            let serial_number = self.read_region(region, addr_field.address, 4)?;
-            eprintln!(
-                "Serial Number: {}",
-                serial_number
-                    .iter()
-                    .map(|b| format!("{:02x}", b))
-                    .collect::<String>()
-            );
         }
 
         Ok(())

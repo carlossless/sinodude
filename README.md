@@ -8,14 +8,6 @@ A programming tool for SinoWealth 8051 microcontrollers.
 
 SinoWealth microcontrollers have limited public documentation. This tool has been developed through reverse engineering and may not work correctly with all chip variants and all configurations.
 
-## Supported Parts
-
-Parts listed below have been tested to work:
-
-| Part | Flash Size |
-|------|------------|
-| SH68F90A | 64KB |
-
 ## Supported Programmers
 
 | Programmer | Description | Notes |
