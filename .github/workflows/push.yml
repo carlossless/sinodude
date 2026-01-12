@@ -7,41 +7,26 @@ env:
 
 defaults:
   run:
-    # necessary for windows
     shell: bash
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Install libudev
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
-      - name: Cargo cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ./target
-          key: test-cargo-registry
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
       - name: Lint
-        run: cargo fmt -- --check
+        run: nix develop --command cargo fmt -- --check
 
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Install libudev
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
-      - name: Cargo cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ./target
-          key: test-cargo-registry
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
       - name: Run tests
-        run: cargo test --verbose
+        run: nix develop --command cargo test --verbose
 
   build-sinodude-serial-firmware:
     runs-on: ubuntu-latest
@@ -52,25 +37,16 @@ jobs:
             features: "--no-default-features --features atmega328p"
           - target: atmega328pb
             features: "--no-default-features --features atmega328pb"
-    defaults:
-      run:
-        working-directory: firmware
     steps:
-      - uses: actions/checkout@v3
-      - name: Install AVR toolchain
-        run: sudo apt-get update && sudo apt-get install -y avr-libc gcc-avr
-      - name: Cargo cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ./firmware/target
-          key: firmware-cargo-registry-${{ matrix.target }}
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
       - name: Build firmware (${{ matrix.target }})
-        run: RUSTFLAGS="-C target-cpu=${{ matrix.target }}" cargo build --release --verbose ${{ matrix.features }}
+        run: nix develop --command bash -c 'cd firmware && RUSTFLAGS="-C target-cpu=${{ matrix.target }}" cargo build --release --verbose ${{ matrix.features }}'
       - name: Generate hex file
-        run: avr-objcopy -O ihex target/avr-none/release/sinodude-serial.elf sinodude-serial-${{ matrix.target }}.hex
+        run: nix develop --command bash -c 'cd firmware && avr-objcopy -O ihex target/avr-none/release/sinodude-serial.elf sinodude-serial-${{ matrix.target }}.hex'
       - name: Compress
+        working-directory: firmware
         run: |
           mkdir -p ./artifacts
           if [[ $GITHUB_REF_TYPE =~ ^tag$ ]]; then
@@ -126,7 +102,7 @@ jobs:
           if [[ $OS =~ ^windows.*$ ]]; then
               EXEC=$NAME.exe
           else
-              EXEC=$NAME
+          EXEC=$NAME
           fi
           if [[ $GITHUB_REF_TYPE =~ ^tag$ ]]; then
             TAG=$GITHUB_REF_NAME
