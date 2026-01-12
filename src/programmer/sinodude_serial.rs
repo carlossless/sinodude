@@ -392,8 +392,7 @@ impl SinodudeSerialProgrammer {
             let first_part_size = 4.min(option_byte_count);
             let second_part_size = option_byte_count.saturating_sub(4);
 
-            let mut code_options =
-                self.read_region(region, addr_field.address, first_part_size)?;
+            let mut code_options = self.read_region(region, addr_field.address, first_part_size)?;
             if second_part_size > 0 {
                 let second_part = self.read_region(region, 0x1100, second_part_size)?;
                 code_options.extend_from_slice(&second_part);

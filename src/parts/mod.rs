@@ -1,13 +1,13 @@
 use indexmap::IndexMap;
 use phf::phf_map;
 
+pub mod sh68f1000;
+pub mod sh68f1001;
 pub mod sh68f881;
 pub mod sh68f89;
 pub mod sh68f90;
 pub mod sh68f90a;
 pub mod sh68f91;
-pub mod sh68f1000;
-pub mod sh68f1001;
 
 #[derive(Debug, Clone, Copy)]
 pub struct AddressField {
