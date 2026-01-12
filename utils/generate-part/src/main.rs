@@ -36,10 +36,6 @@ fn decrypt(mut input: impl Iterator<Item = u8>, keys: KeyPair) -> Result<Vec<u8>
         result.push(partial ^ keys.1);
     }
 
-    // if result.len() < HEADER_SIZE + 10 || &result[HEADER_SIZE..(HEADER_SIZE + 10)] != b"[ChipName]" {
-    //     return Err(GptError::InvalidContent);
-    // }
-
     Ok(result)
 }
 
@@ -49,6 +45,7 @@ fn keypair(filename: &str) -> Result<KeyPair, GptError> {
         .and_then(|s| s.to_str())
         .ok_or_else(|| GptError::Parse("Invalid filename".to_string()))?;
     let len = stem.len();
+
     if len < 4 {
         return Err(GptError::Parse("Filename too short for key extraction".to_string()));
     }
@@ -446,6 +443,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  Keys: ({:#04x}, {:#04x})", keys.0, keys.1);
 
         let decrypted = decrypt(file_content.iter().copied(), keys)?;
+        let content = String::from_utf8_lossy(&decrypted);
+        let part = parse_gpt_content(&content)?; // parse already to verify that it was correctly decrypted
+
+        println!("  Chip: {}", part.chip_name);
 
         // Write decrypted file
         let decrypted_path = format!("{}.decrypted", file_path);
@@ -456,30 +457,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
-        // Parse and generate part definition
-        let content = String::from_utf8_lossy(&decrypted);
-        let part = parse_gpt_content(&content)?;
-
-        println!("  Chip: {}", part.chip_name);
-        println!("  Flash: {} bytes", part.flash_size);
-        println!("  Sector: {} bytes", part.sector_size);
-        println!("  JTAG ID: 0x{:04x}", part.jtag_id);
-        if let Some(ref addr) = part.customer_id {
-            println!("  Customer ID: 0x{:04X}", addr.address);
-        }
-        if let Some(ref addr) = part.operation_number {
-            println!("  Operation Number: 0x{:04X}", addr.address);
-        }
-        if let Some(ref addr) = part.customer_option {
-            println!("  Customer Option: 0x{:04X}", addr.address);
-        }
-        if let Some(ref addr) = part.security {
-            println!("  Security: 0x{:04X}", addr.address);
-        }
-        if let Some(ref addr) = part.serial_number {
-            println!("  Serial Number: 0x{:04X}", addr.address);
-        }
-
+        // Generate part definition
         let rust_code = generate_rust_part_definition(&part);
         let output_filename = format!(
             "{}/{}.rs",

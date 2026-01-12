@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -24,8 +24,27 @@ echo "Found GPT files:"
 echo "$GPT_FILES"
 echo
 
-# Run generate-part on all files
-$GENERATE_PART --output-dir "$OUTPUT_DIR" $GPT_FILES
+# Run generate-part on each file individually, continuing on failure
+FAILED=0
+SUCCESS=0
+FAILED_FILES=()
+while IFS= read -r file; do
+    if $GENERATE_PART --output-dir "$OUTPUT_DIR" "$file"; then
+        ((SUCCESS++))
+    else
+        FAILED_FILES+=("$file")
+        ((FAILED++)) || true
+    fi
+done <<< "$GPT_FILES"
 
 echo
 echo "Part definitions generated in $OUTPUT_DIR"
+echo "Success: $SUCCESS, Failed: $FAILED"
+
+if [[ ${#FAILED_FILES[@]} -gt 0 ]]; then
+    echo
+    echo "Failed files:"
+    for f in "${FAILED_FILES[@]}"; do
+        echo "  $f"
+    done
+fi
