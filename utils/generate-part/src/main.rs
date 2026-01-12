@@ -36,9 +36,9 @@ fn decrypt(mut input: impl Iterator<Item = u8>, keys: KeyPair) -> Result<Vec<u8>
         result.push(partial ^ keys.1);
     }
 
-    if result.len() < HEADER_SIZE + 10 || &result[HEADER_SIZE..(HEADER_SIZE + 10)] != b"[ChipName]" {
-        return Err(GptError::InvalidContent);
-    }
+    // if result.len() < HEADER_SIZE + 10 || &result[HEADER_SIZE..(HEADER_SIZE + 10)] != b"[ChipName]" {
+    //     return Err(GptError::InvalidContent);
+    // }
 
     Ok(result)
 }
@@ -61,7 +61,6 @@ fn keypair(filename: &str) -> Result<KeyPair, GptError> {
 
 #[derive(Debug, Clone)]
 pub struct AddressField {
-    pub region: u8,
     pub address: u32,
 }
 
@@ -191,14 +190,14 @@ fn parse_gpt_content(content: &str) -> Result<PartDefinition, GptError> {
         }
     }
 
-    // Helper to parse address fields (region + hex address)
+    // Helper to parse address fields (skip first value, just get the second value (address))
     let parse_address_field = |key: &str| -> Option<AddressField> {
         let values = multi_fields.get(key)?;
         if values.len() >= 2 {
-            let region = values[0].parse::<u8>().ok()?;
+            // values[0] is region (unused), values[1] is address
             let addr_str = values[1].trim_start_matches("0x").trim_start_matches("0X");
             let address = u32::from_str_radix(addr_str, 16).ok()?;
-            Some(AddressField { region, address })
+            Some(AddressField { address })
         } else {
             None
         }
@@ -338,7 +337,7 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
     // Address fields
     fn format_address_field(addr: &Option<AddressField>) -> String {
         match addr {
-            Some(a) => format!("Some(AddressField {{ region: {}, address: 0x{:04x} }})", a.region, a.address),
+            Some(a) => format!("Some(AddressField {{ address: 0x{:04x} }})", a.address),
             None => "None".to_string(),
         }
     }
@@ -466,19 +465,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  Sector: {} bytes", part.sector_size);
         println!("  JTAG ID: 0x{:04x}", part.jtag_id);
         if let Some(ref addr) = part.customer_id {
-            println!("  Customer ID: region={}, 0x{:04X}", addr.region, addr.address);
+            println!("  Customer ID: 0x{:04X}", addr.address);
         }
         if let Some(ref addr) = part.operation_number {
-            println!("  Operation Number: region={}, 0x{:04X}", addr.region, addr.address);
+            println!("  Operation Number: 0x{:04X}", addr.address);
         }
         if let Some(ref addr) = part.customer_option {
-            println!("  Customer Option: region={}, 0x{:04X}", addr.region, addr.address);
+            println!("  Customer Option: 0x{:04X}", addr.address);
         }
         if let Some(ref addr) = part.security {
-            println!("  Security: region={}, 0x{:04X}", addr.region, addr.address);
+            println!("  Security: 0x{:04X}", addr.address);
         }
         if let Some(ref addr) = part.serial_number {
-            println!("  Serial Number: region={}, 0x{:04X}", addr.region, addr.address);
+            println!("  Serial Number: 0x{:04X}", addr.address);
         }
 
         let rust_code = generate_rust_part_definition(&part);

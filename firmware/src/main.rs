@@ -28,10 +28,6 @@ mod cmd {
     pub const CMD_PING: u8 = 0x01;
     pub const CMD_GET_VERSION: u8 = 0x02;
 
-    // Power control
-    pub const CMD_POWER_ON: u8 = 0x03;
-    pub const CMD_POWER_OFF: u8 = 0x04;
-
     // Connection
     pub const CMD_CONNECT: u8 = 0x05;
     pub const CMD_DISCONNECT: u8 = 0x06;
@@ -158,12 +154,17 @@ impl IcpController {
     }
 
     fn connect(&mut self) -> bool {
-        // Initial setup: Set TCK, TDI, TMS high
-        self.tck_high();
-        self.tdi_high();
-        self.tms_high();
+        self.power_on();
 
-        self.delay_us(500);
+        // Wait for power stabilization
+        self.delay.delay_ms(5u8);
+        
+        // Initial setup: Set TCK, TDI, TMS high
+        self.tms_high();
+        self.tdi_high();
+        self.tck_high();
+
+        self.delay.delay_ms(3u8);
 
         self.tck_low();
         self.delay_us(1);
@@ -194,8 +195,8 @@ impl IcpController {
             self.delay_us(2);
         }
 
-        // 25600 TMS cycles
-        for _ in 0..25600u16 {
+        // 20480 TMS cycles
+        for _ in 0..20480u16 {
             self.tms_low();
             self.delay_us(2);
             self.tms_high();
@@ -210,8 +211,8 @@ impl IcpController {
         self.mode = Mode::ICP;
         self.start_mode();
 
-        // 25600 TCK cycles
-        for _ in 0..25600u16 {
+        // 1644 TCK cycles
+        for _ in 0..1644u16 {
             self.tck_high();
             self.delay_us(2);
             self.tck_low();
@@ -219,6 +220,8 @@ impl IcpController {
         }
 
         self.reset();
+
+        self.delay_us(10);
 
         // Verify connection with ping
         if self.check() {
@@ -228,7 +231,6 @@ impl IcpController {
             self.connected = false;
             false
         }
-        // self.check_2()
     }
 
     fn reset(&mut self) {
@@ -237,6 +239,8 @@ impl IcpController {
             Mode::UNSET => { return; }
             Mode::ICP | Mode::READY => {
                 self.tck_high();
+
+                self.delay_us(8);
 
                 self.tms_high();
                 self.delay_us(2);
@@ -294,8 +298,7 @@ impl IcpController {
     }
 
     fn disconnect(&mut self) {
-        // FIXME: a separate operation is uneccessary
-        self.switch_mode(Mode::ICP);
+        self.power_off();
     }
 
     fn check(&mut self) -> bool {
@@ -304,6 +307,7 @@ impl IcpController {
         self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
         self.send_icp_byte(0x69);
         self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_H);
+        self.send_icp_byte(0xFF);
         self.send_icp_byte(0xFF);
 
         self.send_icp_byte(icp_cmd::ICP_GET_IB_OFFSET);
@@ -709,16 +713,6 @@ fn main() -> ! {
                 let _ = nb::block!(tx.write(VERSION_MINOR));
             }
 
-            cmd::CMD_POWER_ON => {
-                icp.power_on();
-                let _ = nb::block!(tx.write(cmd::RSP_OK));
-            }
-
-            cmd::CMD_POWER_OFF => {
-                icp.power_off();
-                let _ = nb::block!(tx.write(cmd::RSP_OK));
-            }
-
             cmd::CMD_CONNECT => {
                 if icp.connect() {
                     let _ = nb::block!(tx.write(cmd::RSP_OK));
@@ -857,6 +851,6 @@ fn panic(_info: &PanicInfo) -> ! {
     let (mut _rx, mut tx) = serial.split();
 
     loop {
-        let _ = nb::block!(tx.write(b'S'));
+        let _ = nb::block!(tx.write(b'P'));
     }
 }

@@ -1,14 +1,16 @@
 use indexmap::IndexMap;
 use phf::phf_map;
 
+pub mod sh68f881;
+pub mod sh68f89;
 pub mod sh68f90;
 pub mod sh68f90a;
 pub mod sh68f91;
-pub mod sh68f881;
+pub mod sh68f1000;
+pub mod sh68f1001;
 
 #[derive(Debug, Clone, Copy)]
 pub struct AddressField {
-    pub region: u8,
     pub address: u32,
 }
 
@@ -72,7 +74,12 @@ pub fn format_parsed_options(parsed: &[ParsedOption]) -> String {
     }
 
     // Calculate column widths
-    let name_width = parsed.iter().map(|o| o.name.len()).max().unwrap_or(4).max(4);
+    let name_width = parsed
+        .iter()
+        .map(|o| o.name.len())
+        .max()
+        .unwrap_or(4)
+        .max(4);
     let desc_width = parsed
         .iter()
         .map(|o| o.description.unwrap_or("(unknown)").len())
@@ -85,7 +92,10 @@ pub fn format_parsed_options(parsed: &[ParsedOption]) -> String {
     // Header
     output.push_str(&format!(
         "{:<name_width$}  {:>5}  {:>8}  {:<desc_width$}\n",
-        "Name", "Value", "Editable", "Description",
+        "Name",
+        "Value",
+        "Editable",
+        "Description",
         name_width = name_width,
         desc_width = desc_width
     ));
@@ -93,7 +103,10 @@ pub fn format_parsed_options(parsed: &[ParsedOption]) -> String {
     // Separator
     output.push_str(&format!(
         "{:-<name_width$}  {:->5}  {:->8}  {:-<desc_width$}\n",
-        "", "", "", "",
+        "",
+        "",
+        "",
+        "",
         name_width = name_width,
         desc_width = desc_width
     ));
@@ -104,7 +117,10 @@ pub fn format_parsed_options(parsed: &[ParsedOption]) -> String {
         let editable = if opt.editable { "yes" } else { "no" };
         output.push_str(&format!(
             "{:<name_width$}  {:>5}  {:>8}  {}\n",
-            opt.name, opt.raw_value, editable, desc,
+            opt.name,
+            opt.raw_value,
+            editable,
+            desc,
             name_width = name_width
         ));
     }
@@ -131,9 +147,30 @@ pub struct Part {
     pub options: fn() -> Options,
 }
 
+impl Part {
+    /// Returns true if options are stored in flash memory.
+    /// custom_block values 2, 3, 4 are NOT in flash; all others ARE in flash.
+    pub fn options_in_flash(&self) -> bool {
+        !matches!(self.custom_block, 2 | 3 | 4)
+    }
+
+    /// Returns the region code for reading options.
+    /// Region 1 = flash, Region 2 = custom block (not flash).
+    pub fn options_region(&self) -> u8 {
+        if self.options_in_flash() {
+            1
+        } else {
+            2
+        }
+    }
+}
+
 pub static PARTS: phf::Map<&'static str, &'static Part> = phf_map! {
+    "sh68f881" => &sh68f881::PART,
+    "sh68f89" => &sh68f89::PART,
     "sh68f90" => &sh68f90::PART,
     "sh68f90a" => &sh68f90a::PART,
     "sh68f91" => &sh68f91::PART,
-    "sh68f881" => &sh68f881::PART,
+    "sh68f1000" => &sh68f1000::PART,
+    "sh68f1001" => &sh68f1001::PART,
 };

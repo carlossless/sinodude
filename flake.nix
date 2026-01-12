@@ -72,6 +72,7 @@
           nativeBuildInputs = [
             pkgs.rustup
             toolchain
+            pkgs.pkgsCross.avr.buildPackages.gcc
             pkgs.avrdude
             ravedude
           ];

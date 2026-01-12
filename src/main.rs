@@ -105,18 +105,51 @@ fn main() {
                         .map(|s| s.as_str())
                         .expect("--power is required for sinolink programmer");
                     let power_setting = PowerSetting::from_option(power_setting_name);
-                    let sinolink = SinolinkProgrammer::new(part, power_setting).unwrap();
-                    sinolink.read_init().unwrap();
-                    sinolink.read_flash().unwrap()
+                    let sinolink = match SinolinkProgrammer::new(part, power_setting) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("Error: {e}");
+                            std::process::exit(1);
+                        }
+                    };
+                    if let Err(e) = sinolink.read_init() {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
+                    match sinolink.read_flash() {
+                        Ok(r) => r,
+                        Err(e) => {
+                            eprintln!("Error: {e}");
+                            std::process::exit(1);
+                        }
+                    }
                 }
                 "sinodude-serial" => {
                     let port = sub_matches
                         .get_one::<String>("port")
                         .expect("--port is required for sinodude-serial programmer");
-                    let mut programmer = SinodudeSerialProgrammer::new(port, part).unwrap();
-                    programmer.read_init().unwrap();
-                    let result = programmer.read_flash().unwrap();
-                    programmer.finish().unwrap();
+                    let mut programmer = match SinodudeSerialProgrammer::new(port, part) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            eprintln!("Error: {e}");
+                            std::process::exit(1);
+                        }
+                    };
+                    if let Err(e) = programmer.read_init() {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
+                    let result = match programmer.read_flash() {
+                        Ok(r) => r,
+                        Err(e) => {
+                            eprintln!("Error: {e}");
+                            std::process::exit(1);
+                        }
+                    };
+                    if let Err(e) = programmer.finish() {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
                     result
                 }
                 _ => unreachable!(),
@@ -163,22 +196,49 @@ fn main() {
                         .map(|s| s.as_str())
                         .expect("--power is required for sinolink programmer");
                     let power_setting = PowerSetting::from_option(power_setting_name);
-                    let sinolink = SinolinkProgrammer::new(part, power_setting).unwrap();
-                    sinolink.write_init().unwrap();
-                    sinolink.write_flash(&firmware[0..65536]).unwrap();
+                    let sinolink = match SinolinkProgrammer::new(part, power_setting) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("Error: {e}");
+                            std::process::exit(1);
+                        }
+                    };
+                    if let Err(e) = sinolink.write_init() {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
+                    if let Err(e) = sinolink.write_flash(&firmware[0..65536]) {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
                 }
                 "sinodude-serial" => {
                     let port = sub_matches
                         .get_one::<String>("port")
                         .expect("--port is required for sinodude-serial programmer");
-                    let mut programmer = SinodudeSerialProgrammer::new(port, part).unwrap();
-                    programmer.write_init().unwrap();
-                    programmer.write_flash(&firmware).unwrap();
-                    programmer.finish().unwrap();
+                    let mut programmer = match SinodudeSerialProgrammer::new(port, part) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            eprintln!("Error: {e}");
+                            std::process::exit(1);
+                        }
+                    };
+                    if let Err(e) = programmer.write_init() {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
+                    if let Err(e) = programmer.write_flash(&firmware) {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
+                    if let Err(e) = programmer.finish() {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
                 }
                 _ => unreachable!(),
             }
         }
-_ => unreachable!(),
+        _ => unreachable!(),
     }
 }

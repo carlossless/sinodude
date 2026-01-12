@@ -14,10 +14,6 @@ mod cmd {
     pub const CMD_PING: u8 = 0x01;
     pub const CMD_GET_VERSION: u8 = 0x02;
 
-    // Power control
-    pub const CMD_POWER_ON: u8 = 0x03;
-    pub const CMD_POWER_OFF: u8 = 0x04;
-
     // Connection
     pub const CMD_CONNECT: u8 = 0x05;
     pub const CMD_DISCONNECT: u8 = 0x06;
@@ -75,7 +71,6 @@ pub enum SinodudeSerialProgrammerError {
 pub struct SinodudeSerialProgrammer {
     port: Box<dyn serialport::SerialPort>,
     chip_type: &'static Part,
-    powered: bool,
     connected: bool,
 }
 
@@ -94,7 +89,11 @@ impl SinodudeSerialProgrammer {
         // Give the Arduino time to reset after serial connection
         std::thread::sleep(Duration::from_secs(2));
 
-        Ok(Self { port, chip_type, powered: false, connected: false })
+        Ok(Self {
+            port,
+            chip_type,
+            connected: false,
+        })
     }
 
     fn send_command(&mut self, cmd: u8) -> Result<(), SinodudeSerialProgrammerError> {
@@ -182,24 +181,6 @@ impl SinodudeSerialProgrammer {
             });
         }
 
-        Ok(())
-    }
-
-    pub fn power_on(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
-        eprintln!("Powering on target...");
-        self.send_command(cmd::CMD_POWER_ON)?;
-        self.expect_ok()?;
-        self.powered = true;
-        eprintln!("Target powered on");
-        Ok(())
-    }
-
-    pub fn power_off(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
-        eprintln!("Powering off target...");
-        self.send_command(cmd::CMD_POWER_OFF)?;
-        self.expect_ok()?;
-        self.powered = false;
-        eprintln!("Target powered off");
         Ok(())
     }
 
@@ -324,12 +305,20 @@ impl SinodudeSerialProgrammer {
         Ok(())
     }
 
-    fn read_region(&mut self, region: u8, address: u32, size: usize) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
-        debug!("Reading {} bytes from region {} at address {:#06x}", size, region, address);
+    fn read_region(
+        &mut self,
+        region: u8,
+        address: u32,
+        size: usize,
+    ) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
+        debug!(
+            "Reading {} bytes from region {} at address {:#06x}",
+            size, region, address
+        );
         self.send_command(cmd::CMD_READ_FLASH)?;
         self.send_bytes(&address.to_le_bytes())?;
         self.send_bytes(&(size as u16).to_le_bytes())?;
-        self.send_bytes(&[region-1])?;
+        self.send_bytes(&[region - 1])?;
         let response = self.read_byte()?;
         if response != cmd::RSP_DATA {
             return Err(SinodudeSerialProgrammerError::OperationFailed);
@@ -344,21 +333,29 @@ impl SinodudeSerialProgrammer {
     }
 
     pub fn get_code_options(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
+        let region = self.chip_type.options_region();
+
         // Read customer ID (4 bytes)
         if let Some(ref addr_field) = self.chip_type.customer_id {
-            let customer_id = self.read_region(addr_field.region, addr_field.address, 4)?;
+            let customer_id = self.read_region(region, addr_field.address, 4)?;
             eprintln!(
                 "Customer ID: {}",
-                customer_id.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+                customer_id
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<String>()
             );
         }
 
         // Read operation number (2 bytes)
         if let Some(ref addr_field) = self.chip_type.operation_number {
-            let operation_number = self.read_region(addr_field.region, addr_field.address, 2)?;
+            let operation_number = self.read_region(region, addr_field.address, 2)?;
             eprintln!(
                 "Operation Number: {}",
-                operation_number.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+                operation_number
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<String>()
             );
         }
 
@@ -368,15 +365,19 @@ impl SinodudeSerialProgrammer {
             let first_part_size = 4.min(option_byte_count);
             let second_part_size = option_byte_count.saturating_sub(4);
 
-            let mut code_options = self.read_region(addr_field.region, addr_field.address, first_part_size)?;
+            let mut code_options =
+                self.read_region(region, addr_field.address, first_part_size)?;
             if second_part_size > 0 {
-                let second_part = self.read_region(addr_field.region, 0x1100, second_part_size)?;
+                let second_part = self.read_region(region, 0x1100, second_part_size)?;
                 code_options.extend_from_slice(&second_part);
             }
 
             eprintln!(
                 "Code Options: {}",
-                code_options.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+                code_options
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<String>()
             );
 
             // Parse and display options in user-friendly format
@@ -387,10 +388,13 @@ impl SinodudeSerialProgrammer {
 
         // Read serial number (4 bytes)
         if let Some(ref addr_field) = self.chip_type.serial_number {
-            let serial_number = self.read_region(addr_field.region, addr_field.address, 4)?;
+            let serial_number = self.read_region(region, addr_field.address, 4)?;
             eprintln!(
                 "Serial Number: {}",
-                serial_number.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+                serial_number
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<String>()
             );
         }
 
@@ -400,7 +404,6 @@ impl SinodudeSerialProgrammer {
     pub fn read_init(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         self.ping()?;
         self.check_version()?;
-        self.power_on()?;
         self.connect()?;
         self.get_id()?;
         self.set_config()?;
@@ -412,7 +415,6 @@ impl SinodudeSerialProgrammer {
     pub fn write_init(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         self.ping()?;
         self.check_version()?;
-        self.power_on()?;
         self.connect()?;
         self.get_id()?;
         self.set_config()?;
@@ -598,7 +600,6 @@ impl SinodudeSerialProgrammer {
 
     pub fn finish(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         self.disconnect()?;
-        self.power_off()?;
         Ok(())
     }
 }
@@ -608,9 +609,6 @@ impl Drop for SinodudeSerialProgrammer {
         // Best effort cleanup, only if needed
         if self.connected {
             let _ = self.disconnect();
-        }
-        if self.powered {
-            let _ = self.power_off();
         }
     }
 }

@@ -15,11 +15,11 @@ pub const PART: Part = Part {
     jtag_id: 0xf648,
     sector_size: 1024,
     option_byte_count: 4,
-    customer_id: Some(AddressField { region: 1, address: 0x1000 }),
-    operation_number: Some(AddressField { region: 1, address: 0x1004 }),
-    customer_option: Some(AddressField { region: 1, address: 0x1006 }),
-    security: Some(AddressField { region: 1, address: 0x100a }),
-    serial_number: Some(AddressField { region: 1, address: 0x103c }),
+    customer_id: Some(AddressField { address: 0x1000 }),
+    operation_number: Some(AddressField { address: 0x1004 }),
+    customer_option: Some(AddressField { address: 0x1006 }),
+    security: Some(AddressField { address: 0x100a }),
+    serial_number: Some(AddressField { address: 0x103c }),
     options,
 };
 
