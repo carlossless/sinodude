@@ -661,7 +661,10 @@ impl IcpController {
 #[atmega_hal::entry]
 fn main() -> ! {
     let dp = pac::Peripherals::take().unwrap();
+    #[cfg(feature = "atmega328p")]
     let pins = Pins::new(dp.PORTB, dp.PORTC, dp.PORTD);
+    #[cfg(feature = "atmega328pb")]
+    let pins = Pins::new(dp.PORTB, dp.PORTC, dp.PORTD, dp.PORTE);
 
     // Setup serial at 115200 baud
     let serial = Usart::new(
@@ -832,7 +835,10 @@ fn main() -> ! {
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     let dp = pac::Peripherals::take().unwrap();
+    #[cfg(feature = "atmega328p")]
     let pins = Pins::new(dp.PORTB, dp.PORTC, dp.PORTD);
+    #[cfg(feature = "atmega328pb")]
+    let pins = Pins::new(dp.PORTB, dp.PORTC, dp.PORTD, dp.PORTE);
 
     // Setup serial at 115200 baud
     let serial = Usart::new(

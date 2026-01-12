@@ -4,8 +4,13 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
+[features]
+default = ["atmega328p"]
+atmega328p = ["avr-device/atmega328p", "atmega-hal/atmega328p"]
+atmega328pb = ["avr-device/atmega328pb", "atmega-hal/atmega328pb"]
+
 [dependencies]
-avr-device = { version = "0.5", features = ["atmega328p"] }
+avr-device = { version = "0.5" }
 embedded-hal = "1.0"
 ufmt = "0.2"
 nb = "1.1"
@@ -13,7 +18,7 @@ nb = "1.1"
 [dependencies.atmega-hal]
 git = "https://github.com/rahix/avr-hal"
 rev = "ff4909c00ceee76d60f8bd7cc95bc0f3e2ab673f"
-features = ["atmega328p", "rt"]
+features = ["rt"]
 
 [[bin]]
 name = "sinodude-serial"

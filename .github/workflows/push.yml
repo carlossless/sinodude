@@ -45,6 +45,13 @@ jobs:
 
   build-sinodude-serial-firmware:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: atmega328p
+            features: "--no-default-features --features atmega328p"
+          - target: atmega328pb
+            features: "--no-default-features --features atmega328pb"
     defaults:
       run:
         working-directory: firmware
@@ -58,11 +65,11 @@ jobs:
           path: |
             ~/.cargo/registry
             ./firmware/target
-          key: firmware-cargo-registry
-      - name: Build firmware
-        run: cargo build --release --verbose
+          key: firmware-cargo-registry-${{ matrix.target }}
+      - name: Build firmware (${{ matrix.target }})
+        run: RUSTFLAGS="-C target-cpu=${{ matrix.target }}" cargo build --release --verbose ${{ matrix.features }}
       - name: Generate hex file
-        run: avr-objcopy -O ihex target/avr-none/release/sinodude-serial.elf sinodude-serial.hex
+        run: avr-objcopy -O ihex target/avr-none/release/sinodude-serial.elf sinodude-serial-${{ matrix.target }}.hex
       - name: Compress
         run: |
           mkdir -p ./artifacts
@@ -71,11 +78,11 @@ jobs:
           else
             TAG=$GITHUB_SHA
           fi
-          tar -czf ./artifacts/sinodude-serial-$TAG.tar.gz sinodude-serial.hex
+          tar -czf ./artifacts/sinodude-serial-${{ matrix.target }}-$TAG.tar.gz sinodude-serial-${{ matrix.target }}.hex
       - name: Archive artifact
         uses: actions/upload-artifact@v4
         with:
-          name: result-firmware
+          name: result-firmware-${{ matrix.target }}
           path: |
             ./firmware/artifacts
 

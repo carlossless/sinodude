@@ -7,3 +7,6 @@ runner = "ravedude"
 
 [unstable]
 build-std = ["core"]
+
+# To build for ATmega328PB instead, override RUSTFLAGS:
+# RUSTFLAGS="-C target-cpu=atmega328pb" cargo build --release --no-default-features --features atmega328pb

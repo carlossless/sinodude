@@ -5,6 +5,7 @@ AVR-based programmer firmware for SinoWealth 8051 microcontrollers using the ICP
 ## Supported Boards
 
 - Arduino Nano (ATmega328P)
+- Arduino Nano Every compatible boards (ATmega328PB)
 
 ## Pin Connections
 
@@ -80,23 +81,34 @@ Requires Rust nightly with AVR support:
 ```bash
 cd firmware
 rustup override set nightly
-cargo build --release
 ```
 
-The output ELF file will be in `target/avr-atmega328p/release/sinodude-serial.elf`.
+### ATmega328P (default)
+
+```bash
+RUSTFLAGS="-C target-cpu=atmega328p" cargo build --release
+```
+
+The output ELF file will be in `target/avr-none/release/sinodude-serial.elf`.
+
+### ATmega328PB
+
+```bash
+RUSTFLAGS="-C target-cpu=atmega328pb" cargo build --release --no-default-features --features atmega328pb
+```
 
 ## Flashing
 
-Using avrdude:
+Using avrdude for ATmega328P:
 
 ```bash
-avrdude -p atmega328p -c arduino -P /dev/ttyUSB0 -b 115200 -U flash:w:target/avr-atmega328p/release/sinodude-serial.elf
+avrdude -p atmega328p -c arduino -P /dev/ttyUSB0 -b 115200 -U flash:w:target/avr-none/release/sinodude-serial.elf
 ```
 
-Or with ravedude (if installed):
+Using avrdude for ATmega328PB:
 
 ```bash
-cargo run --release
+avrdude -p atmega328pb -c arduino -P /dev/ttyUSB0 -b 115200 -U flash:w:target/avr-none/release/sinodude-serial.elf
 ```
 
 ## Acknowledgments
