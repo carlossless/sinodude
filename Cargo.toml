@@ -19,3 +19,4 @@ simple_logger = { version = "5.1", default-features = false, features = ["stderr
 serialport = "4.6"
 indicatif = "0.17"
 indexmap = "2.7"
+ctrlc = "3.4"

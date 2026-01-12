@@ -2,6 +2,8 @@ use super::super::parts::{format_parsed_options, parse_code_options, Part};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
@@ -66,18 +68,22 @@ pub enum SinodudeSerialProgrammerError {
     JtagIdMismatch { expected: u16, actual: u16 },
     #[error("Part number mismatch: expected {expected}, got {actual}")]
     PartNumberMismatch { expected: String, actual: String },
+    #[error("Operation cancelled")]
+    Cancelled,
 }
 
 pub struct SinodudeSerialProgrammer {
     port: Box<dyn serialport::SerialPort>,
     chip_type: &'static Part,
     connected: bool,
+    cancelled: Arc<AtomicBool>,
 }
 
 impl SinodudeSerialProgrammer {
     pub fn new(
         port_name: &str,
         chip_type: &'static Part,
+        cancelled: Arc<AtomicBool>,
     ) -> Result<Self, SinodudeSerialProgrammerError> {
         eprintln!("Opening serial port: {}", port_name);
 
@@ -93,7 +99,16 @@ impl SinodudeSerialProgrammer {
             port,
             chip_type,
             connected: false,
+            cancelled,
         })
+    }
+
+    fn check_cancelled(&self) -> Result<(), SinodudeSerialProgrammerError> {
+        if self.cancelled.load(Ordering::SeqCst) {
+            Err(SinodudeSerialProgrammerError::Cancelled)
+        } else {
+            Ok(())
+        }
     }
 
     fn send_command(&mut self, cmd: u8) -> Result<(), SinodudeSerialProgrammerError> {
@@ -442,6 +457,10 @@ impl SinodudeSerialProgrammer {
 
         let start = Instant::now();
         for addr in (0..flash_size).step_by(buffer_size as usize) {
+            self.check_cancelled().map_err(|e| {
+                progress.abandon_with_message("Cancelled");
+                e
+            })?;
             let result = self.read_chunk(addr, buffer_size).map_err(|e| {
                 progress.abandon_with_message("Read failed");
                 e
@@ -543,6 +562,10 @@ impl SinodudeSerialProgrammer {
 
         let start = Instant::now();
         for addr in (0..flash_size).step_by(sector_size) {
+            self.check_cancelled().map_err(|e| {
+                erase_progress.abandon_with_message("Cancelled");
+                e
+            })?;
             self.erase_sector(addr as u32).map_err(|e| {
                 erase_progress.abandon_with_message("Erase failed");
                 e
@@ -559,6 +582,10 @@ impl SinodudeSerialProgrammer {
 
         let start = Instant::now();
         for addr in (0..flash_size).step_by(CHUNK_SIZE) {
+            self.check_cancelled().map_err(|e| {
+                write_progress.abandon_with_message("Cancelled");
+                e
+            })?;
             let end = (addr + CHUNK_SIZE).min(flash_size);
             let chunk = &firmware[addr..end];
             self.write_chunk(addr as u32, chunk).map_err(|e| {
@@ -577,6 +604,10 @@ impl SinodudeSerialProgrammer {
 
         let start = Instant::now();
         for addr in (0..flash_size).step_by(CHUNK_SIZE) {
+            self.check_cancelled().map_err(|e| {
+                verify_progress.abandon_with_message("Cancelled");
+                e
+            })?;
             let end = (addr + CHUNK_SIZE).min(flash_size);
             let expected = &firmware[addr..end];
             let actual = self.read_chunk(addr as u32, (end - addr) as u16)?;

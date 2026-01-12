@@ -1,6 +1,8 @@
 use clap::*;
 use log::info;
 use simple_logger::SimpleLogger;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::{env, fs, io::Read};
 
 mod ihex;
@@ -69,14 +71,7 @@ fn cli() -> Command {
 ;
 }
 
-fn main() {
-    SimpleLogger::new()
-        .with_utc_timestamps()
-        .with_level(log::LevelFilter::Off)
-        .env()
-        .init()
-        .unwrap();
-
+fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
     let matches = cli().get_matches();
 
     match matches.subcommand() {
@@ -105,51 +100,19 @@ fn main() {
                         .map(|s| s.as_str())
                         .expect("--power is required for sinolink programmer");
                     let power_setting = PowerSetting::from_option(power_setting_name);
-                    let sinolink = match SinolinkProgrammer::new(part, power_setting) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            eprintln!("Error: {e}");
-                            std::process::exit(1);
-                        }
-                    };
-                    if let Err(e) = sinolink.read_init() {
-                        eprintln!("Error: {e}");
-                        std::process::exit(1);
-                    }
-                    match sinolink.read_flash() {
-                        Ok(r) => r,
-                        Err(e) => {
-                            eprintln!("Error: {e}");
-                            std::process::exit(1);
-                        }
-                    }
+                    let sinolink = SinolinkProgrammer::new(part, power_setting)?;
+                    sinolink.read_init()?;
+                    sinolink.read_flash()?
                 }
                 "sinodude-serial" => {
                     let port = sub_matches
                         .get_one::<String>("port")
                         .expect("--port is required for sinodude-serial programmer");
-                    let mut programmer = match SinodudeSerialProgrammer::new(port, part) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            eprintln!("Error: {e}");
-                            std::process::exit(1);
-                        }
-                    };
-                    if let Err(e) = programmer.read_init() {
-                        eprintln!("Error: {e}");
-                        std::process::exit(1);
-                    }
-                    let result = match programmer.read_flash() {
-                        Ok(r) => r,
-                        Err(e) => {
-                            eprintln!("Error: {e}");
-                            std::process::exit(1);
-                        }
-                    };
-                    if let Err(e) = programmer.finish() {
-                        eprintln!("Error: {e}");
-                        std::process::exit(1);
-                    }
+                    let mut programmer =
+                        SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+                    programmer.read_init()?;
+                    let result = programmer.read_flash()?;
+                    programmer.finish()?;
                     result
                 }
                 _ => unreachable!(),
@@ -158,8 +121,8 @@ fn main() {
             let digest = md5::compute(&result);
             info!("MD5: {:x}", digest);
 
-            let ihex = to_ihex(result).unwrap();
-            fs::write(output_file, ihex).unwrap();
+            let ihex = to_ihex(result)?;
+            fs::write(output_file, ihex)?;
         }
         Some(("write", sub_matches)) => {
             let input_file = sub_matches
@@ -179,11 +142,11 @@ fn main() {
 
             let part = PARTS.get(part_name).unwrap();
 
-            let mut file = fs::File::open(input_file).unwrap();
+            let mut file = fs::File::open(input_file)?;
             let mut file_buf = Vec::new();
-            file.read_to_end(&mut file_buf).unwrap();
+            file.read_to_end(&mut file_buf)?;
             let file_str = String::from_utf8_lossy(&file_buf[..]);
-            let mut firmware = from_ihex(&file_str, part.flash_size).unwrap();
+            let mut firmware = from_ihex(&file_str, part.flash_size)?;
 
             if firmware.len() < part.flash_size {
                 firmware.resize(part.flash_size, 0);
@@ -196,49 +159,50 @@ fn main() {
                         .map(|s| s.as_str())
                         .expect("--power is required for sinolink programmer");
                     let power_setting = PowerSetting::from_option(power_setting_name);
-                    let sinolink = match SinolinkProgrammer::new(part, power_setting) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            eprintln!("Error: {e}");
-                            std::process::exit(1);
-                        }
-                    };
-                    if let Err(e) = sinolink.write_init() {
-                        eprintln!("Error: {e}");
-                        std::process::exit(1);
-                    }
-                    if let Err(e) = sinolink.write_flash(&firmware[0..65536]) {
-                        eprintln!("Error: {e}");
-                        std::process::exit(1);
-                    }
+                    let sinolink = SinolinkProgrammer::new(part, power_setting)?;
+                    sinolink.write_init()?;
+                    sinolink.write_flash(&firmware[0..65536])?;
                 }
                 "sinodude-serial" => {
                     let port = sub_matches
                         .get_one::<String>("port")
                         .expect("--port is required for sinodude-serial programmer");
-                    let mut programmer = match SinodudeSerialProgrammer::new(port, part) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            eprintln!("Error: {e}");
-                            std::process::exit(1);
-                        }
-                    };
-                    if let Err(e) = programmer.write_init() {
-                        eprintln!("Error: {e}");
-                        std::process::exit(1);
-                    }
-                    if let Err(e) = programmer.write_flash(&firmware) {
-                        eprintln!("Error: {e}");
-                        std::process::exit(1);
-                    }
-                    if let Err(e) = programmer.finish() {
-                        eprintln!("Error: {e}");
-                        std::process::exit(1);
-                    }
+                    let mut programmer =
+                        SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+                    programmer.write_init()?;
+                    programmer.write_flash(&firmware)?;
+                    programmer.finish()?;
                 }
                 _ => unreachable!(),
             }
         }
         _ => unreachable!(),
+    }
+
+    Ok(())
+}
+
+fn main() {
+    SimpleLogger::new()
+        .with_utc_timestamps()
+        .with_level(log::LevelFilter::Off)
+        .env()
+        .init()
+        .unwrap();
+
+    // Set up cancellation token for Ctrl+C handling
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let c = cancelled.clone();
+    ctrlc::set_handler(move || {
+        c.store(true, Ordering::SeqCst);
+    })
+    .expect("Error setting Ctrl-C handler");
+
+    if let Err(e) = run(cancelled) {
+        // Don't print cancellation errors - the user already knows they cancelled
+        if e.to_string() != "Operation cancelled" {
+            eprintln!("Error: {e}");
+        }
+        std::process::exit(1);
     }
 }
