@@ -68,6 +68,25 @@ fn cli() -> Command {
                         .required(false),
                 ),
         )
+        .subcommand(
+            Command::new("erase")
+                .short_flag('e')
+                .about("Mass erase the chip's flash")
+                .arg(
+                    arg!(-c --programmer <PROGRAMMER>)
+                        .value_parser(["sinodude-serial"])
+                        .required(true),
+                )
+                .arg(
+                    arg!(-p --part <PART>)
+                        .value_parser(PARTS.keys().copied().collect::<Vec<_>>())
+                        .required(true),
+                )
+                .arg(
+                    arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
+                        .required(false),
+                ),
+        )
 ;
 }
 
@@ -171,6 +190,48 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                         SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
                     programmer.write_init()?;
                     programmer.write_flash(&firmware)?;
+                    programmer.finish()?;
+                }
+                _ => unreachable!(),
+            }
+        }
+        Some(("erase", sub_matches)) => {
+            let part_name = sub_matches
+                .get_one::<String>("part")
+                .map(|s| s.as_str())
+                .unwrap();
+
+            let programmer_name = sub_matches
+                .get_one::<String>("programmer")
+                .map(|s| s.as_str())
+                .unwrap();
+
+            let part = PARTS.get(part_name).unwrap();
+
+            match programmer_name {
+                "sinodude-serial" => {
+                    let port = sub_matches
+                        .get_one::<String>("port")
+                        .expect("--port is required for sinodude-serial programmer");
+                    let mut programmer =
+                        SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+                    programmer.erase_init()?;
+                    programmer.mass_erase()?;
+                    // TODO: figure out security_levels + chip types and handle this properly
+                    // Also erase the custom region from the security address
+                    if let Some(ref security) = part.security {
+                        // Determine security region length based on security_level
+                        let security_length: u16 = match part.security_level {
+                            4 => 17,
+                            _ => 8, // RANDOM
+                        };
+                        eprintln!(
+                            "Erasing custom region at security address {:#x} ({} bytes)...",
+                            security.address, security_length
+                        );
+                        programmer.erase_custom_region(security.address, security_length)?;
+                        eprintln!("Custom region erase complete");
+                    }
                     programmer.finish()?;
                 }
                 _ => unreachable!(),

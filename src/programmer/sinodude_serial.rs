@@ -31,6 +31,8 @@ mod cmd {
     pub const CMD_READ_FLASH: u8 = 0x0A;
     pub const CMD_WRITE_FLASH: u8 = 0x0B;
     pub const CMD_ERASE_FLASH: u8 = 0x0C;
+    pub const CMD_MASS_ERASE: u8 = 0x0D;
+    pub const CMD_ERASE_CUSTOM_REGION: u8 = 0x0E;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -58,6 +60,10 @@ pub enum SinodudeSerialProgrammerError {
     OperationFailed,
     #[error("Erase failed at address {0:#x}")]
     EraseFailed(u32),
+    #[error("Mass erase failed")]
+    MassEraseFailed,
+    #[error("Custom region erase failed at address {0:#x}")]
+    CustomRegionEraseFailed(u32),
     #[error("Write failed at address {0:#x}")]
     WriteFailed(u32),
     #[error("Verification failed at address {0:#x}")]
@@ -374,6 +380,21 @@ impl SinodudeSerialProgrammer {
             );
         }
 
+        // Read security bits (from security address to serial_number address)
+        if let (Some(ref security_addr), Some(ref serial_addr)) =
+            (&self.chip_type.security, &self.chip_type.serial_number)
+        {
+            let security_len = (serial_addr.address - security_addr.address) as usize;
+            let security_bits = self.read_region(region, security_addr.address, security_len)?;
+            eprintln!(
+                "Security Bits: {}",
+                security_bits
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<String>()
+            );
+        }
+
         // Read serial number (4 bytes)
         if let Some(ref addr_field) = self.chip_type.serial_number {
             let serial_number = self.read_region(region, addr_field.address, 4)?;
@@ -434,6 +455,16 @@ impl SinodudeSerialProgrammer {
         self.set_config()?;
         self.get_part_number()?;
         self.get_code_options()?;
+        Ok(())
+    }
+
+    pub fn erase_init(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
+        self.ping()?;
+        self.check_version()?;
+        self.connect()?;
+        self.get_id()?;
+        self.set_config()?;
+        self.get_part_number()?;
         Ok(())
     }
 
@@ -521,6 +552,35 @@ impl SinodudeSerialProgrammer {
 
         self.expect_ok()
             .map_err(|_| SinodudeSerialProgrammerError::EraseFailed(addr))
+    }
+
+    pub fn mass_erase(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
+        eprintln!("Mass erasing flash...");
+        let start = Instant::now();
+
+        self.send_command(cmd::CMD_MASS_ERASE)?;
+        self.expect_ok()
+            .map_err(|_| SinodudeSerialProgrammerError::MassEraseFailed)?;
+
+        let elapsed = start.elapsed();
+        eprintln!("Mass erase complete in {:.2?}", elapsed);
+        Ok(())
+    }
+
+    pub fn erase_custom_region(&mut self, addr: u32, length: u16) -> Result<(), SinodudeSerialProgrammerError> {
+        debug!("Erasing custom region at {:#x}, length {}", addr, length);
+        self.send_command(cmd::CMD_ERASE_CUSTOM_REGION)?;
+
+        // Send address (4 bytes, little endian)
+        let addr_bytes = addr.to_le_bytes();
+        self.send_bytes(&addr_bytes)?;
+
+        // Send length (2 bytes, little endian)
+        let len_bytes = length.to_le_bytes();
+        self.send_bytes(&len_bytes)?;
+
+        self.expect_ok()
+            .map_err(|_| SinodudeSerialProgrammerError::CustomRegionEraseFailed(addr))
     }
 
     fn write_chunk(&mut self, addr: u32, data: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {

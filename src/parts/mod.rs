@@ -139,6 +139,7 @@ pub struct Part {
     pub jtag_id: u16,
     pub sector_size: usize,
     pub option_byte_count: usize,
+    pub security_level: u8,
     pub customer_id: Option<AddressField>,
     pub operation_number: Option<AddressField>,
     pub customer_option: Option<AddressField>,

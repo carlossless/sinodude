@@ -15,6 +15,7 @@ pub const PART: Part = Part {
     jtag_id: 0xf690,
     sector_size: 512,
     option_byte_count: 8,
+    security_level: 4,
     customer_id: Some(AddressField { address: 0x1000 }),
     operation_number: Some(AddressField { address: 0x1004 }),
     customer_option: Some(AddressField { address: 0x1006 }),

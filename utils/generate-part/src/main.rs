@@ -78,6 +78,7 @@ pub struct PartDefinition {
     pub initial_option: u64,
     pub option_mask: u64,
     pub option_byte_count: usize,
+    pub security_level: u8,
     pub customer_id: Option<AddressField>,
     pub operation_number: Option<AddressField>,
     pub customer_option: Option<AddressField>,
@@ -267,6 +268,11 @@ fn parse_gpt_content(content: &str) -> Result<PartDefinition, GptError> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(8);
 
+    let security_level = fields
+        .get("SecurityLevel")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+
     // Parse address fields
     let customer_id = parse_address_field("CustomerID");
     let operation_number = parse_address_field("OperationNumber");
@@ -302,6 +308,7 @@ fn parse_gpt_content(content: &str) -> Result<PartDefinition, GptError> {
         initial_option,
         option_mask,
         option_byte_count,
+        security_level,
         customer_id,
         operation_number,
         customer_option,
@@ -352,6 +359,10 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
     output.push_str(&format!(
         "    option_byte_count: {},\n",
         part.option_byte_count
+    ));
+    output.push_str(&format!(
+        "    security_level: {},\n",
+        part.security_level
     ));
 
     // Address fields

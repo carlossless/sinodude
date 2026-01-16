@@ -45,6 +45,8 @@ mod cmd {
     pub const CMD_READ_FLASH: u8 = 0x0A;
     pub const CMD_WRITE_FLASH: u8 = 0x0B;
     pub const CMD_ERASE_FLASH: u8 = 0x0C;
+    pub const CMD_MASS_ERASE: u8 = 0x0D;
+    pub const CMD_ERASE_CUSTOM_REGION: u8 = 0x0E;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -392,17 +394,17 @@ impl IcpController {
                 self.tdi_low();
             }
 
-            self.delay_us(1);
+            self.delay_us(2);
             self.tck_high();
-            self.delay_us(1);
+            self.delay_us(2);
             self.tck_low();
 
             byte <<= 1;
         }
 
-        self.delay_us(1);
+        self.delay_us(2);
         self.tck_high();
-        self.delay_us(1);
+        self.delay_us(2);
         self.tck_low();
 
         self.tdi_low();
@@ -412,9 +414,9 @@ impl IcpController {
         let mut byte: u8 = 0;
         let mut mask: u8 = 1;
         for _ in 0..8 {
-            self.delay_us(1);
+            self.delay_us(2);
             self.tck_high();
-            self.delay_us(1);
+            self.delay_us(2);
             self.tck_low();
 
             if self.tdo_read() {
@@ -424,9 +426,9 @@ impl IcpController {
             mask <<= 1;
         }
 
-        self.delay_us(1);
+        self.delay_us(2);
         self.tck_high();
-        self.delay_us(1);
+        self.delay_us(2);
         self.tck_low();
 
         byte
@@ -617,6 +619,58 @@ impl IcpController {
         true
     }
 
+    fn icp_mass_erase(&mut self) -> bool {
+        self.switch_mode(Mode::ICP);
+
+        let Some(chip_type) = self.chip_type else {
+            return false;
+        };
+
+        if chip_type != 1 {
+            self.send_icp_byte(0x46);
+            self.send_icp_byte(0xF0);
+            self.send_icp_byte(0xFF);
+        }
+
+        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
+        self.send_icp_byte(0x00);
+        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_H);
+        self.send_icp_byte(0x00);
+        if chip_type == 4 || chip_type == 7 {
+            self.send_icp_byte(icp_cmd::ICP_SET_XPAGE);
+            self.send_icp_byte(0x00);
+        }
+
+        self.send_icp_byte(icp_cmd::ICP_SET_IB_DATA);
+        self.send_icp_byte(0x00);
+
+        self.send_icp_byte(0x4b);
+        self.send_icp_byte(0x15);
+        self.send_icp_byte(0x0a);
+        self.send_icp_byte(0x09);
+        self.send_icp_byte(0x06);
+        self.send_icp_byte(0xff);
+
+        self.pins.tdi.set_high(); // keep tdi line high
+
+        self.delay.delay_ms(30u8);
+        while !self.tdo_read() {
+            self.delay.delay_ms(5u8);
+            for _ in 0..18 {
+                self.delay_us(2);
+                self.tck_high();
+                self.delay_us(2);
+                self.tck_low();
+
+                if self.tdo_read() {
+                    break;
+                }
+            }
+        }
+
+        return true; // TODO: at some point, time out and return false
+    }
+
     fn icp_erase_flash(&mut self, addr: u32) -> bool {
         self.switch_mode(Mode::ICP);
 
@@ -656,7 +710,59 @@ impl IcpController {
 
         status
     }
+
+    // TODO: can either be merged with icp_erase_flash or write_flash broken up
+    fn icp_erase_custom_region(&mut self, addr: u32, length: u16) -> bool {
+        self.switch_mode(Mode::ICP);
+
+        let Some(chip_type) = self.chip_type else {
+            return false;
+        };
+
+        if chip_type != 1 {
+            self.send_icp_byte(0x46);
+            self.send_icp_byte(0xF0);
+            self.send_icp_byte(0xFF);
+        }
+
+        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
+        self.send_icp_byte((addr & 0xFF) as u8);
+        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_H);
+        self.send_icp_byte(((addr & 0xFF00) >> 8) as u8);
+        if chip_type == 4 || chip_type == 7 {
+            self.send_icp_byte(icp_cmd::ICP_SET_XPAGE);
+            self.send_icp_byte(((addr & 0xFF0000) >> 16) as u8);
+        } 
+
+        self.send_icp_byte(icp_cmd::ICP_SET_IB_DATA);
+        self.send_icp_byte(0x00);
+
+        self.send_icp_byte(0xa5);
+        self.send_icp_byte(0x15);
+        self.send_icp_byte(0x0a);
+        self.send_icp_byte(0x09);
+        self.send_icp_byte(0x06);
+
+        self.send_icp_byte(0x00);
+
+        self.delay_us(10);
+
+        for _ in 0..length-1 {
+            // while self.tdo_read() == true {
+                self.send_icp_byte(0x00);
+            // }
+            // // TDO goes high here, does it mean anything, should we check it?
+            self.send_icp_byte(0x00);
+        }
+        self.send_icp_byte(0xAA);
+        // TDO goes high here, does it mean anything, should we check it?
+        self.send_icp_byte(0x00);
+        self.send_icp_byte(0x00);
+
+        true
+    }
 }
+
 
 #[atmega_hal::entry]
 fn main() -> ! {
@@ -818,6 +924,37 @@ fn main() -> ! {
                 };
 
                 if icp.icp_erase_flash(addr) {
+                    let _ = nb::block!(tx.write(cmd::RSP_OK));
+                } else {
+                    let _ = nb::block!(tx.write(cmd::RSP_ERR));
+                }
+            }
+
+            cmd::CMD_MASS_ERASE => {
+                if icp.icp_mass_erase() {
+                    let _ = nb::block!(tx.write(cmd::RSP_OK));
+                } else {
+                    let _ = nb::block!(tx.write(cmd::RSP_ERR));
+                }
+            }
+
+            cmd::CMD_ERASE_CUSTOM_REGION => {
+                // Read address (4 bytes)
+                let addr = {
+                    let b0 = nb::block!(rx.read()).unwrap_or(0);
+                    let b1 = nb::block!(rx.read()).unwrap_or(0);
+                    let b2 = nb::block!(rx.read()).unwrap_or(0);
+                    let b3 = nb::block!(rx.read()).unwrap_or(0);
+                    u32::from_le_bytes([b0, b1, b2, b3])
+                };
+                // Read length (2 bytes)
+                let length = {
+                    let low = nb::block!(rx.read()).unwrap_or(0);
+                    let high = nb::block!(rx.read()).unwrap_or(0);
+                    u16::from_le_bytes([low, high])
+                };
+
+                if icp.icp_erase_custom_region(addr, length) {
                     let _ = nb::block!(tx.write(cmd::RSP_OK));
                 } else {
                     let _ = nb::block!(tx.write(cmd::RSP_ERR));
