@@ -79,11 +79,20 @@ pub enum SinodudeSerialProgrammerError {
     #[error("Customer option length {provided} exceeds maximum {max}")]
     CustomerOptionLengthExceeded { provided: usize, max: usize },
     #[error("Non-editable bits modified at byte {byte}: provided {provided:#04x}, expected {expected:#04x} (mask {mask:#04x})")]
-    NonEditableBitsModified { byte: usize, provided: u8, expected: u8, mask: u8 },
+    NonEditableBitsModified {
+        byte: usize,
+        provided: u8,
+        expected: u8,
+        mask: u8,
+    },
     #[error("Writing security bits is only supported for security_level 4 and chip_type 0x07 (got security_level {security_level}, chip_type {chip_type:#04x})")]
     UnsupportedSecurityWrite { security_level: u8, chip_type: u8 },
     #[error("Custom region verification failed at address {addr:#x}: expected {expected:02x?}, got {actual:02x?}")]
-    CustomRegionVerificationFailed { addr: u32, expected: Vec<u8>, actual: Vec<u8> },
+    CustomRegionVerificationFailed {
+        addr: u32,
+        expected: Vec<u8>,
+        actual: Vec<u8>,
+    },
 }
 
 pub struct SinodudeSerialProgrammer {
@@ -576,8 +585,16 @@ impl SinodudeSerialProgrammer {
         Ok(())
     }
 
-    pub fn write_custom_region(&mut self, addr: u32, data: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
-        debug!("Writing {} bytes to custom region at {:#x}", data.len(), addr);
+    pub fn write_custom_region(
+        &mut self,
+        addr: u32,
+        data: &[u8],
+    ) -> Result<(), SinodudeSerialProgrammerError> {
+        debug!(
+            "Writing {} bytes to custom region at {:#x}",
+            data.len(),
+            addr
+        );
         self.send_command(cmd::CMD_WRITE_CUSTOM_REGION)?;
 
         // Send address (4 bytes, little endian)
@@ -598,17 +615,22 @@ impl SinodudeSerialProgrammer {
         // Verify by reading back (region 2 = custom block)
         let read_back = self.read_region(2, addr, data.len())?;
         if read_back != data {
-            return Err(SinodudeSerialProgrammerError::CustomRegionVerificationFailed {
-                addr,
-                expected: data.to_vec(),
-                actual: read_back,
-            });
+            return Err(
+                SinodudeSerialProgrammerError::CustomRegionVerificationFailed {
+                    addr,
+                    expected: data.to_vec(),
+                    actual: read_back,
+                },
+            );
         }
 
         Ok(())
     }
 
-    pub fn write_customer_id(&mut self, data: &[u8; 4]) -> Result<(), SinodudeSerialProgrammerError> {
+    pub fn write_customer_id(
+        &mut self,
+        data: &[u8; 4],
+    ) -> Result<(), SinodudeSerialProgrammerError> {
         if let Some(ref field) = self.chip_type.customer_id {
             eprintln!("Writing customer ID at {:#x}...", field.address);
             self.write_custom_region(field.address, data)?;
@@ -616,7 +638,10 @@ impl SinodudeSerialProgrammer {
         Ok(())
     }
 
-    pub fn write_operation_number(&mut self, data: &[u8; 2]) -> Result<(), SinodudeSerialProgrammerError> {
+    pub fn write_operation_number(
+        &mut self,
+        data: &[u8; 2],
+    ) -> Result<(), SinodudeSerialProgrammerError> {
         if let Some(ref field) = self.chip_type.operation_number {
             eprintln!("Writing operation number at {:#x}...", field.address);
             self.write_custom_region(field.address, data)?;
@@ -624,13 +649,18 @@ impl SinodudeSerialProgrammer {
         Ok(())
     }
 
-    pub fn write_customer_option(&mut self, data: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
+    pub fn write_customer_option(
+        &mut self,
+        data: &[u8],
+    ) -> Result<(), SinodudeSerialProgrammerError> {
         // Validate length
         if data.len() > self.chip_type.option_byte_count {
-            return Err(SinodudeSerialProgrammerError::CustomerOptionLengthExceeded {
-                provided: data.len(),
-                max: self.chip_type.option_byte_count,
-            });
+            return Err(
+                SinodudeSerialProgrammerError::CustomerOptionLengthExceeded {
+                    provided: data.len(),
+                    max: self.chip_type.option_byte_count,
+                },
+            );
         }
 
         // Validate that non-editable bits match default values
@@ -661,11 +691,17 @@ impl SinodudeSerialProgrammer {
             let second_part_size = data.len().saturating_sub(4);
 
             if second_part_size > 0 {
-                eprintln!("Writing customer option ({} bytes) at {:#x}...", second_part_size, 0x1100);
+                eprintln!(
+                    "Writing customer option ({} bytes) at {:#x}...",
+                    second_part_size, 0x1100
+                );
                 self.write_custom_region(0x1100, &data[first_part_size..])?;
             }
 
-            eprintln!("Writing customer option ({} bytes) at {:#x}...", first_part_size, field.address);
+            eprintln!(
+                "Writing customer option ({} bytes) at {:#x}...",
+                first_part_size, field.address
+            );
             self.write_custom_region(field.address, &data[..first_part_size])?;
         }
         Ok(())
@@ -687,7 +723,10 @@ impl SinodudeSerialProgrammer {
         Ok(())
     }
 
-    pub fn write_serial_number(&mut self, data: &[u8; 4]) -> Result<(), SinodudeSerialProgrammerError> {
+    pub fn write_serial_number(
+        &mut self,
+        data: &[u8; 4],
+    ) -> Result<(), SinodudeSerialProgrammerError> {
         if let Some(ref field) = self.chip_type.serial_number {
             eprintln!("Writing serial number at {:#x}...", field.address);
             self.write_custom_region(field.address, data)?;

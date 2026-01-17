@@ -360,10 +360,7 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
         "    option_byte_count: {},\n",
         part.option_byte_count
     ));
-    output.push_str(&format!(
-        "    security_level: {},\n",
-        part.security_level
-    ));
+    output.push_str(&format!("    security_level: {},\n", part.security_level));
 
     // Address fields
     fn format_address_field(addr: &Option<AddressField>) -> String {

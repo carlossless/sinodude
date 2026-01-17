@@ -792,7 +792,6 @@ impl IcpController {
     }
 }
 
-
 #[atmega_hal::entry]
 fn main() -> ! {
     let dp = pac::Peripherals::take().unwrap();
