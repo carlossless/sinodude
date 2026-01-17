@@ -47,6 +47,7 @@ mod cmd {
     pub const CMD_ERASE_FLASH: u8 = 0x0C;
     pub const CMD_MASS_ERASE: u8 = 0x0D;
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0E;
+    pub const CMD_READ_CUSTOM_REGION: u8 = 0x0F;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -573,7 +574,7 @@ impl IcpController {
         true
     }
 
-    fn icp_write_flash(&mut self, addr: u32, data: &[u8]) -> bool {
+    fn icp_write_region(&mut self, addr: u32, data: &[u8], custom_block: bool) -> bool {
         self.switch_mode(Mode::ICP);
 
         let Some(chip_type) = self.chip_type else {
@@ -598,7 +599,9 @@ impl IcpController {
         self.send_icp_byte(icp_cmd::ICP_SET_IB_DATA);
         self.send_icp_byte(data[0]);
 
-        self.send_icp_byte(0x6e);
+        // Command byte: 0xa5 for custom region, 0x6e for flash
+        let cmd = if custom_block { 0xa5 } else { 0x6e };
+        self.send_icp_byte(cmd);
         self.send_icp_byte(0x15);
         self.send_icp_byte(0x0a);
         self.send_icp_byte(0x09);
@@ -608,7 +611,6 @@ impl IcpController {
         self.delay_us(10);
 
         self.send_icp_byte(0x00);
-        // TDO must go high here to indicate success
         if !self.tdo_read() {
             return false;
         }
@@ -617,7 +619,6 @@ impl IcpController {
             self.send_icp_byte(data[i]);
             self.delay_us(5);
             self.send_icp_byte(0x00);
-            // TDO must go high here to indicate success
             if !self.tdo_read() {
                 return false;
             }
@@ -631,9 +632,14 @@ impl IcpController {
         }
         self.send_icp_byte(0x00);
         self.send_icp_byte(0x00);
+
         self.delay_us(5);
 
         true
+    }
+
+    fn icp_write_flash(&mut self, addr: u32, data: &[u8]) -> bool {
+        self.icp_write_region(addr, data, false)
     }
 
     fn icp_mass_erase(&mut self) -> bool {
@@ -728,67 +734,8 @@ impl IcpController {
         status
     }
 
-    // TODO: can either be merged with icp_erase_flash or write_flash broken up
     fn icp_write_custom_region(&mut self, addr: u32, data: &[u8]) -> bool {
-        self.switch_mode(Mode::ICP);
-
-        let Some(chip_type) = self.chip_type else {
-            return false;
-        };
-
-        if chip_type != 1 {
-            self.send_icp_byte(0x46);
-            self.send_icp_byte(0xF0);
-            self.send_icp_byte(0xFF);
-        }
-
-        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
-        self.send_icp_byte((addr & 0xFF) as u8);
-        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_H);
-        self.send_icp_byte(((addr & 0xFF00) >> 8) as u8);
-        if chip_type == 4 || chip_type == 7 {
-            self.send_icp_byte(icp_cmd::ICP_SET_XPAGE);
-            self.send_icp_byte(((addr & 0xFF0000) >> 16) as u8);
-        }
-
-        self.send_icp_byte(icp_cmd::ICP_SET_IB_DATA);
-        self.send_icp_byte(data[0]);
-
-        self.send_icp_byte(0xa5);
-        self.send_icp_byte(0x15);
-        self.send_icp_byte(0x0a);
-        self.send_icp_byte(0x09);
-        self.send_icp_byte(0x06);
-        self.send_icp_byte(data[1]);
-
-        self.delay_us(10);
-
-        self.send_icp_byte(0x00);
-        // TDO must go high here to indicate success
-        if !self.tdo_read() {
-            return false;
-        }
-
-        for i in 2..data.len() {
-            self.send_icp_byte(data[i]);
-            self.delay_us(5);
-            self.send_icp_byte(0x00);
-            // TDO must go high here to indicate success
-            if !self.tdo_read() {
-                return false;
-            }
-        }
-
-        self.send_icp_byte(0x00);
-        self.send_icp_byte(0xaa);
-        // TDO must go high here to indicate success
-        if !self.tdo_read() {
-            return false;
-        }
-        self.send_icp_byte(0x00);
-        self.send_icp_byte(0x00);
-
-        true
+        self.icp_write_region(addr, data, true)
     }
 }
 
@@ -880,7 +827,7 @@ fn main() -> ! {
             }
 
             cmd::CMD_READ_FLASH => {
-                // Read address (4 bytes), length (2 bytes) and region (custom_block flag) (1 byte)
+                // Read address (4 bytes) and length (2 bytes)
                 let addr = {
                     let b0 = nb::block!(rx.read()).unwrap_or(0);
                     let b1 = nb::block!(rx.read()).unwrap_or(0);
@@ -893,13 +840,41 @@ fn main() -> ! {
                     let high = nb::block!(rx.read()).unwrap_or(0);
                     u16::from_le_bytes([low, high]) as usize
                 };
-                let region = nb::block!(rx.read()).unwrap_or(0);
-                let custom_block = region == 1;
 
                 // Clamp length to buffer size
                 let read_len = len.min(buffer.len());
 
-                if icp.icp_read_flash(addr, &mut buffer[..read_len], custom_block) {
+                if icp.icp_read_flash(addr, &mut buffer[..read_len], false) {
+                    let _ = nb::block!(tx.write(cmd::RSP_DATA));
+                    let _ = nb::block!(tx.write(read_len as u8));
+                    let _ = nb::block!(tx.write((read_len >> 8) as u8));
+                    for i in 0..read_len {
+                        let _ = nb::block!(tx.write(buffer[i]));
+                    }
+                } else {
+                    let _ = nb::block!(tx.write(cmd::RSP_ERR));
+                }
+            }
+
+            cmd::CMD_READ_CUSTOM_REGION => {
+                // Read address (4 bytes) and length (2 bytes)
+                let addr = {
+                    let b0 = nb::block!(rx.read()).unwrap_or(0);
+                    let b1 = nb::block!(rx.read()).unwrap_or(0);
+                    let b2 = nb::block!(rx.read()).unwrap_or(0);
+                    let b3 = nb::block!(rx.read()).unwrap_or(0);
+                    u32::from_le_bytes([b0, b1, b2, b3])
+                };
+                let len = {
+                    let low = nb::block!(rx.read()).unwrap_or(0);
+                    let high = nb::block!(rx.read()).unwrap_or(0);
+                    u16::from_le_bytes([low, high]) as usize
+                };
+
+                // Clamp length to buffer size
+                let read_len = len.min(buffer.len());
+
+                if icp.icp_read_flash(addr, &mut buffer[..read_len], true) {
                     let _ = nb::block!(tx.write(cmd::RSP_DATA));
                     let _ = nb::block!(tx.write(read_len as u8));
                     let _ = nb::block!(tx.write((read_len >> 8) as u8));

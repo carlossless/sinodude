@@ -9,6 +9,12 @@ pub mod sh68f90;
 pub mod sh68f90a;
 pub mod sh68f91;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Region {
+    Flash,
+    Custom,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct AddressField {
     pub address: u32,
@@ -155,13 +161,12 @@ impl Part {
         !matches!(self.custom_block, 2 | 3 | 4)
     }
 
-    /// Returns the region code for reading options.
-    /// Region 1 = flash, Region 2 = custom block (not flash).
-    pub fn options_region(&self) -> u8 {
+    /// Returns the region for reading options.
+    pub fn options_region(&self) -> Region {
         if self.options_in_flash() {
-            1
+            Region::Flash
         } else {
-            2
+            Region::Custom
         }
     }
 }

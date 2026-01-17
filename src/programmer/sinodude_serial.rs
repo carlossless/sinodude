@@ -1,4 +1,4 @@
-use super::super::parts::{format_parsed_options, parse_code_options, Part};
+use super::super::parts::{format_parsed_options, parse_code_options, Part, Region};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use std::io::{Read, Write};
@@ -33,6 +33,7 @@ mod cmd {
     pub const CMD_ERASE_FLASH: u8 = 0x0C;
     pub const CMD_MASS_ERASE: u8 = 0x0D;
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0E;
+    pub const CMD_READ_CUSTOM_REGION: u8 = 0x0F;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -303,10 +304,9 @@ impl SinodudeSerialProgrammer {
             0x04 => 0x2200,
             _ => return Err(SinodudeSerialProgrammerError::OperationFailed),
         };
-        self.send_command(cmd::CMD_READ_FLASH)?;
+        self.send_command(cmd::CMD_READ_CUSTOM_REGION)?;
         self.send_bytes(&custom_block_addr.to_le_bytes())?; // Address
         self.send_bytes(&(16u16.to_le_bytes()))?; // Length
-        self.send_bytes(&[0x01])?; // Custom block read
         let response = self.read_byte()?;
         if response != cmd::RSP_DATA {
             return Err(SinodudeSerialProgrammerError::OperationFailed);
@@ -345,18 +345,21 @@ impl SinodudeSerialProgrammer {
 
     fn read_region(
         &mut self,
-        region: u8,
+        region: Region,
         address: u32,
         size: usize,
     ) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
         debug!(
-            "Reading {} bytes from region {} at address {:#06x}",
+            "Reading {} bytes from {:?} at address {:#06x}",
             size, region, address
         );
-        self.send_command(cmd::CMD_READ_FLASH)?;
+        let cmd = match region {
+            Region::Custom => cmd::CMD_READ_CUSTOM_REGION,
+            Region::Flash => cmd::CMD_READ_FLASH,
+        };
+        self.send_command(cmd)?;
         self.send_bytes(&address.to_le_bytes())?;
         self.send_bytes(&(size as u16).to_le_bytes())?;
-        self.send_bytes(&[region - 1])?;
         let response = self.read_byte()?;
         if response != cmd::RSP_DATA {
             return Err(SinodudeSerialProgrammerError::OperationFailed);
@@ -538,9 +541,6 @@ impl SinodudeSerialProgrammer {
         let len_bytes = length.to_le_bytes();
         self.send_bytes(&len_bytes)?;
 
-        // Send flash read indicator
-        self.send_bytes(&[0x00])?;
-
         // Expect data response
         let response = self.read_byte()?;
         if response != cmd::RSP_DATA {
@@ -612,8 +612,8 @@ impl SinodudeSerialProgrammer {
         self.expect_ok()
             .map_err(|_| SinodudeSerialProgrammerError::CustomRegionWriteFailed(addr))?;
 
-        // Verify by reading back (region 2 = custom block)
-        let read_back = self.read_region(2, addr, data.len())?;
+        // Verify by reading back
+        let read_back = self.read_region(Region::Custom, addr, data.len())?;
         if read_back != data {
             return Err(
                 SinodudeSerialProgrammerError::CustomRegionVerificationFailed {
