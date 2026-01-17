@@ -613,7 +613,7 @@ impl IcpController {
             return false;
         }
 
-        for i in 1..data.len() {
+        for i in 2..data.len() {
             self.send_icp_byte(data[i]);
             self.delay_us(5);
             self.send_icp_byte(0x00);
