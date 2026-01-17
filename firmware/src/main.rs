@@ -21,7 +21,7 @@ use atmega_hal::{
 // Power - D6 (output)
 
 // Firmware version
-const VERSION_MAJOR: u8 = 1;
+const VERSION_MAJOR: u8 = 2;
 const VERSION_MINOR: u8 = 0;
 
 // Serial protocol commands
@@ -31,23 +31,22 @@ mod cmd {
     pub const CMD_GET_VERSION: u8 = 0x02;
 
     // Connection
-    pub const CMD_CONNECT: u8 = 0x05;
-    pub const CMD_DISCONNECT: u8 = 0x06;
+    pub const CMD_CONNECT: u8 = 0x03;
+    pub const CMD_DISCONNECT: u8 = 0x04;
 
     // Identification
-    pub const CMD_GET_ID: u8 = 0x07;
-
+    pub const CMD_GET_ID: u8 = 0x05;
     // Configuration
-    pub const CMD_SET_CONFIG: u8 = 0x08;
-    pub const CMD_GET_CONFIG: u8 = 0x09;
+    pub const CMD_SET_CONFIG: u8 = 0x06;
+    pub const CMD_GET_CONFIG: u8 = 0x07;
 
-    // Flash operations
-    pub const CMD_READ_FLASH: u8 = 0x0A;
-    pub const CMD_WRITE_FLASH: u8 = 0x0B;
-    pub const CMD_ERASE_FLASH: u8 = 0x0C;
-    pub const CMD_MASS_ERASE: u8 = 0x0D;
-    pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0E;
-    pub const CMD_READ_CUSTOM_REGION: u8 = 0x0F;
+    // Memory operations
+    pub const CMD_READ_FLASH: u8 = 0x08;
+    pub const CMD_WRITE_FLASH: u8 = 0x09;
+    pub const CMD_ERASE_FLASH: u8 = 0x0A;
+    pub const CMD_MASS_ERASE: u8 = 0x0B;
+    pub const CMD_READ_CUSTOM_REGION: u8 = 0x0C;
+    pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
