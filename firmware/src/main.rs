@@ -46,7 +46,7 @@ mod cmd {
     pub const CMD_WRITE_FLASH: u8 = 0x0B;
     pub const CMD_ERASE_FLASH: u8 = 0x0C;
     pub const CMD_MASS_ERASE: u8 = 0x0D;
-    pub const CMD_ERASE_CUSTOM_REGION: u8 = 0x0E;
+    pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0E;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -171,7 +171,7 @@ impl IcpController {
         self.delay.delay_ms(3u8);
 
         self.tck_low();
-        self.delay_us(1);
+        self.delay_us(2);
         self.tck_high();
         self.delay_us(50);
 
@@ -701,8 +701,8 @@ impl IcpController {
         self.send_icp_byte(0x0a);
         self.send_icp_byte(0x09);
         self.send_icp_byte(0x06);
-
         self.send_icp_byte(0x00);
+
         self.delay.delay_ms(300u16);
         self.send_icp_byte(0x00);
         let status = self.pins.tdo.is_high();
@@ -712,7 +712,7 @@ impl IcpController {
     }
 
     // TODO: can either be merged with icp_erase_flash or write_flash broken up
-    fn icp_erase_custom_region(&mut self, addr: u32, length: u16) -> bool {
+    fn icp_write_custom_region(&mut self, addr: u32, data: &[u8]) -> bool {
         self.switch_mode(Mode::ICP);
 
         let Some(chip_type) = self.chip_type else {
@@ -732,30 +732,33 @@ impl IcpController {
         if chip_type == 4 || chip_type == 7 {
             self.send_icp_byte(icp_cmd::ICP_SET_XPAGE);
             self.send_icp_byte(((addr & 0xFF0000) >> 16) as u8);
-        } 
+        }
 
         self.send_icp_byte(icp_cmd::ICP_SET_IB_DATA);
-        self.send_icp_byte(0x00);
+        self.send_icp_byte(data[0]);
 
         self.send_icp_byte(0xa5);
         self.send_icp_byte(0x15);
         self.send_icp_byte(0x0a);
         self.send_icp_byte(0x09);
         self.send_icp_byte(0x06);
-
-        self.send_icp_byte(0x00);
+        self.send_icp_byte(data[1]);
 
         self.delay_us(10);
 
-        for _ in 0..length-1 {
-            // while self.tdo_read() == true {
-                self.send_icp_byte(0x00);
-            // }
-            // // TDO goes high here, does it mean anything, should we check it?
-            self.send_icp_byte(0x00);
-        }
-        self.send_icp_byte(0xAA);
+        self.send_icp_byte(0x00);
         // TDO goes high here, does it mean anything, should we check it?
+
+        for i in 2..data.len() {
+            self.send_icp_byte(data[i]);
+            self.delay_us(5);
+            self.send_icp_byte(0x00);
+            // TDO goes high here, does it mean anything, should we check it?
+        }
+
+        self.send_icp_byte(0x00);
+        // TDO goes high here, does it mean anything, should we check it?
+        self.send_icp_byte(0xaa);
         self.send_icp_byte(0x00);
         self.send_icp_byte(0x00);
 
@@ -938,7 +941,7 @@ fn main() -> ! {
                 }
             }
 
-            cmd::CMD_ERASE_CUSTOM_REGION => {
+            cmd::CMD_WRITE_CUSTOM_REGION => {
                 // Read address (4 bytes)
                 let addr = {
                     let b0 = nb::block!(rx.read()).unwrap_or(0);
@@ -948,13 +951,21 @@ fn main() -> ! {
                     u32::from_le_bytes([b0, b1, b2, b3])
                 };
                 // Read length (2 bytes)
-                let length = {
+                let len = {
                     let low = nb::block!(rx.read()).unwrap_or(0);
                     let high = nb::block!(rx.read()).unwrap_or(0);
-                    u16::from_le_bytes([low, high])
+                    u16::from_le_bytes([low, high]) as usize
                 };
 
-                if icp.icp_erase_custom_region(addr, length) {
+                // Clamp length to buffer size
+                let write_len = len.min(buffer.len());
+
+                // Read data to write
+                for i in 0..write_len {
+                    buffer[i] = nb::block!(rx.read()).unwrap_or(0);
+                }
+
+                if icp.icp_write_custom_region(addr, &buffer[..write_len]) {
                     let _ = nb::block!(tx.write(cmd::RSP_OK));
                 } else {
                     let _ = nb::block!(tx.write(cmd::RSP_ERR));

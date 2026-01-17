@@ -32,7 +32,7 @@ mod cmd {
     pub const CMD_WRITE_FLASH: u8 = 0x0B;
     pub const CMD_ERASE_FLASH: u8 = 0x0C;
     pub const CMD_MASS_ERASE: u8 = 0x0D;
-    pub const CMD_ERASE_CUSTOM_REGION: u8 = 0x0E;
+    pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0E;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -62,8 +62,8 @@ pub enum SinodudeSerialProgrammerError {
     EraseFailed(u32),
     #[error("Mass erase failed")]
     MassEraseFailed,
-    #[error("Custom region erase failed at address {0:#x}")]
-    CustomRegionEraseFailed(u32),
+    #[error("Custom region write failed at address {0:#x}")]
+    CustomRegionWriteFailed(u32),
     #[error("Write failed at address {0:#x}")]
     WriteFailed(u32),
     #[error("Verification failed at address {0:#x}")]
@@ -76,6 +76,12 @@ pub enum SinodudeSerialProgrammerError {
     PartNumberMismatch { expected: String, actual: String },
     #[error("Operation cancelled")]
     Cancelled,
+    #[error("Customer option length {provided} exceeds maximum {max}")]
+    CustomerOptionLengthExceeded { provided: usize, max: usize },
+    #[error("Non-editable bits modified at byte {byte}: provided {provided:#04x}, expected {expected:#04x} (mask {mask:#04x})")]
+    NonEditableBitsModified { byte: usize, provided: u8, expected: u8, mask: u8 },
+    #[error("Writing security bits is only supported for security_level 4 and chip_type 0x07 (got security_level {security_level}, chip_type {chip_type:#04x})")]
+    UnsupportedSecurityWrite { security_level: u8, chip_type: u8 },
 }
 
 pub struct SinodudeSerialProgrammer {
@@ -380,11 +386,12 @@ impl SinodudeSerialProgrammer {
             );
         }
 
-        // Read security bits (from security address to serial_number address)
-        if let (Some(ref security_addr), Some(ref serial_addr)) =
-            (&self.chip_type.security, &self.chip_type.serial_number)
-        {
-            let security_len = (serial_addr.address - security_addr.address) as usize;
+        // Read security bits (known size based on security_level)
+        if let Some(ref security_addr) = self.chip_type.security {
+            let security_len: usize = match self.chip_type.security_level {
+                4 => 17,
+                _ => 8,
+            };
             let security_bits = self.read_region(region, security_addr.address, security_len)?;
             eprintln!(
                 "Security Bits: {}",
@@ -567,20 +574,110 @@ impl SinodudeSerialProgrammer {
         Ok(())
     }
 
-    pub fn erase_custom_region(&mut self, addr: u32, length: u16) -> Result<(), SinodudeSerialProgrammerError> {
-        debug!("Erasing custom region at {:#x}, length {}", addr, length);
-        self.send_command(cmd::CMD_ERASE_CUSTOM_REGION)?;
+    pub fn write_custom_region(&mut self, addr: u32, data: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
+        debug!("Writing {} bytes to custom region at {:#x}", data.len(), addr);
+        self.send_command(cmd::CMD_WRITE_CUSTOM_REGION)?;
 
         // Send address (4 bytes, little endian)
         let addr_bytes = addr.to_le_bytes();
         self.send_bytes(&addr_bytes)?;
 
         // Send length (2 bytes, little endian)
-        let len_bytes = length.to_le_bytes();
+        let len = data.len() as u16;
+        let len_bytes = len.to_le_bytes();
         self.send_bytes(&len_bytes)?;
 
+        // Send data
+        self.send_bytes(data)?;
+
         self.expect_ok()
-            .map_err(|_| SinodudeSerialProgrammerError::CustomRegionEraseFailed(addr))
+            .map_err(|_| SinodudeSerialProgrammerError::CustomRegionWriteFailed(addr))
+    }
+
+    pub fn write_customer_id(&mut self, data: &[u8; 4]) -> Result<(), SinodudeSerialProgrammerError> {
+        if let Some(ref field) = self.chip_type.customer_id {
+            eprintln!("Writing customer ID at {:#x}...", field.address);
+            self.write_custom_region(field.address, data)?;
+        }
+        Ok(())
+    }
+
+    pub fn write_operation_number(&mut self, data: &[u8; 2]) -> Result<(), SinodudeSerialProgrammerError> {
+        if let Some(ref field) = self.chip_type.operation_number {
+            eprintln!("Writing operation number at {:#x}...", field.address);
+            self.write_custom_region(field.address, data)?;
+        }
+        Ok(())
+    }
+
+    pub fn write_customer_option(&mut self, data: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
+        // Validate length
+        if data.len() > self.chip_type.option_byte_count {
+            return Err(SinodudeSerialProgrammerError::CustomerOptionLengthExceeded {
+                provided: data.len(),
+                max: self.chip_type.option_byte_count,
+            });
+        }
+
+        // Validate that non-editable bits match default values
+        let mask = self.chip_type.code_option_mask;
+        let defaults = self.chip_type.default_code_options;
+        for (i, &byte) in data.iter().enumerate() {
+            if i < mask.len() && i < defaults.len() {
+                // Non-editable bits are where mask is 0
+                // Check that (provided & ~mask) == (default & ~mask)
+                let non_editable_mask = !mask[i];
+                let provided_non_editable = byte & non_editable_mask;
+                let default_non_editable = defaults[i] & non_editable_mask;
+                if provided_non_editable != default_non_editable {
+                    return Err(SinodudeSerialProgrammerError::NonEditableBitsModified {
+                        byte: i,
+                        provided: byte,
+                        expected: (byte & mask[i]) | default_non_editable,
+                        mask: mask[i],
+                    });
+                }
+            }
+        }
+
+        if let Some(ref field) = self.chip_type.customer_option {
+            // Split write same as read: first 4 bytes to customer_option.address, rest to 0x1100
+            let first_part_size = 4.min(data.len());
+            let second_part_size = data.len().saturating_sub(4);
+
+            eprintln!("Writing customer option ({} bytes) at {:#x}...", first_part_size, field.address);
+            self.write_custom_region(field.address, &data[..first_part_size])?;
+
+            if second_part_size > 0 {
+                eprintln!("Writing customer option ({} bytes) at {:#x}...", second_part_size, 0x1100);
+                self.write_custom_region(0x1100, &data[first_part_size..])?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn write_security(&mut self, data: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
+        // Only security_level 4 and chip_type 0x07 are supported for writing security
+        if self.chip_type.security_level != 4 || self.chip_type.chip_type != 0x07 {
+            return Err(SinodudeSerialProgrammerError::UnsupportedSecurityWrite {
+                security_level: self.chip_type.security_level,
+                chip_type: self.chip_type.chip_type,
+            });
+        }
+
+        if let Some(ref field) = self.chip_type.security {
+            eprintln!("Writing security at {:#x}...", field.address);
+            self.write_custom_region(field.address, data)?;
+        }
+        Ok(())
+    }
+
+    pub fn write_serial_number(&mut self, data: &[u8; 4]) -> Result<(), SinodudeSerialProgrammerError> {
+        if let Some(ref field) = self.chip_type.serial_number {
+            eprintln!("Writing serial number at {:#x}...", field.address);
+            self.write_custom_region(field.address, data)?;
+        }
+        Ok(())
     }
 
     fn write_chunk(&mut self, addr: u32, data: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
@@ -605,7 +702,6 @@ impl SinodudeSerialProgrammer {
 
     pub fn write_flash(&mut self, firmware: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
         let flash_size = self.chip_type.flash_size.min(firmware.len());
-        let sector_size = self.chip_type.sector_size;
 
         eprintln!("Writing {} bytes to flash...", flash_size);
 
@@ -613,26 +709,6 @@ impl SinodudeSerialProgrammer {
             .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
             .unwrap()
             .progress_chars("=>-");
-
-        // First, erase all sectors
-        let erase_progress = ProgressBar::new(flash_size as u64);
-        erase_progress.set_style(style.clone());
-        erase_progress.set_message("Erasing");
-
-        let start = Instant::now();
-        for addr in (0..flash_size).step_by(sector_size) {
-            self.check_cancelled().map_err(|e| {
-                erase_progress.abandon_with_message("Cancelled");
-                e
-            })?;
-            self.erase_sector(addr as u32).map_err(|e| {
-                erase_progress.abandon_with_message("Erase failed");
-                e
-            })?;
-            erase_progress.set_position((addr + sector_size) as u64);
-        }
-        let elapsed = start.elapsed();
-        erase_progress.finish_with_message(format!("Erase complete in {:.2?}", elapsed));
 
         // Then write data in chunks
         let write_progress = ProgressBar::new(flash_size as u64);

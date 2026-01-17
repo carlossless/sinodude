@@ -11,6 +11,17 @@ mod programmer;
 
 pub use crate::{ihex::*, parts::*, programmer::*};
 
+fn parse_hex(s: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let s = s.trim_start_matches("0x").trim_start_matches("0X");
+    if s.len() % 2 != 0 {
+        return Err("Hex string must have even length".into());
+    }
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| e.into()))
+        .collect()
+}
+
 fn cli() -> Command {
     return Command::new("sinodude")
         .about("programming tool for sinowealth devices")
@@ -65,6 +76,26 @@ fn cli() -> Command {
                 )
                 .arg(
                     arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--customer_id <CUSTOMER_ID> "Customer ID (4 bytes hex, e.g., 01020304)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--operation_number <OPERATION_NUMBER> "Operation number (2 bytes hex, e.g., 0102)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--customer_option <CUSTOMER_OPTION> "Customer option (hex string)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--security <SECURITY> "Security bits (hex string)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--serial_number <SERIAL_NUMBER> "Serial number (4 bytes hex, e.g., 01020304)")
                         .required(false),
                 ),
         )
@@ -189,7 +220,46 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                     let mut programmer =
                         SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
                     programmer.write_init()?;
+
+                    programmer.mass_erase()?;
+
+                    // Write custom fields if provided
+                    if let Some(security_hex) = sub_matches.get_one::<String>("security") {
+                        let data = parse_hex(security_hex)?;
+                        programmer.write_security(&data)?;
+                    }
+
+                    if let Some(customer_id_hex) = sub_matches.get_one::<String>("customer_id") {
+                        let data = parse_hex(customer_id_hex)?;
+                        if data.len() != 4 {
+                            return Err("Customer ID must be exactly 4 bytes".into());
+                        }
+                        programmer.write_customer_id(data.as_slice().try_into().unwrap())?;
+                    }
+
+                    if let Some(op_num_hex) = sub_matches.get_one::<String>("operation_number") {
+                        let data = parse_hex(op_num_hex)?;
+                        if data.len() != 2 {
+                            return Err("Operation number must be exactly 2 bytes".into());
+                        }
+                        programmer.write_operation_number(data.as_slice().try_into().unwrap())?;
+                    }
+
+                    if let Some(cust_opt_hex) = sub_matches.get_one::<String>("customer_option") {
+                        let data = parse_hex(cust_opt_hex)?;
+                        programmer.write_customer_option(&data)?;
+                    }
+
+                    if let Some(serial_hex) = sub_matches.get_one::<String>("serial_number") {
+                        let data = parse_hex(serial_hex)?;
+                        if data.len() != 4 {
+                            return Err("Serial number must be exactly 4 bytes".into());
+                        }
+                        programmer.write_serial_number(data.as_slice().try_into().unwrap())?;
+                    }
+
                     programmer.write_flash(&firmware)?;
+
                     programmer.finish()?;
                 }
                 _ => unreachable!(),
@@ -218,10 +288,10 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                     programmer.erase_init()?;
                     programmer.mass_erase()?;
                     // TODO: figure out security_levels + chip types and handle this properly
-                    // Also erase the custom region from the security address
+                    // Also erase the custom region from the security address by writing zeros
                     if let Some(ref security) = part.security {
                         // Determine security region length based on security_level
-                        let security_length: u16 = match part.security_level {
+                        let security_length: usize = match part.security_level {
                             4 => 17,
                             _ => 8, // RANDOM
                         };
@@ -229,7 +299,8 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                             "Erasing custom region at security address {:#x} ({} bytes)...",
                             security.address, security_length
                         );
-                        programmer.erase_custom_region(security.address, security_length)?;
+                        let zeros = vec![0u8; security_length];
+                        programmer.write_custom_region(security.address, &zeros)?;
                         eprintln!("Custom region erase complete");
                     }
                     programmer.finish()?;
