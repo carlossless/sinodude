@@ -43,7 +43,7 @@ mod cmd {
     // Memory operations
     pub const CMD_READ_FLASH: u8 = 0x08;
     pub const CMD_WRITE_FLASH: u8 = 0x09;
-    pub const CMD_ERASE_FLASH: u8 = 0x0A;
+    pub const CMD_ERASE_FLASH_SECTOR: u8 = 0x0A;
     pub const CMD_MASS_ERASE: u8 = 0x0B;
     pub const CMD_READ_CUSTOM_REGION: u8 = 0x0C;
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
@@ -915,7 +915,7 @@ fn main() -> ! {
                 }
             }
 
-            cmd::CMD_ERASE_FLASH => {
+            cmd::CMD_ERASE_FLASH_SECTOR => {
                 // Read address (4 bytes)
                 let addr = {
                     let b0 = nb::block!(rx.read()).unwrap_or(0);

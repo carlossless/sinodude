@@ -30,7 +30,7 @@ mod cmd {
     // Memory operations
     pub const CMD_READ_FLASH: u8 = 0x08;
     pub const CMD_WRITE_FLASH: u8 = 0x09;
-    pub const CMD_ERASE_FLASH: u8 = 0x0A;
+    pub const CMD_ERASE_FLASH_SECTOR: u8 = 0x0A;
     pub const CMD_MASS_ERASE: u8 = 0x0B;
     pub const CMD_READ_CUSTOM_REGION: u8 = 0x0C;
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
@@ -400,12 +400,9 @@ impl SinodudeSerialProgrammer {
             );
         }
 
-        // Read security bits (known size based on security_level)
+        // Read security bits
         if let Some(ref security_addr) = self.chip_type.security {
-            let security_len: usize = match self.chip_type.security_level {
-                4 => 17,
-                _ => 8,
-            };
+            let security_len = self.chip_type.security_length();
             let security_bits = self.read_region(region, security_addr.address, security_len)?;
             eprintln!(
                 "Security Bits: {}",
@@ -562,7 +559,7 @@ impl SinodudeSerialProgrammer {
 
     fn erase_sector(&mut self, addr: u32) -> Result<(), SinodudeSerialProgrammerError> {
         debug!("Erasing sector at {:#x}", addr);
-        self.send_command(cmd::CMD_ERASE_FLASH)?;
+        self.send_command(cmd::CMD_ERASE_FLASH_SECTOR)?;
 
         // Send address (4 bytes, little endian)
         let addr_bytes = addr.to_le_bytes();
@@ -570,6 +567,52 @@ impl SinodudeSerialProgrammer {
 
         self.expect_ok()
             .map_err(|_| SinodudeSerialProgrammerError::EraseFailed(addr))
+    }
+
+    /// Erase sectors covering the given address range
+    pub fn erase_sectors(
+        &mut self,
+        start_addr: u32,
+        end_addr: u32,
+    ) -> Result<(), SinodudeSerialProgrammerError> {
+        let sector_size = self.chip_type.sector_size as u32;
+        let first_sector = start_addr / sector_size;
+        let last_sector = (end_addr.saturating_sub(1)) / sector_size;
+        let num_sectors = last_sector - first_sector + 1;
+
+        eprintln!(
+            "Erasing {} sector(s) from {:#x} to {:#x}...",
+            num_sectors,
+            first_sector * sector_size,
+            (last_sector + 1) * sector_size
+        );
+
+        let progress = ProgressBar::new(num_sectors as u64);
+        progress.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg} [{bar:40.cyan/blue}] {pos}/{len}")
+                .unwrap()
+                .progress_chars("=>-"),
+        );
+        progress.set_message("Erasing");
+
+        let start = Instant::now();
+        for sector in first_sector..=last_sector {
+            self.check_cancelled().map_err(|e| {
+                progress.abandon_with_message("Cancelled");
+                e
+            })?;
+            let sector_addr = sector * sector_size;
+            self.erase_sector(sector_addr).map_err(|e| {
+                progress.abandon_with_message("Erase failed");
+                e
+            })?;
+            progress.inc(1);
+        }
+        let elapsed = start.elapsed();
+        progress.finish_with_message(format!("Erase complete in {:.2?}", elapsed));
+
+        Ok(())
     }
 
     pub fn mass_erase(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
@@ -811,6 +854,87 @@ impl SinodudeSerialProgrammer {
                 ));
             }
             verify_progress.set_position(end as u64);
+        }
+        let elapsed = start.elapsed();
+        verify_progress.finish_with_message(format!("Verify complete in {:.2?}", elapsed));
+
+        Ok(())
+    }
+
+    /// Write a specific range of flash (addresses are inclusive of start, exclusive of end)
+    pub fn write_flash_range(
+        &mut self,
+        firmware: &[u8],
+        start_addr: usize,
+        end_addr: usize,
+    ) -> Result<(), SinodudeSerialProgrammerError> {
+        let flash_size = self.chip_type.flash_size.min(firmware.len());
+        let start_addr = start_addr.min(flash_size);
+        let end_addr = end_addr.min(flash_size);
+        let range_size = end_addr.saturating_sub(start_addr);
+
+        if range_size == 0 {
+            eprintln!("Nothing to write (empty range)");
+            return Ok(());
+        }
+
+        eprintln!(
+            "Writing {} bytes to flash (range {:#x}-{:#x})...",
+            range_size, start_addr, end_addr
+        );
+
+        let style = ProgressStyle::default_bar()
+            .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+            .unwrap()
+            .progress_chars("=>-");
+
+        // Write data in chunks
+        let write_progress = ProgressBar::new(range_size as u64);
+        write_progress.set_style(style.clone());
+        write_progress.set_message("Writing");
+
+        let start = Instant::now();
+        for addr in (start_addr..end_addr).step_by(CHUNK_SIZE) {
+            self.check_cancelled().map_err(|e| {
+                write_progress.abandon_with_message("Cancelled");
+                e
+            })?;
+            let end = (addr + CHUNK_SIZE).min(end_addr);
+            let chunk = &firmware[addr..end];
+            self.write_chunk(addr as u32, chunk).map_err(|e| {
+                write_progress.abandon_with_message("Write failed");
+                e
+            })?;
+            write_progress.set_position((end - start_addr) as u64);
+        }
+        let elapsed = start.elapsed();
+        write_progress.finish_with_message(format!("Write complete in {:.2?}", elapsed));
+
+        // Verify
+        let verify_progress = ProgressBar::new(range_size as u64);
+        verify_progress.set_style(style);
+        verify_progress.set_message("Verifying");
+
+        let start = Instant::now();
+        for addr in (start_addr..end_addr).step_by(CHUNK_SIZE) {
+            self.check_cancelled().map_err(|e| {
+                verify_progress.abandon_with_message("Cancelled");
+                e
+            })?;
+            let end = (addr + CHUNK_SIZE).min(end_addr);
+            let expected = &firmware[addr..end];
+            let actual = self.read_chunk(addr as u32, (end - addr) as u16)?;
+
+            if expected != actual.as_slice() {
+                verify_progress.abandon_with_message("Verify failed");
+                eprintln!("Verification failed at address {:#x}", addr);
+                eprintln!("Expected: {:02x?}", expected);
+                eprintln!("Actual:   {:02x?}", actual);
+                return Err(SinodudeSerialProgrammerError::VerificationFailed(
+                    addr as u32,
+                ));
+            }
+            verify_progress.set_position((end - start_addr) as u64);
         }
         let elapsed = start.elapsed();
         verify_progress.finish_with_message(format!("Verify complete in {:.2?}", elapsed));

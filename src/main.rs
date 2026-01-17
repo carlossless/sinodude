@@ -22,6 +22,15 @@ fn parse_hex(s: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         .collect()
 }
 
+fn parse_addr(s: &str) -> Result<usize, Box<dyn std::error::Error>> {
+    let s = s.trim();
+    if s.starts_with("0x") || s.starts_with("0X") {
+        usize::from_str_radix(&s[2..], 16).map_err(|e| e.into())
+    } else {
+        s.parse::<usize>().map_err(|e| e.into())
+    }
+}
+
 fn cli() -> Command {
     return Command::new("sinodude")
         .about("programming tool for sinowealth devices")
@@ -97,12 +106,20 @@ fn cli() -> Command {
                 .arg(
                     arg!(--serial_number <SERIAL_NUMBER> "Serial number (4 bytes hex, e.g., 01020304)")
                         .required(false),
+                )
+                .arg(
+                    arg!(--start_addr <START_ADDR> "Start address for partial write (hex, e.g., 0x1000)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--end_addr <END_ADDR> "End address for partial write (hex, e.g., 0x2000)")
+                        .required(false),
                 ),
         )
         .subcommand(
             Command::new("erase")
                 .short_flag('e')
-                .about("Mass erase the chip's flash")
+                .about("Erase the chip's flash (mass erase or specific sectors)")
                 .arg(
                     arg!(-c --programmer <PROGRAMMER>)
                         .value_parser(["sinodude-serial"])
@@ -115,6 +132,14 @@ fn cli() -> Command {
                 )
                 .arg(
                     arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--start_addr <START_ADDR> "Start address for sector erase (hex, e.g., 0x1000)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--end_addr <END_ADDR> "End address for sector erase (hex, e.g., 0x2000)")
                         .required(false),
                 ),
         )
@@ -217,11 +242,56 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                     let port = sub_matches
                         .get_one::<String>("port")
                         .expect("--port is required for sinodude-serial programmer");
+
+                    // Parse and validate address range before connecting
+                    let sector_size = part.sector_size;
+                    let start_addr = sub_matches
+                        .get_one::<String>("start_addr")
+                        .map(|s| parse_addr(s))
+                        .transpose()?;
+                    let end_addr = sub_matches
+                        .get_one::<String>("end_addr")
+                        .map(|s| parse_addr(s))
+                        .transpose()?;
+
+                    if let Some(addr) = start_addr {
+                        if addr % sector_size != 0 {
+                            return Err(format!(
+                                "Start address {:#x} is not aligned to sector size {:#x}",
+                                addr, sector_size
+                            )
+                            .into());
+                        }
+                    }
+                    if let Some(addr) = end_addr {
+                        if addr % sector_size != 0 {
+                            return Err(format!(
+                                "End address {:#x} is not aligned to sector size {:#x}",
+                                addr, sector_size
+                            )
+                            .into());
+                        }
+                    }
+
                     let mut programmer =
                         SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
                     programmer.write_init()?;
 
-                    programmer.mass_erase()?;
+                    // Use sector-based erase for partial writes, mass erase for full writes
+                    match (start_addr, end_addr) {
+                        (Some(start), Some(end)) => {
+                            programmer.erase_sectors(start as u32, end as u32)?;
+                        }
+                        (Some(start), None) => {
+                            programmer.erase_sectors(start as u32, part.flash_size as u32)?;
+                        }
+                        (None, Some(end)) => {
+                            programmer.erase_sectors(0, end as u32)?;
+                        }
+                        (None, None) => {
+                            programmer.mass_erase()?;
+                        }
+                    }
 
                     // Write custom fields if provided
                     if let Some(security_hex) = sub_matches.get_one::<String>("security") {
@@ -258,7 +328,21 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                         programmer.write_serial_number(data.as_slice().try_into().unwrap())?;
                     }
 
-                    programmer.write_flash(&firmware)?;
+                    // Use range write for partial writes, full write otherwise
+                    match (start_addr, end_addr) {
+                        (Some(start), Some(end)) => {
+                            programmer.write_flash_range(&firmware, start, end)?;
+                        }
+                        (Some(start), None) => {
+                            programmer.write_flash_range(&firmware, start, firmware.len())?;
+                        }
+                        (None, Some(end)) => {
+                            programmer.write_flash_range(&firmware, 0, end)?;
+                        }
+                        (None, None) => {
+                            programmer.write_flash(&firmware)?;
+                        }
+                    }
 
                     programmer.finish()?;
                 }
@@ -283,26 +367,72 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                     let port = sub_matches
                         .get_one::<String>("port")
                         .expect("--port is required for sinodude-serial programmer");
+
+                    // Parse and validate address range before connecting
+                    let sector_size = part.sector_size;
+                    let start_addr = sub_matches
+                        .get_one::<String>("start_addr")
+                        .map(|s| parse_addr(s))
+                        .transpose()?;
+                    let end_addr = sub_matches
+                        .get_one::<String>("end_addr")
+                        .map(|s| parse_addr(s))
+                        .transpose()?;
+
+                    if let Some(addr) = start_addr {
+                        if addr % sector_size != 0 {
+                            return Err(format!(
+                                "Start address {:#x} is not aligned to sector size {:#x}",
+                                addr, sector_size
+                            )
+                            .into());
+                        }
+                    }
+                    if let Some(addr) = end_addr {
+                        if addr % sector_size != 0 {
+                            return Err(format!(
+                                "End address {:#x} is not aligned to sector size {:#x}",
+                                addr, sector_size
+                            )
+                            .into());
+                        }
+                    }
+
                     let mut programmer =
                         SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
                     programmer.erase_init()?;
-                    programmer.mass_erase()?;
-                    // TODO: figure out security_levels + chip types and handle this properly
-                    // Also erase the custom region from the security address by writing zeros
-                    if let Some(ref security) = part.security {
-                        // Determine security region length based on security_level
-                        let security_length: usize = match part.security_level {
-                            4 => 17,
-                            _ => 8, // RANDOM
-                        };
-                        eprintln!(
-                            "Erasing custom region at security address {:#x} ({} bytes)...",
-                            security.address, security_length
-                        );
-                        let zeros = vec![0u8; security_length];
-                        programmer.write_custom_region(security.address, &zeros)?;
-                        eprintln!("Custom region erase complete");
+
+                    // Use sector-based erase for partial erases, mass erase otherwise
+                    let is_partial_erase = start_addr.is_some() || end_addr.is_some();
+                    match (start_addr, end_addr) {
+                        (Some(start), Some(end)) => {
+                            programmer.erase_sectors(start as u32, end as u32)?;
+                        }
+                        (Some(start), None) => {
+                            programmer.erase_sectors(start as u32, part.flash_size as u32)?;
+                        }
+                        (None, Some(end)) => {
+                            programmer.erase_sectors(0, end as u32)?;
+                        }
+                        (None, None) => {
+                            programmer.mass_erase()?;
+                        }
                     }
+
+                    // Only blank out security region on full mass erase
+                    if !is_partial_erase {
+                        if let Some(ref security) = part.security {
+                            let security_length = part.security_length();
+                            eprintln!(
+                                "Erasing custom region at security address {:#x} ({} bytes)...",
+                                security.address, security_length
+                            );
+                            let zeros = vec![0u8; security_length];
+                            programmer.write_custom_region(security.address, &zeros)?;
+                            eprintln!("Custom region erase complete");
+                        }
+                    }
+
                     programmer.finish()?;
                 }
                 _ => unreachable!(),

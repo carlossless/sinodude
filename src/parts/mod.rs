@@ -169,6 +169,18 @@ impl Part {
             Region::Custom
         }
     }
+
+    /// Returns the security region length for this part.
+    pub fn security_length(&self) -> usize {
+        match (self.chip_type, self.security_level) {
+            // TODO: implement this fully
+            (0x07, 4) => 17, // just a guess for now, works for sh68f90a
+            _ => panic!(
+                "Security length not defined for this part (chip_type: {:#x}, security_level: {})",
+                self.chip_type, self.security_level
+            ),
+        }
+    }
 }
 
 pub static PARTS: phf::Map<&'static str, &'static Part> = phf_map! {
