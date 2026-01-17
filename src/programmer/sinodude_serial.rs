@@ -82,6 +82,8 @@ pub enum SinodudeSerialProgrammerError {
     NonEditableBitsModified { byte: usize, provided: u8, expected: u8, mask: u8 },
     #[error("Writing security bits is only supported for security_level 4 and chip_type 0x07 (got security_level {security_level}, chip_type {chip_type:#04x})")]
     UnsupportedSecurityWrite { security_level: u8, chip_type: u8 },
+    #[error("Custom region verification failed at address {addr:#x}: expected {expected:02x?}, got {actual:02x?}")]
+    CustomRegionVerificationFailed { addr: u32, expected: Vec<u8>, actual: Vec<u8> },
 }
 
 pub struct SinodudeSerialProgrammer {
@@ -591,7 +593,19 @@ impl SinodudeSerialProgrammer {
         self.send_bytes(data)?;
 
         self.expect_ok()
-            .map_err(|_| SinodudeSerialProgrammerError::CustomRegionWriteFailed(addr))
+            .map_err(|_| SinodudeSerialProgrammerError::CustomRegionWriteFailed(addr))?;
+
+        // Verify by reading back (region 2 = custom block)
+        let read_back = self.read_region(2, addr, data.len())?;
+        if read_back != data {
+            return Err(SinodudeSerialProgrammerError::CustomRegionVerificationFailed {
+                addr,
+                expected: data.to_vec(),
+                actual: read_back,
+            });
+        }
+
+        Ok(())
     }
 
     pub fn write_customer_id(&mut self, data: &[u8; 4]) -> Result<(), SinodudeSerialProgrammerError> {
@@ -641,17 +655,18 @@ impl SinodudeSerialProgrammer {
         }
 
         if let Some(ref field) = self.chip_type.customer_option {
-            // Split write same as read: first 4 bytes to customer_option.address, rest to 0x1100
+            // Split write: first 4 bytes to customer_option.address, rest to 0x1100
+            // Write second region first, then the first region
             let first_part_size = 4.min(data.len());
             let second_part_size = data.len().saturating_sub(4);
-
-            eprintln!("Writing customer option ({} bytes) at {:#x}...", first_part_size, field.address);
-            self.write_custom_region(field.address, &data[..first_part_size])?;
 
             if second_part_size > 0 {
                 eprintln!("Writing customer option ({} bytes) at {:#x}...", second_part_size, 0x1100);
                 self.write_custom_region(0x1100, &data[first_part_size..])?;
             }
+
+            eprintln!("Writing customer option ({} bytes) at {:#x}...", first_part_size, field.address);
+            self.write_custom_region(field.address, &data[..first_part_size])?;
         }
         Ok(())
     }
