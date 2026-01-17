@@ -603,15 +603,32 @@ impl IcpController {
         self.send_icp_byte(0x0a);
         self.send_icp_byte(0x09);
         self.send_icp_byte(0x06);
+        self.send_icp_byte(data[1]);
+
+        self.delay_us(10);
+
+        self.send_icp_byte(0x00);
+        // TDO must go high here to indicate success
+        if !self.tdo_read() {
+            return false;
+        }
 
         for i in 1..data.len() {
             self.send_icp_byte(data[i]);
             self.delay_us(5);
             self.send_icp_byte(0x00);
+            // TDO must go high here to indicate success
+            if !self.tdo_read() {
+                return false;
+            }
         }
 
         self.send_icp_byte(0x00);
         self.send_icp_byte(0xaa);
+        // TDO must go high here to indicate success
+        if !self.tdo_read() {
+            return false;
+        }
         self.send_icp_byte(0x00);
         self.send_icp_byte(0x00);
         self.delay_us(5);
@@ -747,18 +764,27 @@ impl IcpController {
         self.delay_us(10);
 
         self.send_icp_byte(0x00);
-        // TDO goes high here, does it mean anything, should we check it?
+        // TDO must go high here to indicate success
+        if !self.tdo_read() {
+            return false;
+        }
 
         for i in 2..data.len() {
             self.send_icp_byte(data[i]);
             self.delay_us(5);
             self.send_icp_byte(0x00);
-            // TDO goes high here, does it mean anything, should we check it?
+            // TDO must go high here to indicate success
+            if !self.tdo_read() {
+                return false;
+            }
         }
 
         self.send_icp_byte(0x00);
-        // TDO goes high here, does it mean anything, should we check it?
         self.send_icp_byte(0xaa);
+        // TDO must go high here to indicate success
+        if !self.tdo_read() {
+            return false;
+        }
         self.send_icp_byte(0x00);
         self.send_icp_byte(0x00);
 
