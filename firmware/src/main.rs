@@ -92,6 +92,10 @@ struct IcpController {
     connected: bool,
     mode: Mode,
     chip_type: Option<u8>,
+    security_address: u16,
+    security_length: u8,
+    high_part_size: u8,
+    high_part_last_byte: u8,
 }
 
 impl IcpController {
@@ -102,6 +106,10 @@ impl IcpController {
             connected: false,
             mode: Mode::UNSET,
             chip_type: None,
+            security_address: 0,
+            security_length: 0,
+            high_part_size: 0,
+            high_part_last_byte: 0,
         }
     }
 
@@ -153,8 +161,19 @@ impl IcpController {
         self.pins.tdo.is_high()
     }
 
-    fn set_chip_type(&mut self, chip_type: u8) {
+    fn set_chip_type(
+        &mut self,
+        chip_type: u8,
+        security_address: u16,
+        security_length: u8,
+        high_part_size: u8,
+        high_part_last_byte: u8,
+    ) {
         self.chip_type = Some(chip_type);
+        self.security_address = security_address;
+        self.security_length = security_length;
+        self.high_part_size = high_part_size;
+        self.high_part_last_byte = high_part_last_byte;
     }
 
     fn connect(&mut self) -> bool {
@@ -388,6 +407,7 @@ impl IcpController {
     fn send_icp_byte(&mut self, mut byte: u8) {
         // Send MSB first
         for _ in 0..8 {
+            self.delay_us(2);
             if byte & 0x80 != 0 {
                 self.tdi_high();
             } else {
@@ -635,7 +655,6 @@ impl IcpController {
         }
         self.send_icp_byte(0x00);
         let received_checksum = self.receive_icp_byte();
-        self.send_icp_byte(0x00);
 
         self.delay_us(5);
 
@@ -812,7 +831,19 @@ fn main() -> ! {
 
             cmd::CMD_SET_CONFIG => {
                 let chip_type = nb::block!(rx.read()).unwrap_or(0);
-                icp.set_chip_type(chip_type);
+                let security_addr_lo = nb::block!(rx.read()).unwrap_or(0);
+                let security_addr_hi = nb::block!(rx.read()).unwrap_or(0);
+                let security_address = u16::from_le_bytes([security_addr_lo, security_addr_hi]);
+                let security_length = nb::block!(rx.read()).unwrap_or(0);
+                let high_part_size = nb::block!(rx.read()).unwrap_or(0);
+                let high_part_last_byte = nb::block!(rx.read()).unwrap_or(0);
+                icp.set_chip_type(
+                    chip_type,
+                    security_address,
+                    security_length,
+                    high_part_size,
+                    high_part_last_byte,
+                );
                 let _ = nb::block!(tx.write(cmd::RSP_OK));
             }
 
@@ -934,6 +965,32 @@ fn main() -> ! {
 
             cmd::CMD_MASS_ERASE => {
                 if icp.icp_mass_erase() {
+                    // Blank security region after 10ms delay
+                    if icp.security_length > 0 {
+                        icp.delay.delay_ms(10u16);
+                        let sec_len = icp.security_length as usize;
+                        for i in 0..sec_len {
+                            buffer[i] = 0x00;
+                        }
+                        icp.icp_write_custom_region(
+                            icp.security_address as u32,
+                            &buffer[..sec_len],
+                        );
+                    }
+
+                    // Write high part of code options at 0x1100 after 3ms delay
+                    if icp.high_part_size > 0 {
+                        icp.delay.delay_ms(3u16);
+                        let size = icp.high_part_size as usize;
+                        for i in 0..size {
+                            if i == size - 1 {
+                                buffer[i] = icp.high_part_last_byte;
+                            } else {
+                                buffer[i] = 0x00;
+                            }
+                        }
+                        icp.icp_write_custom_region(0x1100, &buffer[..size]);
+                    }
                     let _ = nb::block!(tx.write(cmd::RSP_OK));
                 } else {
                     let _ = nb::block!(tx.write(cmd::RSP_ERR));

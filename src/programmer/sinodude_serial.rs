@@ -273,11 +273,31 @@ impl SinodudeSerialProgrammer {
 
     pub fn set_config(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         self.send_command(cmd::CMD_SET_CONFIG)?;
-        self.send_bytes(&[self.chip_type.chip_type])?;
+
+        // Security info for mass erase
+        let (security_address, security_length) = if let Some(ref security) = self.chip_type.security {
+            (security.address as u16, self.chip_type.security_length() as u8)
+        } else {
+            (0, 0)
+        };
+
+        // High part of code options
+        let high_part_size = self.chip_type.option_byte_count.saturating_sub(4) as u8;
+        let high_part_last_byte = *self.chip_type.default_code_options.last().unwrap_or(&0);
+
+        let security_addr_bytes = security_address.to_le_bytes();
+        self.send_bytes(&[
+            self.chip_type.chip_type,
+            security_addr_bytes[0],
+            security_addr_bytes[1],
+            security_length,
+            high_part_size,
+            high_part_last_byte,
+        ])?;
         self.expect_ok()?;
         debug!(
-            "Configuration set for chip type: {:#04x}",
-            self.chip_type.chip_type
+            "Configuration set for chip type: {:#04x}, security: {:#06x}/{}, high_part: {}/{:#04x}",
+            self.chip_type.chip_type, security_address, security_length, high_part_size, high_part_last_byte
         );
         Ok(())
     }

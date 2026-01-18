@@ -294,36 +294,8 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
 
-                    // Blank out security region and set higher half of code options after mass erase
-                    if is_mass_erase {
-                        if let Some(ref security) = part.security {
-                            let security_length = part.security_length();
-                            eprintln!(
-                                "Blanking security region at {:#x} ({} bytes)...",
-                                security.address, security_length
-                            );
-                            let zeros = vec![0u8; security_length];
-                            programmer.write_custom_region(security.address, &zeros)?;
-                        }
-
-                        // Write high part of code options at 0x1100: all 00s except last byte from defaults
-                        let high_part_size = part.option_byte_count.saturating_sub(4);
-                        if high_part_size > 0 {
-                            let mut high_bytes = vec![0u8; high_part_size];
-                            if let Some(&last_default) = part.default_code_options.last() {
-                                if let Some(last) = high_bytes.last_mut() {
-                                    *last = last_default;
-                                }
-                            }
-                            eprintln!(
-                                "Writing code options high bytes at {:#x} ({} bytes)...",
-                                0x1100, high_part_size
-                            );
-                            programmer.write_custom_region(0x1100, &high_bytes)?;
-                        }
-                    }
-
                     // Write custom fields if provided (customer_option first to write high bytes first)
+                    // Note: Security blanking and high part of code options are handled by firmware after mass erase
                     if let Some(cust_opt_hex) = sub_matches.get_one::<String>("customer_option") {
                         let data = parse_hex(cust_opt_hex)?;
                         programmer.write_customer_option(&data)?;
@@ -449,36 +421,8 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                             programmer.erase_sectors(0, end as u32)?;
                         }
                         (None, None) => {
+                            // Security blanking and high part of code options are handled by firmware
                             programmer.mass_erase()?;
-                        }
-                    }
-
-                    // Blank out security region and set higher half of code options on full mass erase
-                    if !is_partial_erase {
-                        if let Some(ref security) = part.security {
-                            let security_length = part.security_length();
-                            eprintln!(
-                                "Blanking security region at {:#x} ({} bytes)...",
-                                security.address, security_length
-                            );
-                            let zeros = vec![0u8; security_length];
-                            programmer.write_custom_region(security.address, &zeros)?;
-                        }
-
-                        // Write high part of code options at 0x1100: all 00s except last byte from defaults
-                        let high_part_size = part.option_byte_count.saturating_sub(4);
-                        if high_part_size > 0 {
-                            let mut high_bytes = vec![0u8; high_part_size];
-                            if let Some(&last_default) = part.default_code_options.last() {
-                                if let Some(last) = high_bytes.last_mut() {
-                                    *last = last_default;
-                                }
-                            }
-                            eprintln!(
-                                "Writing code options high bytes at {:#x} ({} bytes)...",
-                                0x1100, high_part_size
-                            );
-                            programmer.write_custom_region(0x1100, &high_bytes)?;
                         }
                     }
 
