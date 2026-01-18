@@ -641,7 +641,7 @@ impl IcpController {
         self.icp_write_region(addr, data, false)
     }
 
-    fn icp_mass_erase(&mut self) -> bool {
+    fn icp_mass_erase(&mut self, alternate: bool) -> bool {
         self.switch_mode(Mode::ICP);
 
         let Some(chip_type) = self.chip_type else {
@@ -666,7 +666,10 @@ impl IcpController {
         self.send_icp_byte(icp_cmd::ICP_SET_IB_DATA);
         self.send_icp_byte(0x00);
 
-        self.send_icp_byte(0x4b);
+        // 0x4b - normal mass erase
+        // 0xc3 - alternate mass erase (used when code options have non-default bits)
+        let erase_cmd = if alternate { 0xc3 } else { 0x4b };
+        self.send_icp_byte(erase_cmd);
         self.send_icp_byte(0x15);
         self.send_icp_byte(0x0a);
         self.send_icp_byte(0x09);
@@ -678,16 +681,7 @@ impl IcpController {
         self.delay.delay_ms(30u8);
         while !self.tdo_read() {
             self.delay.delay_ms(5u8);
-            for _ in 0..18 {
-                self.delay_us(2);
-                self.tck_high();
-                self.delay_us(2);
-                self.tck_low();
-
-                if self.tdo_read() {
-                    break;
-                }
-            }
+            self.send_icp_byte(0x00);
         }
 
         return true; // TODO: at some point, time out and return false
@@ -769,8 +763,8 @@ fn main() -> ! {
 
     icp.init();
 
-    // Buffer for flash operations (limited by AVR RAM)
-    let mut buffer: [u8; 64] = [0; 64];
+    // Buffer for flash operations
+    let mut buffer: [u8; 1024] = [0; 1024];
 
     loop {
         // Wait for command
@@ -933,7 +927,8 @@ fn main() -> ! {
             }
 
             cmd::CMD_MASS_ERASE => {
-                if icp.icp_mass_erase() {
+                let alternate = nb::block!(rx.read()).unwrap_or(0) != 0;
+                if icp.icp_mass_erase(alternate) {
                     let _ = nb::block!(tx.write(cmd::RSP_OK));
                 } else {
                     let _ = nb::block!(tx.write(cmd::RSP_ERR));

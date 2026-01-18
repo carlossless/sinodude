@@ -293,40 +293,62 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
 
-                    // Write custom fields if provided
-                    if let Some(security_hex) = sub_matches.get_one::<String>("security") {
-                        let data = parse_hex(security_hex)?;
-                        programmer.write_security(&data)?;
-                    }
+                    // Parse custom fields
+                    let customer_id: Option<[u8; 4]> = sub_matches
+                        .get_one::<String>("customer_id")
+                        .map(|s| parse_hex(s))
+                        .transpose()?
+                        .map(|v| {
+                            if v.len() != 4 {
+                                return Err("Customer ID must be exactly 4 bytes");
+                            }
+                            Ok(v.as_slice().try_into().unwrap())
+                        })
+                        .transpose()?;
 
-                    if let Some(customer_id_hex) = sub_matches.get_one::<String>("customer_id") {
-                        let data = parse_hex(customer_id_hex)?;
-                        if data.len() != 4 {
-                            return Err("Customer ID must be exactly 4 bytes".into());
-                        }
-                        programmer.write_customer_id(data.as_slice().try_into().unwrap())?;
-                    }
+                    let operation_number: Option<[u8; 2]> = sub_matches
+                        .get_one::<String>("operation_number")
+                        .map(|s| parse_hex(s))
+                        .transpose()?
+                        .map(|v| {
+                            if v.len() != 2 {
+                                return Err("Operation number must be exactly 2 bytes");
+                            }
+                            Ok(v.as_slice().try_into().unwrap())
+                        })
+                        .transpose()?;
 
-                    if let Some(op_num_hex) = sub_matches.get_one::<String>("operation_number") {
-                        let data = parse_hex(op_num_hex)?;
-                        if data.len() != 2 {
-                            return Err("Operation number must be exactly 2 bytes".into());
-                        }
-                        programmer.write_operation_number(data.as_slice().try_into().unwrap())?;
-                    }
+                    let customer_option: Option<Vec<u8>> = sub_matches
+                        .get_one::<String>("customer_option")
+                        .map(|s| parse_hex(s))
+                        .transpose()?;
 
-                    if let Some(cust_opt_hex) = sub_matches.get_one::<String>("customer_option") {
-                        let data = parse_hex(cust_opt_hex)?;
-                        programmer.write_customer_option(&data)?;
-                    }
+                    let security: Option<Vec<u8>> = sub_matches
+                        .get_one::<String>("security")
+                        .map(|s| parse_hex(s))
+                        .transpose()?;
 
-                    if let Some(serial_hex) = sub_matches.get_one::<String>("serial_number") {
-                        let data = parse_hex(serial_hex)?;
-                        if data.len() != 4 {
-                            return Err("Serial number must be exactly 4 bytes".into());
-                        }
-                        programmer.write_serial_number(data.as_slice().try_into().unwrap())?;
-                    }
+                    let serial_number: Option<[u8; 4]> = sub_matches
+                        .get_one::<String>("serial_number")
+                        .map(|s| parse_hex(s))
+                        .transpose()?
+                        .map(|v| {
+                            if v.len() != 4 {
+                                return Err("Serial number must be exactly 4 bytes");
+                            }
+                            Ok(v.as_slice().try_into().unwrap())
+                        })
+                        .transpose()?;
+
+                    // Write all custom fields in one transaction (use stored values as defaults)
+                    programmer.write_custom_fields(
+                        customer_id.as_ref(),
+                        operation_number.as_ref(),
+                        customer_option.as_deref(),
+                        security.as_deref(),
+                        serial_number.as_ref(),
+                        true, // use_stored_defaults
+                    )?;
 
                     // Use range write for partial writes, full write otherwise
                     match (start_addr, end_addr) {
@@ -403,7 +425,6 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                     programmer.erase_init()?;
 
                     // Use sector-based erase for partial erases, mass erase otherwise
-                    let is_partial_erase = start_addr.is_some() || end_addr.is_some();
                     match (start_addr, end_addr) {
                         (Some(start), Some(end)) => {
                             programmer.erase_sectors(start as u32, end as u32)?;
@@ -416,20 +437,6 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                         }
                         (None, None) => {
                             programmer.mass_erase()?;
-                        }
-                    }
-
-                    // Only blank out security region on full mass erase
-                    if !is_partial_erase {
-                        if let Some(ref security) = part.security {
-                            let security_length = part.security_length();
-                            eprintln!(
-                                "Erasing custom region at security address {:#x} ({} bytes)...",
-                                security.address, security_length
-                            );
-                            let zeros = vec![0u8; security_length];
-                            programmer.write_custom_region(security.address, &zeros)?;
-                            eprintln!("Custom region erase complete");
                         }
                     }
 

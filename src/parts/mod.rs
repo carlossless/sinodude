@@ -172,14 +172,38 @@ impl Part {
 
     /// Returns the security region length for this part.
     pub fn security_length(&self) -> usize {
-        match (self.chip_type, self.security_level) {
-            // TODO: implement this fully
-            (0x07, 4) => 17, // just a guess for now, works for sh68f90a
-            _ => panic!(
-                "Security length not defined for this part (chip_type: {:#x}, security_level: {})",
-                self.chip_type, self.security_level
-            ),
+        if self.part_number == sh68f90::PART.part_number
+            || self.part_number == sh68f90a::PART.part_number
+        {
+            17
+        } else {
+            panic!(
+                "Security length not defined for this part (part_number: {:02x?})",
+                self.part_number
+            )
         }
+    }
+
+    /// Returns the non-editable default bits for the upper code options (bytes 4+).
+    /// Returns None if option_byte_count <= 4.
+    pub fn upper_code_option_defaults(&self) -> Option<Vec<u8>> {
+        if self.option_byte_count <= 4 {
+            return None;
+        }
+
+        let upper_len = self.option_byte_count - 4;
+        let mut upper = vec![0u8; upper_len];
+
+        // For each byte, use non-editable bits from defaults (mask 0 = not editable)
+        for i in 0..upper_len {
+            let idx = 4 + i;
+            if idx < self.default_code_options.len() && idx < self.code_option_mask.len() {
+                // Non-editable bits: defaults & !mask
+                upper[i] = self.default_code_options[idx] & !self.code_option_mask[idx];
+            }
+        }
+
+        Some(upper)
     }
 }
 
