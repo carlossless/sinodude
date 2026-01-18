@@ -337,7 +337,7 @@ impl IcpController {
 
         self.send_icp_byte(icp_cmd::ICP_GET_IB_OFFSET);
         let response = self.receive_icp_byte();
-        self.receive_icp_byte();
+        self.receive_icp_byte(); // ignored, but seems to be always 0xff
 
         response == 0x69
     }
@@ -600,8 +600,6 @@ impl IcpController {
             return false;
         };
 
-        let mut checksum: u8 = 0;
-
         if chip_type != 1 {
             self.send_icp_byte(0x46);
             self.send_icp_byte(0xF0);
@@ -619,7 +617,6 @@ impl IcpController {
 
         self.send_icp_byte(icp_cmd::ICP_SET_IB_DATA);
         self.send_icp_byte(data[0]);
-        checksum = checksum.wrapping_add(data[0]);
 
         // Command byte: 0xa5 for custom region, 0x6e for flash
         let cmd = if custom_block { 0xa5 } else { 0x6e };
@@ -629,7 +626,6 @@ impl IcpController {
         self.send_icp_byte(0x09);
         self.send_icp_byte(0x06);
         self.send_icp_byte(data[1]);
-        checksum = checksum.wrapping_add(data[1]);
 
         self.delay_us(10); // most likely not needed
 
@@ -640,7 +636,6 @@ impl IcpController {
 
         for i in 2..data.len() {
             self.send_icp_byte(data[i]);
-            checksum = checksum.wrapping_add(data[i]);
             self.delay_us(5);
             self.send_icp_byte(0x00);
             if !self.tdo_read() {
@@ -654,13 +649,9 @@ impl IcpController {
             return false;
         }
         self.send_icp_byte(0x00);
-        let received_checksum = self.receive_icp_byte();
+        self.send_icp_byte(0x00);
 
         self.delay_us(5);
-
-        if received_checksum != checksum {
-            return false;
-        }
 
         true
     }
@@ -694,6 +685,9 @@ impl IcpController {
         self.send_icp_byte(icp_cmd::ICP_SET_IB_DATA);
         self.send_icp_byte(0x00);
 
+        // 0x4b erases flash and custom region
+        // 0xc3 erases only custom region
+        // needs more exploration
         self.send_icp_byte(0x4b);
         self.send_icp_byte(0x15);
         self.send_icp_byte(0x0a);
