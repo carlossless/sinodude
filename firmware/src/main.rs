@@ -580,6 +580,8 @@ impl IcpController {
             return false;
         };
 
+        let mut checksum: u8 = 0;
+
         if chip_type != 1 {
             self.send_icp_byte(0x46);
             self.send_icp_byte(0xF0);
@@ -597,6 +599,7 @@ impl IcpController {
 
         self.send_icp_byte(icp_cmd::ICP_SET_IB_DATA);
         self.send_icp_byte(data[0]);
+        checksum = checksum.wrapping_add(data[0]);
 
         // Command byte: 0xa5 for custom region, 0x6e for flash
         let cmd = if custom_block { 0xa5 } else { 0x6e };
@@ -606,8 +609,9 @@ impl IcpController {
         self.send_icp_byte(0x09);
         self.send_icp_byte(0x06);
         self.send_icp_byte(data[1]);
+        checksum = checksum.wrapping_add(data[1]);
 
-        self.delay_us(10);
+        self.delay_us(10); // most likely not needed
 
         self.send_icp_byte(0x00);
         if !self.tdo_read() {
@@ -616,6 +620,7 @@ impl IcpController {
 
         for i in 2..data.len() {
             self.send_icp_byte(data[i]);
+            checksum = checksum.wrapping_add(data[i]);
             self.delay_us(5);
             self.send_icp_byte(0x00);
             if !self.tdo_read() {
@@ -625,14 +630,18 @@ impl IcpController {
 
         self.send_icp_byte(0x00);
         self.send_icp_byte(0xaa);
-        // TDO must go high here to indicate success
         if !self.tdo_read() {
             return false;
         }
         self.send_icp_byte(0x00);
+        let received_checksum = self.receive_icp_byte();
         self.send_icp_byte(0x00);
 
         self.delay_us(5);
+
+        if received_checksum != checksum {
+            return false;
+        }
 
         true
     }
@@ -678,16 +687,7 @@ impl IcpController {
         self.delay.delay_ms(30u8);
         while !self.tdo_read() {
             self.delay.delay_ms(5u8);
-            for _ in 0..18 {
-                self.delay_us(2);
-                self.tck_high();
-                self.delay_us(2);
-                self.tck_low();
-
-                if self.tdo_read() {
-                    break;
-                }
-            }
+            self.send_icp_byte(0x00);
         }
 
         return true; // TODO: at some point, time out and return false

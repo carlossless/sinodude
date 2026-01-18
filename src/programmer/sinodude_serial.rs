@@ -656,16 +656,16 @@ impl SinodudeSerialProgrammer {
             .map_err(|_| SinodudeSerialProgrammerError::CustomRegionWriteFailed(addr))?;
 
         // Verify by reading back
-        let read_back = self.read_region(Region::Custom, addr, data.len())?;
-        if read_back != data {
-            return Err(
-                SinodudeSerialProgrammerError::CustomRegionVerificationFailed {
-                    addr,
-                    expected: data.to_vec(),
-                    actual: read_back,
-                },
-            );
-        }
+        // let read_back = self.read_region(Region::Custom, addr, data.len())?;
+        // if read_back != data {
+        //     return Err(
+        //         SinodudeSerialProgrammerError::CustomRegionVerificationFailed {
+        //             addr,
+        //             expected: data.to_vec(),
+        //             actual: read_back,
+        //         },
+        //     );
+        // }
 
         Ok(())
     }
@@ -733,6 +733,12 @@ impl SinodudeSerialProgrammer {
             let first_part_size = 4.min(data.len());
             let second_part_size = data.len().saturating_sub(4);
 
+            eprintln!(
+                "Writing customer option ({} bytes) at {:#x}...",
+                first_part_size, field.address
+            );
+            self.write_custom_region(field.address, &data[..first_part_size])?;
+
             if second_part_size > 0 {
                 eprintln!(
                     "Writing customer option ({} bytes) at {:#x}...",
@@ -740,12 +746,6 @@ impl SinodudeSerialProgrammer {
                 );
                 self.write_custom_region(0x1100, &data[first_part_size..])?;
             }
-
-            eprintln!(
-                "Writing customer option ({} bytes) at {:#x}...",
-                first_part_size, field.address
-            );
-            self.write_custom_region(field.address, &data[..first_part_size])?;
         }
         Ok(())
     }

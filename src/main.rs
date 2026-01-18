@@ -278,6 +278,7 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                     programmer.write_init()?;
 
                     // Use sector-based erase for partial writes, mass erase for full writes
+                    let is_mass_erase = start_addr.is_none() && end_addr.is_none();
                     match (start_addr, end_addr) {
                         (Some(start), Some(end)) => {
                             programmer.erase_sectors(start as u32, end as u32)?;
@@ -293,8 +294,46 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
 
-                    // Write custom fields if provided
+                    // Blank out security region and set higher half of code options after mass erase
+                    if is_mass_erase {
+                        if let Some(ref security) = part.security {
+                            let security_length = part.security_length();
+                            eprintln!(
+                                "Blanking security region at {:#x} ({} bytes)...",
+                                security.address, security_length
+                            );
+                            let zeros = vec![0u8; security_length];
+                            programmer.write_custom_region(security.address, &zeros)?;
+                        }
+
+                        // Write high part of code options at 0x1100: all 00s except last byte from defaults
+                        let high_part_size = part.option_byte_count.saturating_sub(4);
+                        if high_part_size > 0 {
+                            let mut high_bytes = vec![0u8; high_part_size];
+                            if let Some(&last_default) = part.default_code_options.last() {
+                                if let Some(last) = high_bytes.last_mut() {
+                                    *last = last_default;
+                                }
+                            }
+                            eprintln!(
+                                "Writing code options high bytes at {:#x} ({} bytes)...",
+                                0x1100, high_part_size
+                            );
+                            programmer.write_custom_region(0x1100, &high_bytes)?;
+                        }
+                    }
+
+                    // Write custom fields if provided (customer_option first to write high bytes first)
+                    if let Some(cust_opt_hex) = sub_matches.get_one::<String>("customer_option") {
+                        let data = parse_hex(cust_opt_hex)?;
+                        programmer.write_customer_option(&data)?;
+                    }
+
+                    // Security can only be written after mass erase
                     if let Some(security_hex) = sub_matches.get_one::<String>("security") {
+                        if !is_mass_erase {
+                            return Err("Security can only be written after mass erase".into());
+                        }
                         let data = parse_hex(security_hex)?;
                         programmer.write_security(&data)?;
                     }
@@ -313,11 +352,6 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                             return Err("Operation number must be exactly 2 bytes".into());
                         }
                         programmer.write_operation_number(data.as_slice().try_into().unwrap())?;
-                    }
-
-                    if let Some(cust_opt_hex) = sub_matches.get_one::<String>("customer_option") {
-                        let data = parse_hex(cust_opt_hex)?;
-                        programmer.write_customer_option(&data)?;
                     }
 
                     if let Some(serial_hex) = sub_matches.get_one::<String>("serial_number") {
@@ -419,17 +453,32 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
 
-                    // Only blank out security region on full mass erase
+                    // Blank out security region and set higher half of code options on full mass erase
                     if !is_partial_erase {
                         if let Some(ref security) = part.security {
                             let security_length = part.security_length();
                             eprintln!(
-                                "Erasing custom region at security address {:#x} ({} bytes)...",
+                                "Blanking security region at {:#x} ({} bytes)...",
                                 security.address, security_length
                             );
                             let zeros = vec![0u8; security_length];
                             programmer.write_custom_region(security.address, &zeros)?;
-                            eprintln!("Custom region erase complete");
+                        }
+
+                        // Write high part of code options at 0x1100: all 00s except last byte from defaults
+                        let high_part_size = part.option_byte_count.saturating_sub(4);
+                        if high_part_size > 0 {
+                            let mut high_bytes = vec![0u8; high_part_size];
+                            if let Some(&last_default) = part.default_code_options.last() {
+                                if let Some(last) = high_bytes.last_mut() {
+                                    *last = last_default;
+                                }
+                            }
+                            eprintln!(
+                                "Writing code options high bytes at {:#x} ({} bytes)...",
+                                0x1100, high_part_size
+                            );
+                            programmer.write_custom_region(0x1100, &high_bytes)?;
                         }
                     }
 
