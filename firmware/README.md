@@ -1,4 +1,4 @@
-# SinoDude Serial Programmer Firmware
+# sinodude-serial
 
 AVR-based programmer firmware for SinoWealth 8051 microcontrollers using the ICP protocol.
 
