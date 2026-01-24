@@ -13,7 +13,7 @@ pub use crate::{ihex::*, parts::*, programmer::*};
 
 fn parse_hex(s: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let s = s.trim_start_matches("0x").trim_start_matches("0X");
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err("Hex string must have even length".into());
     }
     (0..s.len())
@@ -32,7 +32,7 @@ fn parse_addr(s: &str) -> Result<usize, Box<dyn std::error::Error>> {
 }
 
 fn cli() -> Command {
-    return Command::new("sinodude")
+    Command::new("sinodude")
         .about("programming tool for sinowealth devices")
         .version(env!("CARGO_PKG_VERSION"))
         .subcommand_required(true)
@@ -143,7 +143,6 @@ fn cli() -> Command {
                         .required(false),
                 ),
         )
-;
 }
 
 fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {

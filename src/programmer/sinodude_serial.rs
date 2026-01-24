@@ -1,4 +1,7 @@
-use super::super::parts::{format_parsed_options, parse_code_options, Part, Region};
+use super::super::parts::{
+    find_parts_by_jtag_id, find_parts_by_part_number, format_parsed_options, parse_code_options,
+    Part, Region,
+};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use std::io::{Read, Write};
@@ -267,8 +270,8 @@ impl SinodudeSerialProgrammer {
         }
 
         let mut id_bytes = [0u8; 2];
-        for i in 0..2 {
-            id_bytes[i] = self.read_byte()?;
+        for byte in &mut id_bytes {
+            *byte = self.read_byte()?;
         }
 
         let id = u16::from_le_bytes(id_bytes);
@@ -276,6 +279,14 @@ impl SinodudeSerialProgrammer {
 
         let expected_id = self.chip_type.jtag_id;
         if id != expected_id {
+            let matching_parts = find_parts_by_jtag_id(id);
+            if !matching_parts.is_empty() {
+                eprintln!(
+                    "Parts matching JTAG ID {:#06x}: {}",
+                    id,
+                    matching_parts.join(", ")
+                );
+            }
             return Err(SinodudeSerialProgrammerError::JtagIdMismatch {
                 expected: expected_id,
                 actual: id,
@@ -348,6 +359,14 @@ impl SinodudeSerialProgrammer {
                 .iter()
                 .map(|b| format!("{:02x}", b))
                 .collect::<String>();
+            let matching_parts = find_parts_by_part_number(&part_number);
+            if !matching_parts.is_empty() {
+                eprintln!(
+                    "Parts matching part number {}: {}",
+                    actual_str,
+                    matching_parts.join(", ")
+                );
+            }
             return Err(SinodudeSerialProgrammerError::PartNumberMismatch {
                 expected: expected_str,
                 actual: actual_str,
@@ -390,10 +409,7 @@ impl SinodudeSerialProgrammer {
     pub fn get_code_options(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         let region = self.chip_type.options_region();
 
-        let customer_id_addr = match &self.chip_type.customer_id {
-            Some(field) => field.address,
-            None => return Ok(()), // No custom fields for this part
-        };
+        let customer_id_addr = self.chip_type.customer_id.address;
 
         // Read 64 bytes from customer_id address in one transaction
         const REGION_SIZE: usize = 64;
@@ -411,104 +427,100 @@ impl SinodudeSerialProgrammer {
         self.stored_customer_id = Some(customer_id);
 
         // Extract operation_number
-        if let Some(ref field) = self.chip_type.operation_number {
-            let offset = (field.address - customer_id_addr) as usize;
-            if offset + 2 <= REGION_SIZE {
-                let operation_number: [u8; 2] = buffer[offset..offset + 2].try_into().unwrap();
-                eprintln!(
-                    "Operation Number: {}",
-                    operation_number
-                        .iter()
-                        .map(|b| format!("{:02x}", b))
-                        .collect::<String>()
-                );
-                self.stored_operation_number = Some(operation_number);
-            }
-        }
-
-        // Extract security bits
-        if let Some(ref field) = self.chip_type.security {
-            let offset = (field.address - customer_id_addr) as usize;
-            let security_len = self.chip_type.security_length();
-            if offset + security_len <= REGION_SIZE {
-                let security_bits = buffer[offset..offset + security_len].to_vec();
-                eprintln!(
-                    "Security Bits: {}",
-                    security_bits
-                        .iter()
-                        .map(|b| format!("{:02x}", b))
-                        .collect::<String>()
-                );
-                self.stored_security = Some(security_bits);
-            }
-        }
-
-        // Extract serial_number
-        if let Some(ref field) = self.chip_type.serial_number {
-            let offset = (field.address - customer_id_addr) as usize;
-            if offset + 4 <= REGION_SIZE {
-                let serial_number: [u8; 4] = buffer[offset..offset + 4].try_into().unwrap();
-                eprintln!(
-                    "Serial Number: {}",
-                    serial_number
-                        .iter()
-                        .map(|b| format!("{:02x}", b))
-                        .collect::<String>()
-                );
-                self.stored_serial_number = Some(serial_number);
-            }
-        }
-
-        // Extract and handle code options
-        if let Some(ref field) = self.chip_type.customer_option {
-            let option_byte_count = self.chip_type.option_byte_count;
-            let offset = (field.address - customer_id_addr) as usize;
-            let first_part_size = 4.min(option_byte_count);
-
-            // First part from main buffer
-            let mut code_options = buffer[offset..offset + first_part_size].to_vec();
-
-            // Read upper bytes from 0x1100 in separate transaction if needed
-            if option_byte_count > 4 {
-                let second_part_size = option_byte_count - 4;
-                let second_part = self.read_region(region, 0x1100, second_part_size)?;
-                code_options.extend_from_slice(&second_part);
-            }
-
-            // Store the full customer_option (both parts)
-            self.stored_customer_option = Some(code_options.clone());
-
+        let field = &self.chip_type.operation_number;
+        let offset = (field.address - customer_id_addr) as usize;
+        if offset + 2 <= REGION_SIZE {
+            let operation_number: [u8; 2] = buffer[offset..offset + 2].try_into().unwrap();
             eprintln!(
-                "Code Options: {}",
-                code_options
+                "Operation Number: {}",
+                operation_number
                     .iter()
                     .map(|b| format!("{:02x}", b))
                     .collect::<String>()
             );
+            self.stored_operation_number = Some(operation_number);
+        }
 
-            // Check if non-editable bits differ from defaults (only upper bytes for >4-byte options)
-            if let Some(expected_upper) = self.chip_type.upper_code_option_defaults() {
-                let mask = self.chip_type.code_option_mask;
-                for (i, &expected) in expected_upper.iter().enumerate() {
-                    let idx = 4 + i;
-                    if idx < code_options.len() {
-                        let current = code_options[idx] & !mask[idx];
-                        if current != expected {
-                            eprintln!(
+        // Extract security bits
+        let field = &self.chip_type.security;
+        let offset = (field.address - customer_id_addr) as usize;
+        let security_len = self.chip_type.security_length();
+        if offset + security_len <= REGION_SIZE {
+            let security_bits = buffer[offset..offset + security_len].to_vec();
+            eprintln!(
+                "Security Bits: {}",
+                security_bits
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<String>()
+            );
+            self.stored_security = Some(security_bits);
+        }
+
+        // Extract serial_number
+        let field = &self.chip_type.serial_number;
+        let offset = (field.address - customer_id_addr) as usize;
+        if offset + 4 <= REGION_SIZE {
+            let serial_number: [u8; 4] = buffer[offset..offset + 4].try_into().unwrap();
+            eprintln!(
+                "Serial Number: {}",
+                serial_number
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<String>()
+            );
+            self.stored_serial_number = Some(serial_number);
+        }
+
+        // Extract and handle code options
+        let field = &self.chip_type.customer_option;
+        let option_byte_count = self.chip_type.option_byte_count;
+        let offset = (field.address - customer_id_addr) as usize;
+        let first_part_size = 4.min(option_byte_count);
+
+        // First part from main buffer
+        let mut code_options = buffer[offset..offset + first_part_size].to_vec();
+
+        // Read upper bytes from 0x1100 in separate transaction if needed
+        if option_byte_count > 4 {
+            let second_part_size = option_byte_count - 4;
+            let second_part = self.read_region(region, 0x1100, second_part_size)?;
+            code_options.extend_from_slice(&second_part);
+        }
+
+        // Store the full customer_option (both parts)
+        self.stored_customer_option = Some(code_options.clone());
+
+        eprintln!(
+            "Code Options: {}",
+            code_options
+                .iter()
+                .map(|b| format!("{:02x}", b))
+                .collect::<String>()
+        );
+
+        // Check if non-editable bits differ from defaults (only upper bytes for >4-byte options)
+        if let Some(expected_upper) = self.chip_type.upper_code_option_defaults() {
+            let mask = self.chip_type.code_option_mask;
+            for (i, &expected) in expected_upper.iter().enumerate() {
+                let idx = 4 + i;
+                if idx < code_options.len() {
+                    let current = code_options[idx] & !mask[idx];
+                    if current != expected {
+                        eprintln!(
                                 "Warning: Code option byte {} has non-editable bits that differ from defaults (current: {:#04x}, expected: {:#04x})",
                                 idx, current, expected
                             );
-                            self.use_alternate_erase = true;
-                        }
+                        self.use_alternate_erase = true;
                     }
                 }
             }
-
-            // Parse and display options in user-friendly format
-            let options_metadata = (self.chip_type.options)();
-            let parsed = parse_code_options(&code_options, &options_metadata);
-            eprintln!("Code Options (parsed):\n{}", format_parsed_options(&parsed));
         }
+
+        // Parse and display options in user-friendly format
+        let options_metadata = (self.chip_type.options)();
+        let parsed = parse_code_options(&code_options, &options_metadata);
+        eprintln!("Code Options (parsed):\n{}", format_parsed_options(&parsed));
 
         Ok(())
     }
@@ -564,13 +576,11 @@ impl SinodudeSerialProgrammer {
 
         let start = Instant::now();
         for addr in (0..flash_size).step_by(buffer_size as usize) {
-            self.check_cancelled().map_err(|e| {
+            self.check_cancelled().inspect_err(|_| {
                 progress.abandon_with_message("Cancelled");
-                e
             })?;
-            let result = self.read_chunk(addr, buffer_size).map_err(|e| {
+            let result = self.read_chunk(addr, buffer_size).inspect_err(|_| {
                 progress.abandon_with_message("Read failed");
-                e
             })?;
             contents.extend_from_slice(&result);
             progress.set_position(addr as u64 + buffer_size as u64);
@@ -657,14 +667,12 @@ impl SinodudeSerialProgrammer {
 
         let start = Instant::now();
         for sector in first_sector..=last_sector {
-            self.check_cancelled().map_err(|e| {
+            self.check_cancelled().inspect_err(|_| {
                 progress.abandon_with_message("Cancelled");
-                e
             })?;
             let sector_addr = sector * sector_size;
-            self.erase_sector(sector_addr).map_err(|e| {
+            self.erase_sector(sector_addr).inspect_err(|_| {
                 progress.abandon_with_message("Erase failed");
-                e
             })?;
             progress.inc(1);
         }
@@ -703,7 +711,8 @@ impl SinodudeSerialProgrammer {
         &mut self,
     ) -> Result<(), SinodudeSerialProgrammerError> {
         // Blank security region
-        if let Some(ref security) = self.chip_type.security {
+        {
+            let security = &self.chip_type.security;
             let security_length = self.chip_type.security_length();
             eprintln!(
                 "Blanking security region at {:#x} ({} bytes)...",
@@ -772,10 +781,9 @@ impl SinodudeSerialProgrammer {
         &mut self,
         data: &[u8; 4],
     ) -> Result<(), SinodudeSerialProgrammerError> {
-        if let Some(ref field) = self.chip_type.customer_id {
-            eprintln!("Writing customer ID at {:#x}...", field.address);
-            self.write_custom_region(field.address, data)?;
-        }
+        let field = &self.chip_type.customer_id;
+        eprintln!("Writing customer ID at {:#x}...", field.address);
+        self.write_custom_region(field.address, data)?;
         Ok(())
     }
 
@@ -783,10 +791,9 @@ impl SinodudeSerialProgrammer {
         &mut self,
         data: &[u8; 2],
     ) -> Result<(), SinodudeSerialProgrammerError> {
-        if let Some(ref field) = self.chip_type.operation_number {
-            eprintln!("Writing operation number at {:#x}...", field.address);
-            self.write_custom_region(field.address, data)?;
-        }
+        let field = &self.chip_type.operation_number;
+        eprintln!("Writing operation number at {:#x}...", field.address);
+        self.write_custom_region(field.address, data)?;
         Ok(())
     }
 
@@ -825,7 +832,8 @@ impl SinodudeSerialProgrammer {
             }
         }
 
-        if let Some(ref field) = self.chip_type.customer_option {
+        {
+            let field = &self.chip_type.customer_option;
             // Split write: first 4 bytes to customer_option.address, rest to 0x1100
             // Write second region first, then the first region
             let first_part_size = 4.min(data.len());
@@ -857,10 +865,9 @@ impl SinodudeSerialProgrammer {
             });
         }
 
-        if let Some(ref field) = self.chip_type.security {
-            eprintln!("Writing security at {:#x}...", field.address);
-            self.write_custom_region(field.address, data)?;
-        }
+        let field = &self.chip_type.security;
+        eprintln!("Writing security at {:#x}...", field.address);
+        self.write_custom_region(field.address, data)?;
         Ok(())
     }
 
@@ -868,10 +875,9 @@ impl SinodudeSerialProgrammer {
         &mut self,
         data: &[u8; 4],
     ) -> Result<(), SinodudeSerialProgrammerError> {
-        if let Some(ref field) = self.chip_type.serial_number {
-            eprintln!("Writing serial number at {:#x}...", field.address);
-            self.write_custom_region(field.address, data)?;
-        }
+        let field = &self.chip_type.serial_number;
+        eprintln!("Writing serial number at {:#x}...", field.address);
+        self.write_custom_region(field.address, data)?;
         Ok(())
     }
 
@@ -887,10 +893,7 @@ impl SinodudeSerialProgrammer {
         serial_number: Option<&[u8; 4]>,
         use_stored_defaults: bool,
     ) -> Result<(), SinodudeSerialProgrammerError> {
-        let customer_id_addr = match &self.chip_type.customer_id {
-            Some(field) => field.address,
-            None => return Ok(()), // No custom fields for this part
-        };
+        let customer_id_addr = self.chip_type.customer_id.address;
 
         const REGION_SIZE: usize = 64;
         let mut buffer = [0u8; REGION_SIZE];
@@ -918,11 +921,10 @@ impl SinodudeSerialProgrammer {
             };
             let data = operation_number.or(stored);
             if let Some(data) = data {
-                if let Some(ref field) = self.chip_type.operation_number {
-                    let offset = (field.address - customer_id_addr) as usize;
-                    if offset + 2 <= REGION_SIZE {
-                        buffer[offset..offset + 2].copy_from_slice(data);
-                    }
+                let field = &self.chip_type.operation_number;
+                let offset = (field.address - customer_id_addr) as usize;
+                if offset + 2 <= REGION_SIZE {
+                    buffer[offset..offset + 2].copy_from_slice(data);
                 }
             }
         }
@@ -936,20 +938,19 @@ impl SinodudeSerialProgrammer {
                 None
             };
             let data = customer_option.or(stored);
-            if let Some(ref field) = self.chip_type.customer_option {
-                let offset = (field.address - customer_id_addr) as usize;
+            let field = &self.chip_type.customer_option;
+            let offset = (field.address - customer_id_addr) as usize;
 
-                if let Some(data) = data {
-                    // First 4 bytes go to the buffer at customer_option offset
-                    let first_part_len = data.len().min(4).min(REGION_SIZE - offset);
-                    if offset < REGION_SIZE {
-                        buffer[offset..offset + first_part_len]
-                            .copy_from_slice(&data[..first_part_len]);
-                    }
-                    // Remaining bytes (if any) go to 0x1100
-                    if data.len() > 4 {
-                        customer_option_upper = Some(data[4..].to_vec());
-                    }
+            if let Some(data) = data {
+                // First 4 bytes go to the buffer at customer_option offset
+                let first_part_len = data.len().min(4).min(REGION_SIZE - offset);
+                if offset < REGION_SIZE {
+                    buffer[offset..offset + first_part_len]
+                        .copy_from_slice(&data[..first_part_len]);
+                }
+                // Remaining bytes (if any) go to 0x1100
+                if data.len() > 4 {
+                    customer_option_upper = Some(data[4..].to_vec());
                 }
             }
         }
@@ -962,12 +963,11 @@ impl SinodudeSerialProgrammer {
             };
             let data = security.or(stored);
             if let Some(data) = data {
-                if let Some(ref field) = self.chip_type.security {
-                    let offset = (field.address - customer_id_addr) as usize;
-                    let len = data.len().min(REGION_SIZE - offset);
-                    if offset < REGION_SIZE {
-                        buffer[offset..offset + len].copy_from_slice(&data[..len]);
-                    }
+                let field = &self.chip_type.security;
+                let offset = (field.address - customer_id_addr) as usize;
+                let len = data.len().min(REGION_SIZE - offset);
+                if offset < REGION_SIZE {
+                    buffer[offset..offset + len].copy_from_slice(&data[..len]);
                 }
             }
         }
@@ -980,11 +980,10 @@ impl SinodudeSerialProgrammer {
             };
             let data = serial_number.or(stored);
             if let Some(data) = data {
-                if let Some(ref field) = self.chip_type.serial_number {
-                    let offset = (field.address - customer_id_addr) as usize;
-                    if offset + 4 <= REGION_SIZE {
-                        buffer[offset..offset + 4].copy_from_slice(data);
-                    }
+                let field = &self.chip_type.serial_number;
+                let offset = (field.address - customer_id_addr) as usize;
+                if offset + 4 <= REGION_SIZE {
+                    buffer[offset..offset + 4].copy_from_slice(data);
                 }
             }
         }
@@ -1045,15 +1044,13 @@ impl SinodudeSerialProgrammer {
 
         let start = Instant::now();
         for addr in (0..flash_size).step_by(CHUNK_SIZE) {
-            self.check_cancelled().map_err(|e| {
+            self.check_cancelled().inspect_err(|_| {
                 write_progress.abandon_with_message("Cancelled");
-                e
             })?;
             let end = (addr + CHUNK_SIZE).min(flash_size);
             let chunk = &firmware[addr..end];
-            self.write_chunk(addr as u32, chunk).map_err(|e| {
+            self.write_chunk(addr as u32, chunk).inspect_err(|_| {
                 write_progress.abandon_with_message("Write failed");
-                e
             })?;
             write_progress.set_position(end as u64);
         }
@@ -1067,9 +1064,8 @@ impl SinodudeSerialProgrammer {
 
         let start = Instant::now();
         for addr in (0..flash_size).step_by(CHUNK_SIZE) {
-            self.check_cancelled().map_err(|e| {
+            self.check_cancelled().inspect_err(|_| {
                 verify_progress.abandon_with_message("Cancelled");
-                e
             })?;
             let end = (addr + CHUNK_SIZE).min(flash_size);
             let expected = &firmware[addr..end];
@@ -1126,15 +1122,13 @@ impl SinodudeSerialProgrammer {
 
         let start = Instant::now();
         for addr in (start_addr..end_addr).step_by(CHUNK_SIZE) {
-            self.check_cancelled().map_err(|e| {
+            self.check_cancelled().inspect_err(|_| {
                 write_progress.abandon_with_message("Cancelled");
-                e
             })?;
             let end = (addr + CHUNK_SIZE).min(end_addr);
             let chunk = &firmware[addr..end];
-            self.write_chunk(addr as u32, chunk).map_err(|e| {
+            self.write_chunk(addr as u32, chunk).inspect_err(|_| {
                 write_progress.abandon_with_message("Write failed");
-                e
             })?;
             write_progress.set_position((end - start_addr) as u64);
         }
@@ -1148,9 +1142,8 @@ impl SinodudeSerialProgrammer {
 
         let start = Instant::now();
         for addr in (start_addr..end_addr).step_by(CHUNK_SIZE) {
-            self.check_cancelled().map_err(|e| {
+            self.check_cancelled().inspect_err(|_| {
                 verify_progress.abandon_with_message("Cancelled");
-                e
             })?;
             let end = (addr + CHUNK_SIZE).min(end_addr);
             let expected = &firmware[addr..end];

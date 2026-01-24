@@ -393,7 +393,7 @@ impl SinolinkProgrammer<'static> {
             .endpoint(0x81)
             .map_err(|_e| IOError::ReadBulkError(TransferError::Unknown(0)))?;
 
-        let buffer_length = if length % 64 == 0 {
+        let buffer_length = if length.is_multiple_of(64) {
             length
         } else {
             length + (64 - (length % 64))
@@ -450,13 +450,13 @@ impl SinolinkProgrammer<'static> {
             .endpoint(0x02)
             .map_err(|_e| IOError::WriteBulkError(TransferError::Unknown(0)))?;
 
-        let buffer_length = if buf.len() % 64 == 0 {
+        let buffer_length = if buf.len().is_multiple_of(64) {
             buf.len()
         } else {
             buf.len() + (64 - (buf.len() % 64))
         };
 
-        let mut buffer = Buffer::new(buffer_length.into());
+        let mut buffer = Buffer::new(buffer_length);
         buffer.extend_from_slice(&buf);
         let completion = endpoint.transfer_blocking(buffer, TIMEOUT);
         completion.status.map_err(IOError::WriteBulkError)
@@ -513,7 +513,7 @@ impl SinolinkProgrammer<'static> {
         config[14] = chip_type.custom_block;
         config[15] = chip_type.product_block;
 
-        config[47..47 + 8].clone_from_slice(&chip_type.default_code_options);
+        config[47..47 + 8].clone_from_slice(chip_type.default_code_options);
 
         // Model bytes blanked out - not available in GPT files
         config[162..162 + 6].fill(0x00);
@@ -580,7 +580,7 @@ impl SinolinkProgrammer<'static> {
         config[14] = chip_type.custom_block;
         config[15] = chip_type.product_block;
 
-        config[47..47 + 8].clone_from_slice(&chip_type.default_code_options);
+        config[47..47 + 8].clone_from_slice(chip_type.default_code_options);
 
         // Model bytes blanked out - not available in GPT files
         config[162..162 + 6].fill(0x00);

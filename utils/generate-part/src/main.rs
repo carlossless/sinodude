@@ -79,11 +79,12 @@ pub struct PartDefinition {
     pub option_mask: u64,
     pub option_byte_count: usize,
     pub security_level: u8,
-    pub customer_id: Option<AddressField>,
-    pub operation_number: Option<AddressField>,
-    pub customer_option: Option<AddressField>,
-    pub security: Option<AddressField>,
-    pub serial_number: Option<AddressField>,
+    pub bank_type: u8,
+    pub customer_id: AddressField,
+    pub operation_number: AddressField,
+    pub customer_option: AddressField,
+    pub security: AddressField,
+    pub serial_number: AddressField,
     pub options: Vec<OptionDefinition>,
 }
 
@@ -194,16 +195,17 @@ fn parse_gpt_content(content: &str) -> Result<PartDefinition, GptError> {
     }
 
     // Helper to parse address fields (skip first value, just get the second value (address))
-    let parse_address_field = |key: &str| -> Option<AddressField> {
-        let values = multi_fields.get(key)?;
-        if values.len() >= 2 {
-            // values[0] is region (unused), values[1] is address
-            let addr_str = values[1].trim_start_matches("0x").trim_start_matches("0X");
-            let address = u32::from_str_radix(addr_str, 16).ok()?;
-            Some(AddressField { address })
-        } else {
-            None
+    let parse_address_field = |key: &str| -> AddressField {
+        if let Some(values) = multi_fields.get(key) {
+            if values.len() >= 2 {
+                // values[0] is region (unused), values[1] is address
+                let addr_str = values[1].trim_start_matches("0x").trim_start_matches("0X");
+                if let Ok(address) = u32::from_str_radix(addr_str, 16) {
+                    return AddressField { address };
+                }
+            }
         }
+        AddressField { address: 0 }
     };
 
     let chip_name = fields
@@ -273,6 +275,11 @@ fn parse_gpt_content(content: &str) -> Result<PartDefinition, GptError> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
 
+    let bank_type = fields
+        .get("BankType")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+
     // Parse address fields
     let customer_id = parse_address_field("CustomerID");
     let operation_number = parse_address_field("OperationNumber");
@@ -309,6 +316,7 @@ fn parse_gpt_content(content: &str) -> Result<PartDefinition, GptError> {
         option_mask,
         option_byte_count,
         security_level,
+        bank_type,
         customer_id,
         operation_number,
         customer_option,
@@ -329,7 +337,11 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
         "// Auto-generated from GPT file for {}\n\n",
         part.chip_name
     ));
-    output.push_str("use super::{AddressField, OptionInfo, Options, Part};\n");
+    if part.options.is_empty() {
+        output.push_str("use super::{AddressField, Options, Part};\n");
+    } else {
+        output.push_str("use super::{AddressField, OptionInfo, Options, Part};\n");
+    }
     output.push_str("use hex_literal::hex;\n");
     output.push_str("use indexmap::IndexMap;\n\n");
 
@@ -346,6 +358,7 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
         part.product_block
     ));
     output.push_str(&format!("    flash_size: {},\n", part.flash_size));
+    output.push_str(&format!("    eeprom_size: {},\n", part.eeprom));
     output.push_str(&format!(
         "    default_code_options: &hex!(\"{}\"),\n",
         default_code_options
@@ -361,13 +374,11 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
         part.option_byte_count
     ));
     output.push_str(&format!("    security_level: {},\n", part.security_level));
+    output.push_str(&format!("    bank_type: {},\n", part.bank_type));
 
     // Address fields
-    fn format_address_field(addr: &Option<AddressField>) -> String {
-        match addr {
-            Some(a) => format!("Some(AddressField {{ address: 0x{:04x} }})", a.address),
-            None => "None".to_string(),
-        }
+    fn format_address_field(addr: &AddressField) -> String {
+        format!("AddressField {{ address: 0x{:04x} }}", addr.address)
     }
     output.push_str(&format!(
         "    customer_id: {},\n",
@@ -393,10 +404,12 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
 
     output.push_str("};\n\n");
 
-    // Generate options function with all options
-    if !part.options.is_empty() {
-        output.push_str("/// Get all code options metadata\n");
-        output.push_str("pub fn options() -> Options {\n");
+    // Generate options function (always, even if empty)
+    output.push_str("/// Get all code options metadata\n");
+    output.push_str("pub fn options() -> Options {\n");
+    if part.options.is_empty() {
+        output.push_str("    IndexMap::new()\n");
+    } else {
         output.push_str("    IndexMap::from([\n");
         for opt in &part.options {
             let name = opt.name.trim_end_matches(':');
@@ -417,8 +430,8 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
             output.push_str("        }),\n");
         }
         output.push_str("    ])\n");
-        output.push_str("}\n");
     }
+    output.push_str("}\n");
 
     output
 }
