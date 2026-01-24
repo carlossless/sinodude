@@ -1,0 +1,321 @@
+// Auto-generated from GPT file for SH79F9219
+
+use super::{AddressField, OptionInfo, Options, Part};
+use hex_literal::hex;
+use indexmap::IndexMap;
+
+pub const PART: Part = Part {
+    part_number: hex!("79f9219000"),
+    chip_type: 0x07,
+    custom_block: 0x03,
+    product_block: 0x01,
+    flash_size: 32768,
+    eeprom_size: 4096,
+    default_code_options: &hex!("601000dd60000080"),
+    code_option_mask: &hex!("8fff0f3ee000ff0f"),
+    jtag_id: 0x9418,
+    sector_size: 512,
+    option_byte_count: 8,
+    security_level: 4,
+    bank_type: 1,
+    customer_id: AddressField { address: 0x1000 },
+    operation_number: AddressField { address: 0x1004 },
+    customer_option: AddressField { address: 0x1006 },
+    security: AddressField { address: 0x100a },
+    serial_number: AddressField { address: 0x103c },
+    options,
+};
+
+/// Get all code options metadata
+pub fn options() -> Options {
+    IndexMap::from([
+        ("OP_WDTPD", OptionInfo {
+            byte_index: 0,
+            bits_start: 7,
+            bits_end: 7,
+            editable: true,
+            states: IndexMap::from([
+                (0, "Disable WDT function in the Power-Down mode"),
+                (1, "Enable WDT function in the Power-Down mode"),
+            ]),
+        }),
+        ("OP_RST_P26", OptionInfo {
+            byte_index: 0,
+            bits_start: 6,
+            bits_end: 6,
+            editable: false,
+            states: IndexMap::from([
+                (0, "P2.6 used as RST pin"),
+                (1, "P2.6 used as I/O pin"),
+            ]),
+        }),
+        ("OP_RST_P40", OptionInfo {
+            byte_index: 0,
+            bits_start: 5,
+            bits_end: 5,
+            editable: false,
+            states: IndexMap::from([
+                (0, "P4.0 used as RST pin"),
+                (1, "P4.0 used as I/O pin"),
+            ]),
+        }),
+        ("OP_WMT", OptionInfo {
+            byte_index: 0,
+            bits_start: 2,
+            bits_end: 3,
+            editable: true,
+            states: IndexMap::from([
+                (0, "longest warm up time"),
+                (1, "longer warm up time"),
+                (2, "shorter warm up time"),
+                (3, "shortest warm up time"),
+            ]),
+        }),
+        ("OP_SCM", OptionInfo {
+            byte_index: 0,
+            bits_start: 1,
+            bits_end: 1,
+            editable: true,
+            states: IndexMap::from([
+                (0, "SCM is invalid in warm up period"),
+                (1, "SCM is valid in warm up period"),
+            ]),
+        }),
+        ("OP_SCMEN", OptionInfo {
+            byte_index: 0,
+            bits_start: 0,
+            bits_end: 0,
+            editable: true,
+            states: IndexMap::from([
+                (0, "Enable SCM"),
+                (1, "Disable SCM"),
+            ]),
+        }),
+        ("OP_LVREN", OptionInfo {
+            byte_index: 1,
+            bits_start: 7,
+            bits_end: 7,
+            editable: true,
+            states: IndexMap::from([
+                (0, "Disable LVR function"),
+                (1, "Enable LVR function"),
+            ]),
+        }),
+        ("OP_LVRLE", OptionInfo {
+            byte_index: 1,
+            bits_start: 5,
+            bits_end: 6,
+            editable: true,
+            states: IndexMap::from([
+                (0, "4.1V LVR Level 1"),
+                (1, "3.7V LVR Level 2"),
+                (2, "3.1V LVR Level 3"),
+            ]),
+        }),
+        ("OP_SINK/IO", OptionInfo {
+            byte_index: 1,
+            bits_start: 4,
+            bits_end: 4,
+            editable: true,
+            states: IndexMap::from([
+                (0, "Port1[7:3] sink ability large mode"),
+                (1, "Port1[7:3] sink ability normal mode"),
+            ]),
+        }),
+        ("OP_DRV_P04-P00, P12-P10", OptionInfo {
+            byte_index: 1,
+            bits_start: 2,
+            bits_end: 3,
+            editable: true,
+            states: IndexMap::from([
+                (0, "P0.0~P0.4, P1.0~P1.2 output 40mA current when VDD-3.0V"),
+                (1, "P0.0~P0.4, P1.0~P1.2 output 30mA current when VDD-3.0V"),
+                (2, "P0.0~P0.4, P1.0~P1.2 output 20mA current when VDD-3.0V"),
+                (3, "P0.0~P0.4, P1.0~P1.2 output 10mA current when VDD-3.0V"),
+            ]),
+        }),
+        ("OP_DRV_P17-P13, P22-P20", OptionInfo {
+            byte_index: 1,
+            bits_start: 0,
+            bits_end: 1,
+            editable: true,
+            states: IndexMap::from([
+                (0, "P1.3~P1.7, P2.0~P2.2 output 40mA current when VDD-3.0V"),
+                (1, "P1.3~P1.7, P2.0~P2.2 output 30mA current when VDD-3.0V"),
+                (2, "P1.3~P1.7, P2.0~P2.2 output 20mA current when VDD-3.0V"),
+                (3, "P1.3~P1.7, P2.0~P2.2 output 10mA current when VDD-3.0V"),
+            ]),
+        }),
+        ("OP_OSC", OptionInfo {
+            byte_index: 2,
+            bits_start: 0,
+            bits_end: 3,
+            editable: true,
+            states: IndexMap::from([
+                (0, "Oscillator1 is internal 24M RC, Oscillator2 is disabled"),
+                (3, "Oscillator1 is internal 128k RC, Oscillator2 is internal 24M RC"),
+                (6, "Oscillator1 is internal 128k RC, Oscillator2 is 2M-16M Crystal/Ceramic from P2.4 and P2.5"),
+                (10, "Oscillator1 is 2M-16M Crystal/Ceramic from P2.4 and P2.5, Oscillator2 is disabled"),
+                (14, "Oscillator1 is external clock from P2.4, Oscillator2 is disabled"),
+            ]),
+        }),
+        ("OP_ISP", OptionInfo {
+            byte_index: 3,
+            bits_start: 7,
+            bits_end: 7,
+            editable: false,
+            states: IndexMap::from([
+                (0, "Enable ISP function"),
+                (1, "Disable ISP function"),
+            ]),
+        }),
+        ("OP_ISPPIN", OptionInfo {
+            byte_index: 3,
+            bits_start: 6,
+            bits_end: 6,
+            editable: false,
+            states: IndexMap::from([
+                (0, "Enter ISP mode directly regardless the condition of P0.0 and P0.1"),
+                (1, "Enter ISP mode only when P0.0 and P0.1 are connected to GND, simultaneously"),
+            ]),
+        }),
+        ("OP_OSCRFB", OptionInfo {
+            byte_index: 3,
+            bits_start: 3,
+            bits_end: 5,
+            editable: true,
+            states: IndexMap::from([
+                (0, "150K"),
+                (1, "200K"),
+                (2, "300K"),
+                (3, "500K"),
+            ]),
+        }),
+        ("OP_OSCDRIVE", OptionInfo {
+            byte_index: 3,
+            bits_start: 1,
+            bits_end: 2,
+            editable: true,
+            states: IndexMap::from([
+                (0, "2~12M ceramic regardless of cap loads"),
+                (1, "16M ceramic regardless of cap loads"),
+                (2, "4M crystal and 8M~12M crystal with cap load(Cg=Cd)<20Pf"),
+                (3, "16M crystal and 8M~12M crystal with cap load(Cg=Cd)>=20pF"),
+            ]),
+        }),
+        ("OP_OSCRING", OptionInfo {
+            byte_index: 3,
+            bits_start: 0,
+            bits_end: 0,
+            editable: false,
+            states: IndexMap::from([
+                (0, "ring oscillator is disabled"),
+                (1, "ring oscillator is enabled"),
+            ]),
+        }),
+        ("OP_SCMSEL", OptionInfo {
+            byte_index: 4,
+            bits_start: 5,
+            bits_end: 7,
+            editable: true,
+            states: IndexMap::from([
+                (0, "2MHz"),
+                (1, "4MHz"),
+                (2, "6MHz"),
+                (3, "8MHz"),
+                (4, "12MHz"),
+                (5, "16MHz"),
+            ]),
+        }),
+        ("OP_RC_SEL", OptionInfo {
+            byte_index: 4,
+            bits_start: 0,
+            bits_end: 0,
+            editable: false,
+            states: IndexMap::from([
+                (0, "24M RC"),
+                (1, "16M RC"),
+            ]),
+        }),
+        ("OP_P04-P02, P10", OptionInfo {
+            byte_index: 5,
+            bits_start: 4,
+            bits_end: 5,
+            editable: false,
+            states: IndexMap::from([
+                (0, "Port0[4:2], Port1[0] sink ability select larger level"),
+                (1, "Port0[4:2], Port1[0] sink ability select smaller level"),
+                (2, "Port0[4:2], Port1[0] sink ability select minimum level"),
+                (3, "Port0[4:2], Port1[0] sink ability select max level"),
+            ]),
+        }),
+        ("OP_P35-P34, P01-P00", OptionInfo {
+            byte_index: 5,
+            bits_start: 2,
+            bits_end: 3,
+            editable: false,
+            states: IndexMap::from([
+                (0, "Port3[5:4], Port0[1:0] sink ability select larger level"),
+                (1, "Port3[5:4], Port0[1:0] sink ability select smaller level"),
+                (2, "Port3[5:4], Port0[1:0] sink ability select minimum level"),
+                (3, "Port3[5:4], Port0[1:0] sink ability select max level"),
+            ]),
+        }),
+        ("OP_P33-P30", OptionInfo {
+            byte_index: 5,
+            bits_start: 0,
+            bits_end: 1,
+            editable: false,
+            states: IndexMap::from([
+                (0, "Port3[3:0] sink ability select larger level"),
+                (1, "Port3[3:0] sink ability select smaller level"),
+                (2, "Port3[3:0] sink ability select minimum level"),
+                (3, "Port3[3:0] sink ability select max level"),
+            ]),
+        }),
+        ("OP_WDT", OptionInfo {
+            byte_index: 6,
+            bits_start: 0,
+            bits_end: 7,
+            editable: true,
+            states: IndexMap::from([
+                (165, "Disable WDT function"),
+                (0, "Enable WDT function"),
+            ]),
+        }),
+        ("OP_ISPSIZE", OptionInfo {
+            byte_index: 7,
+            bits_start: 4,
+            bits_end: 7,
+            editable: false,
+            states: IndexMap::from([
+                (0, "8 x 1024Bytes"),
+                (1, "7 x 1024Bytes"),
+                (2, "6 x 1024Bytes"),
+                (3, "5 x 1024Bytes"),
+                (4, "4 x 1024Bytes"),
+                (5, "3 x 1024Bytes"),
+                (6, "2 x 1024Bytes"),
+                (7, "1 x 1024Bytes"),
+                (8, "0 bytes"),
+            ]),
+        }),
+        ("OP_EEPROMSIZE", OptionInfo {
+            byte_index: 7,
+            bits_start: 0,
+            bits_end: 3,
+            editable: true,
+            states: IndexMap::from([
+                (0, "8 x 512Bytes"),
+                (1, "7 x 512Bytes"),
+                (2, "6 x 512Bytes"),
+                (3, "5 x 512Bytes"),
+                (4, "4 x 512Bytes"),
+                (5, "3 x 512Bytes"),
+                (6, "2 x 512Bytes"),
+                (7, "1 x 512Bytes"),
+                (8, "0 bytes"),
+            ]),
+        }),
+    ])
+}
