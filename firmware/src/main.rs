@@ -72,10 +72,10 @@ mod jtag_instructions {
 
 #[derive(PartialEq)]
 enum Mode {
-    UNSET,
-    READY,
-    ICP,
-    JTAG,
+    Unset,
+    Ready,
+    Icp,
+    Jtag,
 }
 
 struct IcpPins {
@@ -100,7 +100,7 @@ impl IcpController {
             pins,
             delay: Delay::<MHz16>::new(),
             connected: false,
-            mode: Mode::UNSET,
+            mode: Mode::Unset,
             chip_type: None,
         }
     }
@@ -212,7 +212,7 @@ impl IcpController {
         self.tms_low();
 
         // Enter ICP mode (send mode byte 150)
-        self.mode = Mode::ICP;
+        self.mode = Mode::Icp;
         self.start_mode();
 
         // 1644 TCK cycles
@@ -240,10 +240,10 @@ impl IcpController {
     fn reset(&mut self) {
         // only implemented for ICP
         match self.mode {
-            Mode::UNSET => {
+            Mode::Unset => {
                 return;
             }
-            Mode::ICP | Mode::READY => {
+            Mode::Icp | Mode::Ready => {
                 self.tck_high();
 
                 self.delay_us(8);
@@ -253,7 +253,7 @@ impl IcpController {
                 self.tms_low();
                 self.delay_us(2);
             }
-            Mode::JTAG => {
+            Mode::Jtag => {
                 for _ in 0..35 {
                     self.jtag_next_state(true);
                 }
@@ -262,7 +262,7 @@ impl IcpController {
             }
         }
 
-        self.mode = Mode::READY;
+        self.mode = Mode::Ready;
     }
 
     fn start_mode(&mut self) {
@@ -270,10 +270,10 @@ impl IcpController {
         self.delay_us(2);
 
         let mut mode: u8 = match self.mode {
-            Mode::UNSET => 0,
-            Mode::READY => 1,
-            Mode::ICP => 150,
-            Mode::JTAG => 165,
+            Mode::Unset => 0,
+            Mode::Ready => 1,
+            Mode::Icp => 150,
+            Mode::Jtag => 165,
         };
 
         // Send MSB first
@@ -308,7 +308,7 @@ impl IcpController {
     }
 
     fn check(&mut self) -> bool {
-        self.switch_mode(Mode::ICP);
+        self.switch_mode(Mode::Icp);
 
         self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
         self.send_icp_byte(0x69);
@@ -328,18 +328,18 @@ impl IcpController {
             return;
         }
 
-        if self.mode != Mode::READY {
+        if self.mode != Mode::Ready {
             self.reset();
         }
 
         self.mode = mode;
         self.start_mode();
 
-        if self.mode == Mode::ICP {
+        if self.mode == Mode::Icp {
             self.delay_us(800);
 
             self.ping_icp();
-        } else if self.mode == Mode::JTAG {
+        } else if self.mode == Mode::Jtag {
             // reset JTAG state
             for _ in 0..8 {
                 self.jtag_next_state(true);
@@ -377,7 +377,7 @@ impl IcpController {
     }
 
     fn ping_icp(&mut self) {
-        if self.mode != Mode::ICP {
+        if self.mode != Mode::Icp {
             return;
         }
 
@@ -435,7 +435,7 @@ impl IcpController {
     }
 
     fn jtag_get_id(&mut self) -> u16 {
-        self.switch_mode(Mode::JTAG);
+        self.switch_mode(Mode::Jtag);
 
         self.jtag_send_instruction(jtag_instructions::JTAG_IDCODE);
         self.jtag_receive_data(16)
@@ -492,7 +492,7 @@ impl IcpController {
         self.pins.tck.set_low();
         self.delay_us(2);
 
-        return b;
+        b
     }
 
     fn jtag_next_state_out(&mut self, tms: bool, out: bool) -> bool {
@@ -502,7 +502,7 @@ impl IcpController {
             self.tdi_low();
         }
 
-        return self.jtag_next_state(tms);
+        self.jtag_next_state(tms)
     }
 
     fn jtag_send_bits<T>(&mut self, bit_length: u8, value: T)
@@ -531,11 +531,11 @@ impl IcpController {
             }
         }
 
-        return value;
+        value
     }
 
     fn icp_read_flash(&mut self, addr: u32, buffer: &mut [u8], custom_block: bool) -> bool {
-        self.switch_mode(Mode::ICP);
+        self.switch_mode(Mode::Icp);
 
         let Some(chip_type) = self.chip_type else {
             return false;
@@ -564,8 +564,8 @@ impl IcpController {
         };
         self.send_icp_byte(region);
 
-        for i in 0..buffer.len() {
-            buffer[i] = self.receive_icp_byte();
+        for byte in buffer.iter_mut() {
+            *byte = self.receive_icp_byte();
         }
 
         self.reset();
@@ -574,7 +574,7 @@ impl IcpController {
     }
 
     fn icp_write_region(&mut self, addr: u32, data: &[u8], custom_block: bool) -> bool {
-        self.switch_mode(Mode::ICP);
+        self.switch_mode(Mode::Icp);
 
         let Some(chip_type) = self.chip_type else {
             return false;
@@ -614,8 +614,8 @@ impl IcpController {
             return false;
         }
 
-        for i in 2..data.len() {
-            self.send_icp_byte(data[i]);
+        for byte in data.iter().skip(2) {
+            self.send_icp_byte(*byte);
             self.delay_us(5);
             self.send_icp_byte(0x00);
             if !self.tdo_read() {
@@ -642,7 +642,7 @@ impl IcpController {
     }
 
     fn icp_mass_erase(&mut self, alternate: bool) -> bool {
-        self.switch_mode(Mode::ICP);
+        self.switch_mode(Mode::Icp);
 
         let Some(chip_type) = self.chip_type else {
             return false;
@@ -684,11 +684,11 @@ impl IcpController {
             self.send_icp_byte(0x00);
         }
 
-        return true; // TODO: at some point, time out and return false
+        true // TODO: at some point, time out and return false
     }
 
     fn icp_erase_flash(&mut self, addr: u32) -> bool {
-        self.switch_mode(Mode::ICP);
+        self.switch_mode(Mode::Icp);
 
         let Some(chip_type) = self.chip_type else {
             return false;
@@ -841,8 +841,8 @@ fn main() -> ! {
                     let _ = nb::block!(tx.write(cmd::RSP_DATA));
                     let _ = nb::block!(tx.write(read_len as u8));
                     let _ = nb::block!(tx.write((read_len >> 8) as u8));
-                    for i in 0..read_len {
-                        let _ = nb::block!(tx.write(buffer[i]));
+                    for byte in buffer[..read_len].iter() {
+                        let _ = nb::block!(tx.write(*byte));
                     }
                 } else {
                     let _ = nb::block!(tx.write(cmd::RSP_ERR));
@@ -871,8 +871,8 @@ fn main() -> ! {
                     let _ = nb::block!(tx.write(cmd::RSP_DATA));
                     let _ = nb::block!(tx.write(read_len as u8));
                     let _ = nb::block!(tx.write((read_len >> 8) as u8));
-                    for i in 0..read_len {
-                        let _ = nb::block!(tx.write(buffer[i]));
+                    for byte in buffer[..read_len].iter() {
+                        let _ = nb::block!(tx.write(*byte));
                     }
                 } else {
                     let _ = nb::block!(tx.write(cmd::RSP_ERR));
@@ -898,8 +898,8 @@ fn main() -> ! {
                 let write_len = len.min(buffer.len());
 
                 // Read data to write
-                for i in 0..write_len {
-                    buffer[i] = nb::block!(rx.read()).unwrap_or(0);
+                for byte in buffer[..write_len].iter_mut() {
+                    *byte = nb::block!(rx.read()).unwrap_or(0);
                 }
 
                 if icp.icp_write_flash(addr, &buffer[..write_len]) {
@@ -955,8 +955,8 @@ fn main() -> ! {
                 let write_len = len.min(buffer.len());
 
                 // Read data to write
-                for i in 0..write_len {
-                    buffer[i] = nb::block!(rx.read()).unwrap_or(0);
+                for byte in buffer[..write_len].iter_mut() {
+                    *byte = nb::block!(rx.read()).unwrap_or(0);
                 }
 
                 if icp.icp_write_custom_region(addr, &buffer[..write_len]) {
