@@ -45,18 +45,13 @@ fn cli() -> Command {
                 .arg(arg!(output_file: <OUTPUT_FILE> "file to write flash contents to"))
                 .arg(
                     arg!(-c --programmer <PROGRAMMER>)
-                        .value_parser(["sinolink", "sinodude-serial"])
+                        .value_parser(["sinodude-serial"])
                         .required(true),
                 )
                 .arg(
                     arg!(-p --part <PART>)
                         .value_parser(PARTS.keys().copied().collect::<Vec<_>>())
                         .required(true),
-                )
-                .arg(
-                    arg!(-t --power <POWER_SETTING> "Power setting for sinolink programmer")
-                        .value_parser(["3v3", "5v", "external"])
-                        .required(false),
                 )
                 .arg(
                     arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
@@ -70,18 +65,13 @@ fn cli() -> Command {
                 .arg(arg!(input_file: <INPUT_FILE> "file to write to flash"))
                 .arg(
                     arg!(-c --programmer <PROGRAMMER>)
-                        .value_parser(["sinolink", "sinodude-serial"])
+                        .value_parser(["sinodude-serial"])
                         .required(true),
                 )
                 .arg(
                     arg!(-p --part <PART>)
                         .value_parser(PARTS.keys().copied().collect::<Vec<_>>())
                         .required(true),
-                )
-                .arg(
-                    arg!(-t --power <POWER_SETTING> "Power setting for sinolink programmer")
-                        .value_parser(["3v3", "5v", "external"])
-                        .required(false),
                 )
                 .arg(
                     arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
@@ -160,37 +150,15 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 .map(|s| s.as_str())
                 .unwrap();
 
-            let programmer_name = sub_matches
-                .get_one::<String>("programmer")
-                .map(|s| s.as_str())
-                .unwrap();
-
             let part = PARTS.get(part_name).unwrap();
 
-            let result = match programmer_name {
-                "sinolink" => {
-                    let power_setting_name = sub_matches
-                        .get_one::<String>("power")
-                        .map(|s| s.as_str())
-                        .expect("--power is required for sinolink programmer");
-                    let power_setting = PowerSetting::from_option(power_setting_name);
-                    let sinolink = SinolinkProgrammer::new(part, power_setting)?;
-                    sinolink.read_init()?;
-                    sinolink.read_flash()?
-                }
-                "sinodude-serial" => {
-                    let port = sub_matches
-                        .get_one::<String>("port")
-                        .expect("--port is required for sinodude-serial programmer");
-                    let mut programmer =
-                        SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
-                    programmer.read_init()?;
-                    let result = programmer.read_flash()?;
-                    programmer.finish()?;
-                    result
-                }
-                _ => unreachable!(),
-            };
+            let port = sub_matches
+                .get_one::<String>("port")
+                .expect("--port is required for sinodude-serial programmer");
+            let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            programmer.read_init()?;
+            let result = programmer.read_flash()?;
+            programmer.finish()?;
 
             let digest = md5::compute(&result);
             info!("MD5: {:x}", digest);
@@ -209,11 +177,6 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 .map(|s| s.as_str())
                 .unwrap();
 
-            let programmer_name = sub_matches
-                .get_one::<String>("programmer")
-                .map(|s| s.as_str())
-                .unwrap();
-
             let part = PARTS.get(part_name).unwrap();
 
             let mut file = fs::File::open(input_file)?;
@@ -226,149 +189,133 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 firmware.resize(part.flash_size, 0);
             }
 
-            match programmer_name {
-                "sinolink" => {
-                    let power_setting_name = sub_matches
-                        .get_one::<String>("power")
-                        .map(|s| s.as_str())
-                        .expect("--power is required for sinolink programmer");
-                    let power_setting = PowerSetting::from_option(power_setting_name);
-                    let sinolink = SinolinkProgrammer::new(part, power_setting)?;
-                    sinolink.write_init()?;
-                    sinolink.write_flash(&firmware[0..65536])?;
+            let port = sub_matches
+                .get_one::<String>("port")
+                .expect("--port is required for sinodude-serial programmer");
+
+            // Parse and validate address range before connecting
+            let sector_size = part.sector_size;
+            let start_addr = sub_matches
+                .get_one::<String>("start_addr")
+                .map(|s| parse_addr(s))
+                .transpose()?;
+            let end_addr = sub_matches
+                .get_one::<String>("end_addr")
+                .map(|s| parse_addr(s))
+                .transpose()?;
+
+            if let Some(addr) = start_addr {
+                if addr % sector_size != 0 {
+                    return Err(format!(
+                        "Start address {:#x} is not aligned to sector size {:#x}",
+                        addr, sector_size
+                    )
+                    .into());
                 }
-                "sinodude-serial" => {
-                    let port = sub_matches
-                        .get_one::<String>("port")
-                        .expect("--port is required for sinodude-serial programmer");
-
-                    // Parse and validate address range before connecting
-                    let sector_size = part.sector_size;
-                    let start_addr = sub_matches
-                        .get_one::<String>("start_addr")
-                        .map(|s| parse_addr(s))
-                        .transpose()?;
-                    let end_addr = sub_matches
-                        .get_one::<String>("end_addr")
-                        .map(|s| parse_addr(s))
-                        .transpose()?;
-
-                    if let Some(addr) = start_addr {
-                        if addr % sector_size != 0 {
-                            return Err(format!(
-                                "Start address {:#x} is not aligned to sector size {:#x}",
-                                addr, sector_size
-                            )
-                            .into());
-                        }
-                    }
-                    if let Some(addr) = end_addr {
-                        if addr % sector_size != 0 {
-                            return Err(format!(
-                                "End address {:#x} is not aligned to sector size {:#x}",
-                                addr, sector_size
-                            )
-                            .into());
-                        }
-                    }
-
-                    let mut programmer =
-                        SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
-                    programmer.write_init()?;
-
-                    // Use sector-based erase for partial writes, mass erase for full writes
-                    match (start_addr, end_addr) {
-                        (Some(start), Some(end)) => {
-                            programmer.erase_sectors(start as u32, end as u32)?;
-                        }
-                        (Some(start), None) => {
-                            programmer.erase_sectors(start as u32, part.flash_size as u32)?;
-                        }
-                        (None, Some(end)) => {
-                            programmer.erase_sectors(0, end as u32)?;
-                        }
-                        (None, None) => {
-                            programmer.mass_erase()?;
-                        }
-                    }
-
-                    // Parse custom fields
-                    let customer_id: Option<[u8; 4]> = sub_matches
-                        .get_one::<String>("customer_id")
-                        .map(|s| parse_hex(s))
-                        .transpose()?
-                        .map(|v| {
-                            if v.len() != 4 {
-                                return Err("Customer ID must be exactly 4 bytes");
-                            }
-                            Ok(v.as_slice().try_into().unwrap())
-                        })
-                        .transpose()?;
-
-                    let operation_number: Option<[u8; 2]> = sub_matches
-                        .get_one::<String>("operation_number")
-                        .map(|s| parse_hex(s))
-                        .transpose()?
-                        .map(|v| {
-                            if v.len() != 2 {
-                                return Err("Operation number must be exactly 2 bytes");
-                            }
-                            Ok(v.as_slice().try_into().unwrap())
-                        })
-                        .transpose()?;
-
-                    let customer_option: Option<Vec<u8>> = sub_matches
-                        .get_one::<String>("customer_option")
-                        .map(|s| parse_hex(s))
-                        .transpose()?;
-
-                    let security: Option<Vec<u8>> = sub_matches
-                        .get_one::<String>("security")
-                        .map(|s| parse_hex(s))
-                        .transpose()?;
-
-                    let serial_number: Option<[u8; 4]> = sub_matches
-                        .get_one::<String>("serial_number")
-                        .map(|s| parse_hex(s))
-                        .transpose()?
-                        .map(|v| {
-                            if v.len() != 4 {
-                                return Err("Serial number must be exactly 4 bytes");
-                            }
-                            Ok(v.as_slice().try_into().unwrap())
-                        })
-                        .transpose()?;
-
-                    // Write all custom fields in one transaction (use stored values as defaults)
-                    programmer.write_custom_fields(
-                        customer_id.as_ref(),
-                        operation_number.as_ref(),
-                        customer_option.as_deref(),
-                        security.as_deref(),
-                        serial_number.as_ref(),
-                        true, // use_stored_defaults
-                    )?;
-
-                    // Use range write for partial writes, full write otherwise
-                    match (start_addr, end_addr) {
-                        (Some(start), Some(end)) => {
-                            programmer.write_flash_range(&firmware, start, end)?;
-                        }
-                        (Some(start), None) => {
-                            programmer.write_flash_range(&firmware, start, firmware.len())?;
-                        }
-                        (None, Some(end)) => {
-                            programmer.write_flash_range(&firmware, 0, end)?;
-                        }
-                        (None, None) => {
-                            programmer.write_flash(&firmware)?;
-                        }
-                    }
-
-                    programmer.finish()?;
-                }
-                _ => unreachable!(),
             }
+            if let Some(addr) = end_addr {
+                if addr % sector_size != 0 {
+                    return Err(format!(
+                        "End address {:#x} is not aligned to sector size {:#x}",
+                        addr, sector_size
+                    )
+                    .into());
+                }
+            }
+
+            let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            programmer.write_init()?;
+
+            // Use sector-based erase for partial writes, mass erase for full writes
+            match (start_addr, end_addr) {
+                (Some(start), Some(end)) => {
+                    programmer.erase_sectors(start as u32, end as u32)?;
+                }
+                (Some(start), None) => {
+                    programmer.erase_sectors(start as u32, part.flash_size as u32)?;
+                }
+                (None, Some(end)) => {
+                    programmer.erase_sectors(0, end as u32)?;
+                }
+                (None, None) => {
+                    programmer.mass_erase()?;
+                }
+            }
+
+            // Parse custom fields
+            let customer_id: Option<[u8; 4]> = sub_matches
+                .get_one::<String>("customer_id")
+                .map(|s| parse_hex(s))
+                .transpose()?
+                .map(|v| {
+                    if v.len() != 4 {
+                        return Err("Customer ID must be exactly 4 bytes");
+                    }
+                    Ok(v.as_slice().try_into().unwrap())
+                })
+                .transpose()?;
+
+            let operation_number: Option<[u8; 2]> = sub_matches
+                .get_one::<String>("operation_number")
+                .map(|s| parse_hex(s))
+                .transpose()?
+                .map(|v| {
+                    if v.len() != 2 {
+                        return Err("Operation number must be exactly 2 bytes");
+                    }
+                    Ok(v.as_slice().try_into().unwrap())
+                })
+                .transpose()?;
+
+            let customer_option: Option<Vec<u8>> = sub_matches
+                .get_one::<String>("customer_option")
+                .map(|s| parse_hex(s))
+                .transpose()?;
+
+            let security: Option<Vec<u8>> = sub_matches
+                .get_one::<String>("security")
+                .map(|s| parse_hex(s))
+                .transpose()?;
+
+            let serial_number: Option<[u8; 4]> = sub_matches
+                .get_one::<String>("serial_number")
+                .map(|s| parse_hex(s))
+                .transpose()?
+                .map(|v| {
+                    if v.len() != 4 {
+                        return Err("Serial number must be exactly 4 bytes");
+                    }
+                    Ok(v.as_slice().try_into().unwrap())
+                })
+                .transpose()?;
+
+            // Write all custom fields in one transaction (use stored values as defaults)
+            programmer.write_custom_fields(
+                customer_id.as_ref(),
+                operation_number.as_ref(),
+                customer_option.as_deref(),
+                security.as_deref(),
+                serial_number.as_ref(),
+                true, // use_stored_defaults
+            )?;
+
+            // Use range write for partial writes, full write otherwise
+            match (start_addr, end_addr) {
+                (Some(start), Some(end)) => {
+                    programmer.write_flash_range(&firmware, start, end)?;
+                }
+                (Some(start), None) => {
+                    programmer.write_flash_range(&firmware, start, firmware.len())?;
+                }
+                (None, Some(end)) => {
+                    programmer.write_flash_range(&firmware, 0, end)?;
+                }
+                (None, None) => {
+                    programmer.write_flash(&firmware)?;
+                }
+            }
+
+            programmer.finish()?;
         }
         Some(("erase", sub_matches)) => {
             let part_name = sub_matches
@@ -376,73 +323,62 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 .map(|s| s.as_str())
                 .unwrap();
 
-            let programmer_name = sub_matches
-                .get_one::<String>("programmer")
-                .map(|s| s.as_str())
-                .unwrap();
-
             let part = PARTS.get(part_name).unwrap();
 
-            match programmer_name {
-                "sinodude-serial" => {
-                    let port = sub_matches
-                        .get_one::<String>("port")
-                        .expect("--port is required for sinodude-serial programmer");
+            let port = sub_matches
+                .get_one::<String>("port")
+                .expect("--port is required for sinodude-serial programmer");
 
-                    // Parse and validate address range before connecting
-                    let sector_size = part.sector_size;
-                    let start_addr = sub_matches
-                        .get_one::<String>("start_addr")
-                        .map(|s| parse_addr(s))
-                        .transpose()?;
-                    let end_addr = sub_matches
-                        .get_one::<String>("end_addr")
-                        .map(|s| parse_addr(s))
-                        .transpose()?;
+            // Parse and validate address range before connecting
+            let sector_size = part.sector_size;
+            let start_addr = sub_matches
+                .get_one::<String>("start_addr")
+                .map(|s| parse_addr(s))
+                .transpose()?;
+            let end_addr = sub_matches
+                .get_one::<String>("end_addr")
+                .map(|s| parse_addr(s))
+                .transpose()?;
 
-                    if let Some(addr) = start_addr {
-                        if addr % sector_size != 0 {
-                            return Err(format!(
-                                "Start address {:#x} is not aligned to sector size {:#x}",
-                                addr, sector_size
-                            )
-                            .into());
-                        }
-                    }
-                    if let Some(addr) = end_addr {
-                        if addr % sector_size != 0 {
-                            return Err(format!(
-                                "End address {:#x} is not aligned to sector size {:#x}",
-                                addr, sector_size
-                            )
-                            .into());
-                        }
-                    }
-
-                    let mut programmer =
-                        SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
-                    programmer.erase_init()?;
-
-                    // Use sector-based erase for partial erases, mass erase otherwise
-                    match (start_addr, end_addr) {
-                        (Some(start), Some(end)) => {
-                            programmer.erase_sectors(start as u32, end as u32)?;
-                        }
-                        (Some(start), None) => {
-                            programmer.erase_sectors(start as u32, part.flash_size as u32)?;
-                        }
-                        (None, Some(end)) => {
-                            programmer.erase_sectors(0, end as u32)?;
-                        }
-                        (None, None) => {
-                            programmer.mass_erase()?;
-                        }
-                    }
-
-                    programmer.finish()?;
+            if let Some(addr) = start_addr {
+                if addr % sector_size != 0 {
+                    return Err(format!(
+                        "Start address {:#x} is not aligned to sector size {:#x}",
+                        addr, sector_size
+                    )
+                    .into());
                 }
-                _ => unreachable!(),
             }
+            if let Some(addr) = end_addr {
+                if addr % sector_size != 0 {
+                    return Err(format!(
+                        "End address {:#x} is not aligned to sector size {:#x}",
+                        addr, sector_size
+                    )
+                    .into());
+                }
+            }
+
+            let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            programmer.erase_init()?;
+
+            // Use sector-based erase for partial erases, mass erase otherwise
+            match (start_addr, end_addr) {
+                (Some(start), Some(end)) => {
+                    programmer.erase_sectors(start as u32, end as u32)?;
+                }
+                (Some(start), None) => {
+                    programmer.erase_sectors(start as u32, part.flash_size as u32)?;
+                }
+                (None, Some(end)) => {
+                    programmer.erase_sectors(0, end as u32)?;
+                }
+                (None, None) => {
+                    programmer.mass_erase()?;
+                }
+            }
+
+            programmer.finish()?;
         }
         _ => unreachable!(),
     }

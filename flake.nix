@@ -58,7 +58,7 @@
             inherit buildInputs;
 
             meta = with pkgs.lib; {
-              description = "A utility for interfacing with sinowealth programming tools e.g. sinolink";
+              description = "A programming tool for SinoWealth 8051 microcontrollers";
               homepage = "https://github.com/carlossless/sinodude";
               license = licenses.mit;
               mainProgram = "sinodude";
