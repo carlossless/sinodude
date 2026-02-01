@@ -1,6 +1,6 @@
 // Auto-generated from GPT file for XA2000
 
-use super::{AddressField, Options, Part};
+use super::{AddressField, Options, Part, Voltage};
 use hex_literal::hex;
 use indexmap::IndexMap;
 
@@ -23,6 +23,7 @@ pub const PART: Part = Part {
     customer_option: AddressField { address: 0x0806 },
     security: AddressField { address: 0x080a },
     serial_number: AddressField { address: 0x083c },
+    compatible_voltages: &[Voltage::V5_0],
     options,
 };
 

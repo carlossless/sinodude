@@ -1,6 +1,6 @@
 use super::super::parts::{
     find_parts_by_jtag_id, find_parts_by_part_number, format_parsed_options, parse_code_options,
-    Part, Region,
+    Part, Region, Voltage,
 };
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
@@ -97,6 +97,8 @@ pub enum SinodudeSerialProgrammerError {
         expected: Vec<u8>,
         actual: Vec<u8>,
     },
+    #[error("Part does not support 5.0V required by sinodude-serial programmer. Supported voltages: {supported}")]
+    UnsupportedVoltage { supported: String },
 }
 
 pub struct SinodudeSerialProgrammer {
@@ -120,6 +122,17 @@ impl SinodudeSerialProgrammer {
         chip_type: &'static Part,
         cancelled: Arc<AtomicBool>,
     ) -> Result<Self, SinodudeSerialProgrammerError> {
+        // Check that the part supports 5.0V (required by sinodude-serial programmer)
+        if !chip_type.compatible_voltages.contains(&Voltage::V5_0) {
+            let supported = chip_type
+                .compatible_voltages
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(SinodudeSerialProgrammerError::UnsupportedVoltage { supported });
+        }
+
         eprintln!("Opening serial port: {}", port_name);
 
         let port = serialport::new(port_name, BAUD_RATE)

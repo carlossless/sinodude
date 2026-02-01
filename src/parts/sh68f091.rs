@@ -1,6 +1,6 @@
 // Auto-generated from GPT file for SH68F091
 
-use super::{AddressField, Options, Part};
+use super::{AddressField, Options, Part, Voltage};
 use hex_literal::hex;
 use indexmap::IndexMap;
 
@@ -23,6 +23,7 @@ pub const PART: Part = Part {
     customer_option: AddressField { address: 0x0000 },
     security: AddressField { address: 0x0000 },
     serial_number: AddressField { address: 0x0000 },
+    compatible_voltages: &[Voltage::V3_3],
     options,
 };
 

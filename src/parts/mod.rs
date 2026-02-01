@@ -311,6 +311,22 @@ pub enum Region {
     Custom,
 }
 
+/// Compatible supply voltages for the part
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Voltage {
+    V3_3,
+    V5_0,
+}
+
+impl std::fmt::Display for Voltage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Voltage::V3_3 => write!(f, "3.3V"),
+            Voltage::V5_0 => write!(f, "5.0V"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct AddressField {
     pub address: u32,
@@ -449,6 +465,7 @@ pub struct Part {
     pub customer_option: AddressField,
     pub security: AddressField,
     pub serial_number: AddressField,
+    pub compatible_voltages: &'static [Voltage],
     pub options: fn() -> Options,
 }
 

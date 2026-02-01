@@ -1,6 +1,6 @@
 // Auto-generated from GPT file for SH79F168
 
-use super::{AddressField, OptionInfo, Options, Part};
+use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;
 use indexmap::IndexMap;
 
@@ -23,6 +23,7 @@ pub const PART: Part = Part {
     customer_option: AddressField { address: 0x3fc6 },
     security: AddressField { address: 0x3fca },
     serial_number: AddressField { address: 0x3ffc },
+    compatible_voltages: &[Voltage::V5_0],
     options,
 };
 

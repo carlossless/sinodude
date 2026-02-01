@@ -63,6 +63,12 @@ pub struct AddressField {
     pub address: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Voltage {
+    V3_3,
+    V5_0,
+}
+
 #[derive(Debug, Clone)]
 pub struct PartDefinition {
     pub chip_name: String,
@@ -85,6 +91,7 @@ pub struct PartDefinition {
     pub customer_option: AddressField,
     pub security: AddressField,
     pub serial_number: AddressField,
+    pub compatible_voltages: Vec<Voltage>,
     pub options: Vec<OptionDefinition>,
 }
 
@@ -280,6 +287,28 @@ fn parse_gpt_content(content: &str) -> Result<PartDefinition, GptError> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
 
+    // Parse VDD voltages (ignore 0.0)
+    let mut compatible_voltages = Vec::new();
+    for key in ["VDD0", "VDD1", "VDD2"] {
+        if let Some(value) = fields.get(key) {
+            if let Ok(v) = value.parse::<f32>() {
+                match v {
+                    v if (v - 3.3).abs() < 0.01 => {
+                        if !compatible_voltages.contains(&Voltage::V3_3) {
+                            compatible_voltages.push(Voltage::V3_3);
+                        }
+                    }
+                    v if (v - 5.0).abs() < 0.01 => {
+                        if !compatible_voltages.contains(&Voltage::V5_0) {
+                            compatible_voltages.push(Voltage::V5_0);
+                        }
+                    }
+                    _ => {} // Ignore 0.0 and any other values
+                }
+            }
+        }
+    }
+
     // Parse address fields
     let customer_id = parse_address_field("CustomerID");
     let operation_number = parse_address_field("OperationNumber");
@@ -322,6 +351,7 @@ fn parse_gpt_content(content: &str) -> Result<PartDefinition, GptError> {
         customer_option,
         security,
         serial_number,
+        compatible_voltages,
         options,
     })
 }
@@ -338,9 +368,9 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
         part.chip_name
     ));
     if part.options.is_empty() {
-        output.push_str("use super::{AddressField, Options, Part};\n");
+        output.push_str("use super::{AddressField, Options, Part, Voltage};\n");
     } else {
-        output.push_str("use super::{AddressField, OptionInfo, Options, Part};\n");
+        output.push_str("use super::{AddressField, OptionInfo, Options, Part, Voltage};\n");
     }
     output.push_str("use hex_literal::hex;\n");
     output.push_str("use indexmap::IndexMap;\n\n");
@@ -399,6 +429,19 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
     output.push_str(&format!(
         "    serial_number: {},\n",
         format_address_field(&part.serial_number)
+    ));
+    // Generate compatible_voltages
+    let voltages_str: Vec<&str> = part
+        .compatible_voltages
+        .iter()
+        .map(|v| match v {
+            Voltage::V3_3 => "Voltage::V3_3",
+            Voltage::V5_0 => "Voltage::V5_0",
+        })
+        .collect();
+    output.push_str(&format!(
+        "    compatible_voltages: &[{}],\n",
+        voltages_str.join(", ")
     ));
     output.push_str("    options,\n");
 
