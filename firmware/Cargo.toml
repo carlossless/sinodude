@@ -10,7 +10,7 @@ atmega328p = ["avr-device/atmega328p", "atmega-hal/atmega328p"]
 atmega328pb = ["avr-device/atmega328pb", "atmega-hal/atmega328pb"]
 
 [dependencies]
-avr-device = { version = "0.5" }
+avr-device = { version = "0.8" }
 embedded-hal = "1.0"
 ufmt = "0.2"
 nb = "1.1"
