@@ -1,7 +1,6 @@
 use clap::Parser;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -16,46 +15,87 @@ pub enum GptError {
     Parse(String),
 }
 
+/// Cipher key. `.0` is the ADD byte, `.1` is the constant XOR byte. The cipher
+/// is `cipher[i] = ((plain[i] XOR const) + add) mod 256` per byte.
 type KeyPair = (u8, u8);
-const HEADER_SIZE: usize = 17;
 
-fn decrypt(mut input: impl Iterator<Item = u8>, keys: KeyPair) -> Result<Vec<u8>, GptError> {
-    let header: Vec<u8> = input.by_ref().take(HEADER_SIZE).collect();
-    if header != b"[Version]\r\n3.00\r\n" {
-        return Err(GptError::InvalidHeader);
-    }
+/// Plain header literal. Some "alias" files prepend a metadata line (e.g.
+/// `0031:SH32F9803.gpt:76D:...:`) before this magic — anything earlier in the
+/// file is preserved verbatim.
+const HEADER_MAGIC: &[u8] = b"[Version]\r\n3.00\r\n";
 
-    let mut result: Vec<u8> = vec![];
+/// Plain prefixes the decrypted body may start with. The cipher's encrypted
+/// body always begins with one of these — chip family decides which:
+///   - `[Version]\r\n3.00\r\n` for the 32-bit Flash family (the magic is doubled inside the body as a self-check)
+///   - `[ChipName]` for OTP / Grace-OTP / most Flash family
+///   - `[ChipNumber]` for a small number of alias-prefixed files
+const KNOWN_PREFIXES: &[&[u8]] = &[HEADER_MAGIC, b"[ChipName]", b"[ChipNumber]"];
 
-    for x in input {
-        let mut num: u16 = x as u16;
-        if num < keys.0 as u16 {
-            num += 256;
-        }
-        let partial = (num - keys.0 as u16) as u8;
-        result.push(partial ^ keys.1);
-    }
-
-    Ok(result)
+/// Decrypt one byte with the cipher.
+fn decrypt_byte(cipher: u8, keys: KeyPair) -> u8 {
+    let num = cipher as u16 + if cipher < keys.0 { 256 } else { 0 };
+    ((num - keys.0 as u16) as u8) ^ keys.1
 }
 
-fn keypair(filename: &str) -> Result<KeyPair, GptError> {
-    let stem = Path::new(filename)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| GptError::Parse("Invalid filename".to_string()))?;
-    let len = stem.len();
+/// Decrypt the encrypted body with known keys (no header processing).
+fn decrypt_body(body: &[u8], keys: KeyPair) -> Vec<u8> {
+    body.iter().map(|&c| decrypt_byte(c, keys)).collect()
+}
 
-    if len < 4 {
-        return Err(GptError::Parse(
-            "Filename too short for key extraction".to_string(),
-        ));
+/// All `(add, const)` pairs that decrypt the start of `body` to `target`. There
+/// can be several at this short-length plaintext, so the caller scores them.
+fn candidate_keys(body: &[u8], target: &[u8]) -> Vec<KeyPair> {
+    let mut out = Vec::new();
+    if body.len() < target.len() || target.is_empty() {
+        return out;
     }
-    let key1 = u8::from_str_radix(&stem[len - 2..len], 16)
-        .map_err(|_| GptError::Parse("Invalid key1 in filename".to_string()))?;
-    let key2 = u8::from_str_radix(&stem[len - 4..len - 2], 16)
-        .map_err(|_| GptError::Parse("Invalid key2 in filename".to_string()))?;
-    Ok((key1, key2))
+    // For each candidate `add`, `const` is fixed by position 0; verify positions 1..N.
+    for add in 0u16..=255 {
+        let add_b = add as u8;
+        let const_b = decrypt_byte(body[0], (add_b, 0)) ^ target[0];
+        let keys = (add_b, const_b);
+        if body[1..target.len()]
+            .iter()
+            .zip(target[1..].iter())
+            .all(|(&c, &p)| decrypt_byte(c, keys) == p)
+        {
+            out.push(keys);
+        }
+    }
+    out
+}
+
+/// Find keys, strip any alias prefix, and decrypt. Returns
+/// `(alias_prefix, keys, decrypted_body)`.
+fn find_keys_and_decrypt(data: &[u8]) -> Result<(Vec<u8>, KeyPair, Vec<u8>), GptError> {
+    let off = data
+        .windows(HEADER_MAGIC.len())
+        .position(|w| w == HEADER_MAGIC)
+        .ok_or(GptError::InvalidHeader)?;
+    let prefix = data[..off].to_vec();
+    let body_start = off + HEADER_MAGIC.len();
+    if body_start >= data.len() {
+        return Err(GptError::InvalidContent);
+    }
+    let body = &data[body_start..];
+
+    // Pick the (keys, plaintext) with the highest printable-byte count.
+    let mut best: Option<(usize, KeyPair, Vec<u8>)> = None;
+    for target in KNOWN_PREFIXES {
+        for keys in candidate_keys(body, target) {
+            let plain = decrypt_body(body, keys);
+            let score = plain
+                .iter()
+                .filter(|&&b| (0x20..=0x7e).contains(&b) || b == 9 || b == 10 || b == 13)
+                .count();
+            if best.as_ref().is_none_or(|(s, _, _)| score > *s) {
+                best = Some((score, keys, plain));
+            }
+        }
+    }
+
+    let (_, keys, plain) = best.ok_or(GptError::InvalidContent)?;
+    Ok((prefix, keys, plain))
 }
 
 #[derive(Debug, Clone)]
@@ -524,26 +564,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for file_path in &cli.files {
         println!("Processing: {}", file_path);
 
-        let path = Path::new(file_path);
-        let filename = path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .ok_or("Invalid filename")?;
-
-        // Read and decrypt
+        // Read, recover keys, decrypt
         let file_content = fs::read(file_path)?;
-        let keys = keypair(filename)?;
+        let (alias_prefix, keys, decrypted_body) = find_keys_and_decrypt(&file_content)?;
         println!("  Keys: ({:#04x}, {:#04x})", keys.0, keys.1);
 
-        let decrypted = decrypt(file_content.iter().copied(), keys)?;
-        let content = String::from_utf8_lossy(&decrypted);
+        let content = String::from_utf8_lossy(&decrypted_body);
         let part = parse_gpt_content(&content)?; // parse already to verify that it was correctly decrypted
 
         println!("  Chip: {}", part.chip_name);
 
-        // Write decrypted file
+        // Write decrypted file: preserve any alias-prefix bytes and the plain header.
+        let mut decrypted_output = alias_prefix;
+        decrypted_output.extend_from_slice(HEADER_MAGIC);
+        decrypted_output.extend_from_slice(&decrypted_body);
         let decrypted_path = format!("{}.decrypted", file_path);
-        fs::write(&decrypted_path, &decrypted)?;
+        fs::write(&decrypted_path, &decrypted_output)?;
         println!("  Decrypted: {}", decrypted_path);
 
         if cli.decrypt_only {
