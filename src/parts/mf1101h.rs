@@ -30,132 +30,158 @@ pub const PART: Part = Part {
 /// Get all code options metadata
 pub fn options() -> Options {
     IndexMap::from([
-        ("OP_WDT", OptionInfo {
-            byte_index: 0,
-            bits_start: 7,
-            bits_end: 7,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Disable WDT function"),
-                (1, "Enable WDT function"),
-            ]),
-        }),
-        ("OP_ WDTPD", OptionInfo {
-            byte_index: 0,
-            bits_start: 6,
-            bits_end: 6,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Disable WDT function in the Power-Down mode"),
-                (1, "Enable WDT function in the Power-Down mode"),
-            ]),
-        }),
-        ("OP_RST", OptionInfo {
-            byte_index: 0,
-            bits_start: 5,
-            bits_end: 5,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Pin P4.0 used as RST pin"),
-                (1, "Pin P4.0 used as I/O pin"),
-            ]),
-        }),
-        ("OP_WMT", OptionInfo {
-            byte_index: 0,
-            bits_start: 3,
-            bits_end: 4,
-            editable: true,
-            states: IndexMap::from([
-                (0, "longest warm up time"),
-                (1, "longer warm up time"),
-                (2, "shorter warm up time"),
-                (3, "shortest warm up time"),
-            ]),
-        }),
-        ("OP_OSC", OptionInfo {
-            byte_index: 0,
-            bits_start: 0,
-            bits_end: 2,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Internal RC oscillator (16.6MHz)"),
-                (2, "External clock source (30kHz - 16.6MHz)"),
-                (3, "32.768kHz Crystal oscillator"),
-                (5, "Crystal oscillator(400kHz - 16MHz)"),
-                (6, "Ceramic resonator(400kHz - 16MHz)"),
-            ]),
-        }),
-        ("OP_LVREN", OptionInfo {
-            byte_index: 1,
-            bits_start: 7,
-            bits_end: 7,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Disable LVR function"),
-                (1, "Enable LVR function"),
-            ]),
-        }),
-        ("OP_LVRLE", OptionInfo {
-            byte_index: 1,
-            bits_start: 5,
-            bits_end: 6,
-            editable: true,
-            states: IndexMap::from([
-                (0, "4.1V LVR Level 1"),
-                (2, "3.7V LVR Level 2"),
-                (1, "2.8V LVR Level 3"),
-            ]),
-        }),
-        ("OP_SCM", OptionInfo {
-            byte_index: 1,
-            bits_start: 3,
-            bits_end: 3,
-            editable: true,
-            states: IndexMap::from([
-                (0, "SCM is invalid in warm up period"),
-                (1, "SCM is valid in warm up period"),
-            ]),
-        }),
-        ("OP_IO", OptionInfo {
-            byte_index: 1,
-            bits_start: 0,
-            bits_end: 0,
-            editable: true,
-            states: IndexMap::from([
-                (0, "IO is Input Only mode when reset occurs"),
-                (1, "IO is Quasi-Bi mode when reset occurs"),
-            ]),
-        }),
-        ("OP_OSCDRV", OptionInfo {
-            byte_index: 3,
-            bits_start: 3,
-            bits_end: 4,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Minimum"),
-                (1, "Middle"),
-                (2, "Maximum"),
-            ]),
-        }),
-        ("OP_P3", OptionInfo {
-            byte_index: 3,
-            bits_start: 1,
-            bits_end: 1,
-            editable: true,
-            states: IndexMap::from([
-                (0, "P3 sink ability normal mode"),
-                (1, "P3 sink ability large mode"),
-            ]),
-        }),
-        ("OP_P1P4", OptionInfo {
-            byte_index: 3,
-            bits_start: 0,
-            bits_end: 0,
-            editable: true,
-            states: IndexMap::from([
-                (0, "P1/P4 dirver ability normal mode"),
-                (1, "P1/P4 dirver ability large mode"),
-            ]),
-        }),
+        (
+            "OP_WDT",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 7,
+                bits_end: 7,
+                editable: true,
+                states: IndexMap::from([(0, "Disable WDT function"), (1, "Enable WDT function")]),
+            },
+        ),
+        (
+            "OP_ WDTPD",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 6,
+                bits_end: 6,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "Disable WDT function in the Power-Down mode"),
+                    (1, "Enable WDT function in the Power-Down mode"),
+                ]),
+            },
+        ),
+        (
+            "OP_RST",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 5,
+                bits_end: 5,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "Pin P4.0 used as RST pin"),
+                    (1, "Pin P4.0 used as I/O pin"),
+                ]),
+            },
+        ),
+        (
+            "OP_WMT",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 3,
+                bits_end: 4,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "longest warm up time"),
+                    (1, "longer warm up time"),
+                    (2, "shorter warm up time"),
+                    (3, "shortest warm up time"),
+                ]),
+            },
+        ),
+        (
+            "OP_OSC",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 0,
+                bits_end: 2,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "Internal RC oscillator (16.6MHz)"),
+                    (2, "External clock source (30kHz - 16.6MHz)"),
+                    (3, "32.768kHz Crystal oscillator"),
+                    (5, "Crystal oscillator(400kHz - 16MHz)"),
+                    (6, "Ceramic resonator(400kHz - 16MHz)"),
+                ]),
+            },
+        ),
+        (
+            "OP_LVREN",
+            OptionInfo {
+                byte_index: 1,
+                bits_start: 7,
+                bits_end: 7,
+                editable: true,
+                states: IndexMap::from([(0, "Disable LVR function"), (1, "Enable LVR function")]),
+            },
+        ),
+        (
+            "OP_LVRLE",
+            OptionInfo {
+                byte_index: 1,
+                bits_start: 5,
+                bits_end: 6,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "4.1V LVR Level 1"),
+                    (2, "3.7V LVR Level 2"),
+                    (1, "2.8V LVR Level 3"),
+                ]),
+            },
+        ),
+        (
+            "OP_SCM",
+            OptionInfo {
+                byte_index: 1,
+                bits_start: 3,
+                bits_end: 3,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "SCM is invalid in warm up period"),
+                    (1, "SCM is valid in warm up period"),
+                ]),
+            },
+        ),
+        (
+            "OP_IO",
+            OptionInfo {
+                byte_index: 1,
+                bits_start: 0,
+                bits_end: 0,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "IO is Input Only mode when reset occurs"),
+                    (1, "IO is Quasi-Bi mode when reset occurs"),
+                ]),
+            },
+        ),
+        (
+            "OP_OSCDRV",
+            OptionInfo {
+                byte_index: 3,
+                bits_start: 3,
+                bits_end: 4,
+                editable: true,
+                states: IndexMap::from([(0, "Minimum"), (1, "Middle"), (2, "Maximum")]),
+            },
+        ),
+        (
+            "OP_P3",
+            OptionInfo {
+                byte_index: 3,
+                bits_start: 1,
+                bits_end: 1,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "P3 sink ability normal mode"),
+                    (1, "P3 sink ability large mode"),
+                ]),
+            },
+        ),
+        (
+            "OP_P1P4",
+            OptionInfo {
+                byte_index: 3,
+                bits_start: 0,
+                bits_end: 0,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "P1/P4 dirver ability normal mode"),
+                    (1, "P1/P4 dirver ability large mode"),
+                ]),
+            },
+        ),
     ])
 }

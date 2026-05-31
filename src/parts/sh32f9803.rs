@@ -29,16 +29,14 @@ pub const PART: Part = Part {
 
 /// Get all code options metadata
 pub fn options() -> Options {
-    IndexMap::from([
-        ("OP_IWDT", OptionInfo {
+    IndexMap::from([(
+        "OP_IWDT",
+        OptionInfo {
             byte_index: 0,
             bits_start: 0,
             bits_end: 3,
             editable: false,
-            states: IndexMap::from([
-                (0, "Enable WDT function"),
-                (5, "Disable WDT function"),
-            ]),
-        }),
-    ])
+            states: IndexMap::from([(0, "Enable WDT function"), (5, "Disable WDT function")]),
+        },
+    )])
 }

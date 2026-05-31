@@ -30,27 +30,33 @@ pub const PART: Part = Part {
 /// Get all code options metadata
 pub fn options() -> Options {
     IndexMap::from([
-        ("OP_MCMPIN", OptionInfo {
-            byte_index: 1,
-            bits_start: 0,
-            bits_end: 1,
-            editable: true,
-            states: IndexMap::from([
-                (0, "PC4-PC9:PWM21/PWM11/PWM01/PWM2/PWM1/PWM0"),
-                (1, "PC4-PC9:PWM0/PWM1/PWM2/PWM01/PWM11/PWM21"),
-                (2, "PC4-PC9:PWM21/PWM2/PWM11/PWM1/PWM01/PWM0"),
-                (3, "PC4-PC9:PWM0/PWM01/PWM1/PWM11/PWM2/PWM21"),
-            ]),
-        }),
-        ("OP_CRYCAP", OptionInfo {
-            byte_index: 0,
-            bits_start: 0,
-            bits_end: 0,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Crystal frequency is lower than 10Mhz"),
-                (1, "Crystal frequency is greater than 10Mhz"),
-            ]),
-        }),
+        (
+            "OP_MCMPIN",
+            OptionInfo {
+                byte_index: 1,
+                bits_start: 0,
+                bits_end: 1,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "PC4-PC9:PWM21/PWM11/PWM01/PWM2/PWM1/PWM0"),
+                    (1, "PC4-PC9:PWM0/PWM1/PWM2/PWM01/PWM11/PWM21"),
+                    (2, "PC4-PC9:PWM21/PWM2/PWM11/PWM1/PWM01/PWM0"),
+                    (3, "PC4-PC9:PWM0/PWM01/PWM1/PWM11/PWM2/PWM21"),
+                ]),
+            },
+        ),
+        (
+            "OP_CRYCAP",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 0,
+                bits_end: 0,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "Crystal frequency is lower than 10Mhz"),
+                    (1, "Crystal frequency is greater than 10Mhz"),
+                ]),
+            },
+        ),
     ])
 }

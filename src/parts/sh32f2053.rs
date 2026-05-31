@@ -30,110 +30,131 @@ pub const PART: Part = Part {
 /// Get all code options metadata
 pub fn options() -> Options {
     IndexMap::from([
-        ("OP_IWDT", OptionInfo {
-            byte_index: 0,
-            bits_start: 0,
-            bits_end: 3,
-            editable: true,
-            states: IndexMap::from([
-                (5, "Disable WDT function"),
-                (0, "Enable WDT function"),
-            ]),
-        }),
-        ("OP_WDTPD", OptionInfo {
-            byte_index: 0,
-            bits_start: 4,
-            bits_end: 4,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Disable IWDT function in the Power-Down mode"),
-                (1, "Enable IWDT function in the Power-Down mode"),
-            ]),
-        }),
-        ("OP_LVREN", OptionInfo {
-            byte_index: 0,
-            bits_start: 5,
-            bits_end: 5,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Disable LVR function"),
-                (1, "Enable LVR function"),
-            ]),
-        }),
-        ("OP_LVRLE", OptionInfo {
-            byte_index: 0,
-            bits_start: 6,
-            bits_end: 7,
-            editable: true,
-            states: IndexMap::from([
-                (0, "4.1V LVR Level"),
-                (1, "3.7V LVR Level"),
-                (2, "2.5V LVR Level"),
-            ]),
-        }),
-        ("OP_MCM1PIN", OptionInfo {
-            byte_index: 1,
-            bits_start: 0,
-            bits_end: 1,
-            editable: true,
-            states: IndexMap::from([
-                (0, "PB8-PB13: PWM21/PWM11/PWM01/PWM2/PWM1/PWM0"),
-                (1, "PB8-PB13: PWM0/PWM1/PWM2/PWM01/PWM11/PWM21"),
-                (2, "PB8-PB13: PWM21/PWM2/PWM11/PWM1/PWM01/PWM0"),
-                (3, "PB8-PB13: PWM0/PWM01/PWM1/PWM11/PWM2/PWM21"),
-            ]),
-        }),
-        ("OP_MCM2PIN", OptionInfo {
-            byte_index: 1,
-            bits_start: 2,
-            bits_end: 3,
-            editable: true,
-            states: IndexMap::from([
-                (0, "PB14-PC3 or PA15-PA10: PWM21/PWM11/PWM01/PWM2/PWM1/PWM0"),
-                (1, "PB14-PC3 or PA15-PA10: PWM0/PWM1/PWM2/PWM01/PWM11/PWM21"),
-                (2, "PB14-PC3 or PA15-PA10: PWM21/PWM2/PWM11/PWM1/PWM01/PWM0"),
-                (3, "PB14-PC3 or PA15-PA10: PWM0/PWM01/PWM1/PWM11/PWM2/PWM21"),
-            ]),
-        }),
-        ("OP_CSM", OptionInfo {
-            byte_index: 1,
-            bits_start: 4,
-            bits_end: 4,
-            editable: true,
-            states: IndexMap::from([
-                (0, "CSM Mode is on after power on reset"),
-                (1, "CSM Mode is off after power on reset"),
-            ]),
-        }),
-        ("OP_HSE16M", OptionInfo {
-            byte_index: 1,
-            bits_start: 6,
-            bits_end: 6,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Disable high-frequency 16M HSE"),
-                (1, "Enable high-frequency 16M HSE"),
-            ]),
-        }),
-        ("OP_FLSALG", OptionInfo {
-            byte_index: 1,
-            bits_start: 7,
-            bits_end: 7,
-            editable: false,
-            states: IndexMap::from([
-                (0, "Use BRCHSTAT as an accelerated basis"),
-                (1, "Disuse BRCHSTAT as an accelerated basis"),
-            ]),
-        }),
-        ("OP_ISP", OptionInfo {
-            byte_index: 7,
-            bits_start: 7,
-            bits_end: 7,
-            editable: false,
-            states: IndexMap::from([
-                (0, "Enable ISP function"),
-                (1, "Disable ISP function"),
-            ]),
-        }),
+        (
+            "OP_IWDT",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 0,
+                bits_end: 3,
+                editable: true,
+                states: IndexMap::from([(5, "Disable WDT function"), (0, "Enable WDT function")]),
+            },
+        ),
+        (
+            "OP_WDTPD",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 4,
+                bits_end: 4,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "Disable IWDT function in the Power-Down mode"),
+                    (1, "Enable IWDT function in the Power-Down mode"),
+                ]),
+            },
+        ),
+        (
+            "OP_LVREN",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 5,
+                bits_end: 5,
+                editable: true,
+                states: IndexMap::from([(0, "Disable LVR function"), (1, "Enable LVR function")]),
+            },
+        ),
+        (
+            "OP_LVRLE",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 6,
+                bits_end: 7,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "4.1V LVR Level"),
+                    (1, "3.7V LVR Level"),
+                    (2, "2.5V LVR Level"),
+                ]),
+            },
+        ),
+        (
+            "OP_MCM1PIN",
+            OptionInfo {
+                byte_index: 1,
+                bits_start: 0,
+                bits_end: 1,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "PB8-PB13: PWM21/PWM11/PWM01/PWM2/PWM1/PWM0"),
+                    (1, "PB8-PB13: PWM0/PWM1/PWM2/PWM01/PWM11/PWM21"),
+                    (2, "PB8-PB13: PWM21/PWM2/PWM11/PWM1/PWM01/PWM0"),
+                    (3, "PB8-PB13: PWM0/PWM01/PWM1/PWM11/PWM2/PWM21"),
+                ]),
+            },
+        ),
+        (
+            "OP_MCM2PIN",
+            OptionInfo {
+                byte_index: 1,
+                bits_start: 2,
+                bits_end: 3,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "PB14-PC3 or PA15-PA10: PWM21/PWM11/PWM01/PWM2/PWM1/PWM0"),
+                    (1, "PB14-PC3 or PA15-PA10: PWM0/PWM1/PWM2/PWM01/PWM11/PWM21"),
+                    (2, "PB14-PC3 or PA15-PA10: PWM21/PWM2/PWM11/PWM1/PWM01/PWM0"),
+                    (3, "PB14-PC3 or PA15-PA10: PWM0/PWM01/PWM1/PWM11/PWM2/PWM21"),
+                ]),
+            },
+        ),
+        (
+            "OP_CSM",
+            OptionInfo {
+                byte_index: 1,
+                bits_start: 4,
+                bits_end: 4,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "CSM Mode is on after power on reset"),
+                    (1, "CSM Mode is off after power on reset"),
+                ]),
+            },
+        ),
+        (
+            "OP_HSE16M",
+            OptionInfo {
+                byte_index: 1,
+                bits_start: 6,
+                bits_end: 6,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "Disable high-frequency 16M HSE"),
+                    (1, "Enable high-frequency 16M HSE"),
+                ]),
+            },
+        ),
+        (
+            "OP_FLSALG",
+            OptionInfo {
+                byte_index: 1,
+                bits_start: 7,
+                bits_end: 7,
+                editable: false,
+                states: IndexMap::from([
+                    (0, "Use BRCHSTAT as an accelerated basis"),
+                    (1, "Disuse BRCHSTAT as an accelerated basis"),
+                ]),
+            },
+        ),
+        (
+            "OP_ISP",
+            OptionInfo {
+                byte_index: 7,
+                bits_start: 7,
+                bits_end: 7,
+                editable: false,
+                states: IndexMap::from([(0, "Enable ISP function"), (1, "Disable ISP function")]),
+            },
+        ),
     ])
 }

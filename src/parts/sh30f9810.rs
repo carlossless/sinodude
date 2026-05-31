@@ -30,36 +30,39 @@ pub const PART: Part = Part {
 /// Get all code options metadata
 pub fn options() -> Options {
     IndexMap::from([
-        ("OP_ISP", OptionInfo {
-            byte_index: 7,
-            bits_start: 7,
-            bits_end: 7,
-            editable: false,
-            states: IndexMap::from([
-                (0, "Enable ISP Function"),
-                (1, "Disable ISP Function"),
-            ]),
-        }),
-        ("OP_LVRLE", OptionInfo {
-            byte_index: 1,
-            bits_start: 6,
-            bits_end: 7,
-            editable: true,
-            states: IndexMap::from([
-                (0, "4.1V LVR Level"),
-                (1, "3.7V LVR Level"),
-                (2, "3.1V LVR Level"),
-            ]),
-        }),
-        ("OP_LVREN", OptionInfo {
-            byte_index: 1,
-            bits_start: 5,
-            bits_end: 5,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Disable LVR function"),
-                (1, "Enable LVR function"),
-            ]),
-        }),
+        (
+            "OP_ISP",
+            OptionInfo {
+                byte_index: 7,
+                bits_start: 7,
+                bits_end: 7,
+                editable: false,
+                states: IndexMap::from([(0, "Enable ISP Function"), (1, "Disable ISP Function")]),
+            },
+        ),
+        (
+            "OP_LVRLE",
+            OptionInfo {
+                byte_index: 1,
+                bits_start: 6,
+                bits_end: 7,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "4.1V LVR Level"),
+                    (1, "3.7V LVR Level"),
+                    (2, "3.1V LVR Level"),
+                ]),
+            },
+        ),
+        (
+            "OP_LVREN",
+            OptionInfo {
+                byte_index: 1,
+                bits_start: 5,
+                bits_end: 5,
+                editable: true,
+                states: IndexMap::from([(0, "Disable LVR function"), (1, "Enable LVR function")]),
+            },
+        ),
     ])
 }

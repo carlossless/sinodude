@@ -30,77 +30,89 @@ pub const PART: Part = Part {
 /// Get all code options metadata
 pub fn options() -> Options {
     IndexMap::from([
-        ("OP_WDT", OptionInfo {
-            byte_index: 0,
-            bits_start: 7,
-            bits_end: 7,
-            editable: true,
-            states: IndexMap::from([
-                (1, "Disable WDT"),
-                (0, "Enable WDT"),
-            ]),
-        }),
-        ("OP_WDTPD", OptionInfo {
-            byte_index: 0,
-            bits_start: 6,
-            bits_end: 6,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Disable WDT function in Power-Down mode"),
-                (1, "Enable WDT function in Power-Down mode"),
-            ]),
-        }),
-        ("OP_LVREN", OptionInfo {
-            byte_index: 0,
-            bits_start: 5,
-            bits_end: 5,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Disable LVR function"),
-                (1, "Enable LVR function"),
-            ]),
-        }),
-        ("OP_LVRLE", OptionInfo {
-            byte_index: 0,
-            bits_start: 3,
-            bits_end: 4,
-            editable: true,
-            states: IndexMap::from([
-                (1, "3.7V LVR level 1"),
-                (2, "2.8V LVR level 2"),
-            ]),
-        }),
-        ("OP_PPGO", OptionInfo {
-            byte_index: 0,
-            bits_start: 2,
-            bits_end: 2,
-            editable: true,
-            states: IndexMap::from([
-                (0, "PPG output pulse is low effective"),
-                (1, "PPG output pulse is High effective"),
-            ]),
-        }),
-        ("OP_I/O", OptionInfo {
-            byte_index: 0,
-            bits_start: 1,
-            bits_end: 1,
-            editable: true,
-            states: IndexMap::from([
-                (0, "P0.5/P1.1/P2.0/P2.1 drive ability normal mode"),
-                (1, "P0.5/P1.1/P2.0/P2.1 drive ability large mode"),
-            ]),
-        }),
-        ("OP_PPGO Limit", OptionInfo {
-            byte_index: 1,
-            bits_start: 6,
-            bits_end: 7,
-            editable: true,
-            states: IndexMap::from([
-                (0, "2048*tosc"),
-                (1, "1280*tosc"),
-                (2, "768*tosc"),
-                (3, "512*tosc"),
-            ]),
-        }),
+        (
+            "OP_WDT",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 7,
+                bits_end: 7,
+                editable: true,
+                states: IndexMap::from([(1, "Disable WDT"), (0, "Enable WDT")]),
+            },
+        ),
+        (
+            "OP_WDTPD",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 6,
+                bits_end: 6,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "Disable WDT function in Power-Down mode"),
+                    (1, "Enable WDT function in Power-Down mode"),
+                ]),
+            },
+        ),
+        (
+            "OP_LVREN",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 5,
+                bits_end: 5,
+                editable: true,
+                states: IndexMap::from([(0, "Disable LVR function"), (1, "Enable LVR function")]),
+            },
+        ),
+        (
+            "OP_LVRLE",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 3,
+                bits_end: 4,
+                editable: true,
+                states: IndexMap::from([(1, "3.7V LVR level 1"), (2, "2.8V LVR level 2")]),
+            },
+        ),
+        (
+            "OP_PPGO",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 2,
+                bits_end: 2,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "PPG output pulse is low effective"),
+                    (1, "PPG output pulse is High effective"),
+                ]),
+            },
+        ),
+        (
+            "OP_I/O",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 1,
+                bits_end: 1,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "P0.5/P1.1/P2.0/P2.1 drive ability normal mode"),
+                    (1, "P0.5/P1.1/P2.0/P2.1 drive ability large mode"),
+                ]),
+            },
+        ),
+        (
+            "OP_PPGO Limit",
+            OptionInfo {
+                byte_index: 1,
+                bits_start: 6,
+                bits_end: 7,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "2048*tosc"),
+                    (1, "1280*tosc"),
+                    (2, "768*tosc"),
+                    (3, "512*tosc"),
+                ]),
+            },
+        ),
     ])
 }

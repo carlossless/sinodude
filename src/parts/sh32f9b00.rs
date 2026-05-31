@@ -29,8 +29,9 @@ pub const PART: Part = Part {
 
 /// Get all code options metadata
 pub fn options() -> Options {
-    IndexMap::from([
-        ("OP_MCM1PIN", OptionInfo {
+    IndexMap::from([(
+        "OP_MCM1PIN",
+        OptionInfo {
             byte_index: 1,
             bits_start: 0,
             bits_end: 1,
@@ -41,6 +42,6 @@ pub fn options() -> Options {
                 (2, "PB13-PB8: PWM21/PWM2/PWM11/PWM1/PWM01/PWM0"),
                 (3, "PB13-PB8: PWM0/PWM01/PWM1/PWM11/PWM2/PWM21"),
             ]),
-        }),
-    ])
+        },
+    )])
 }

@@ -30,35 +30,38 @@ pub const PART: Part = Part {
 /// Get all code options metadata
 pub fn options() -> Options {
     IndexMap::from([
-        ("OP_WDTPD", OptionInfo {
-            byte_index: 0,
-            bits_start: 4,
-            bits_end: 4,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Disable IWDT function in the Power-Down mode"),
-                (1, "Enable IWDT function in the Power-Down mode"),
-            ]),
-        }),
-        ("OP_IWDT", OptionInfo {
-            byte_index: 0,
-            bits_start: 0,
-            bits_end: 3,
-            editable: true,
-            states: IndexMap::from([
-                (5, "Disable IWDT Function"),
-                (0, "Enable IWDT Function"),
-            ]),
-        }),
-        ("OP_ISP", OptionInfo {
-            byte_index: 7,
-            bits_start: 7,
-            bits_end: 7,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Enable ISP Function"),
-                (1, "Disable ISP Function"),
-            ]),
-        }),
+        (
+            "OP_WDTPD",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 4,
+                bits_end: 4,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "Disable IWDT function in the Power-Down mode"),
+                    (1, "Enable IWDT function in the Power-Down mode"),
+                ]),
+            },
+        ),
+        (
+            "OP_IWDT",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 0,
+                bits_end: 3,
+                editable: true,
+                states: IndexMap::from([(5, "Disable IWDT Function"), (0, "Enable IWDT Function")]),
+            },
+        ),
+        (
+            "OP_ISP",
+            OptionInfo {
+                byte_index: 7,
+                bits_start: 7,
+                bits_end: 7,
+                editable: true,
+                states: IndexMap::from([(0, "Enable ISP Function"), (1, "Disable ISP Function")]),
+            },
+        ),
     ])
 }

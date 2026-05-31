@@ -30,52 +30,61 @@ pub const PART: Part = Part {
 /// Get all code options metadata
 pub fn options() -> Options {
     IndexMap::from([
-        ("OP_IWDT", OptionInfo {
-            byte_index: 0,
-            bits_start: 0,
-            bits_end: 3,
-            editable: true,
-            states: IndexMap::from([
-                (5, "Disable WDT function"),
-                (0, "Enable WDT function"),
-            ]),
-        }),
-        ("OP_WDTPD", OptionInfo {
-            byte_index: 0,
-            bits_start: 4,
-            bits_end: 4,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Disable IWDT function in the Power-Down mode"),
-                (1, "Enable IWDT function in the Power-Down mode"),
-            ]),
-        }),
-        ("OP_MCMPIN", OptionInfo {
-            byte_index: 2,
-            bits_start: 0,
-            bits_end: 0,
-            editable: true,
-            states: IndexMap::from([
-                (0, "PB1-PB6: No output"),
-                (1, "PB1-PB6: PWM21/PWM11/PWM01/PWM2/PWM1/PWM0"),
-                (2, "PB1-PB6: PWM0/PWM1/PWM2/PWM01/PWM11/PWM21"),
-                (3, "PB1-PB6: PWM21/PWM2/PWM11/PWM1/PWM01/PWM0"),
-                (4, "PB1-PB6: PWM0/PWM01/PWM1/PWM11/PWM2/PWM21"),
-                (0, "Flash is not divided into blocks"),
-                (1, "Flash is divided into two blocks, Main Memory and Backup Memory"),
-                (0, "PC pointer addresses from Main Memory"),
-                (1, "PC pointer addresses from Backup Memory"),
-            ]),
-        }),
-        ("OP_ISP", OptionInfo {
-            byte_index: 7,
-            bits_start: 7,
-            bits_end: 7,
-            editable: true,
-            states: IndexMap::from([
-                (0, "Enable ISP function"),
-                (1, "Disable ISP function"),
-            ]),
-        }),
+        (
+            "OP_IWDT",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 0,
+                bits_end: 3,
+                editable: true,
+                states: IndexMap::from([(5, "Disable WDT function"), (0, "Enable WDT function")]),
+            },
+        ),
+        (
+            "OP_WDTPD",
+            OptionInfo {
+                byte_index: 0,
+                bits_start: 4,
+                bits_end: 4,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "Disable IWDT function in the Power-Down mode"),
+                    (1, "Enable IWDT function in the Power-Down mode"),
+                ]),
+            },
+        ),
+        (
+            "OP_MCMPIN",
+            OptionInfo {
+                byte_index: 2,
+                bits_start: 0,
+                bits_end: 0,
+                editable: true,
+                states: IndexMap::from([
+                    (0, "PB1-PB6: No output"),
+                    (1, "PB1-PB6: PWM21/PWM11/PWM01/PWM2/PWM1/PWM0"),
+                    (2, "PB1-PB6: PWM0/PWM1/PWM2/PWM01/PWM11/PWM21"),
+                    (3, "PB1-PB6: PWM21/PWM2/PWM11/PWM1/PWM01/PWM0"),
+                    (4, "PB1-PB6: PWM0/PWM01/PWM1/PWM11/PWM2/PWM21"),
+                    (0, "Flash is not divided into blocks"),
+                    (
+                        1,
+                        "Flash is divided into two blocks, Main Memory and Backup Memory",
+                    ),
+                    (0, "PC pointer addresses from Main Memory"),
+                    (1, "PC pointer addresses from Backup Memory"),
+                ]),
+            },
+        ),
+        (
+            "OP_ISP",
+            OptionInfo {
+                byte_index: 7,
+                bits_start: 7,
+                bits_end: 7,
+                editable: true,
+                states: IndexMap::from([(0, "Enable ISP function"), (1, "Disable ISP function")]),
+            },
+        ),
     ])
 }
