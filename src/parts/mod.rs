@@ -3,6 +3,8 @@ use phf::phf_map;
 
 pub mod adc2015;
 pub mod ch6935a;
+pub mod chks011;
+pub mod chks012;
 pub mod cm7916;
 pub mod gs16lf601;
 pub mod gs16lf602a;
@@ -27,10 +29,53 @@ pub mod jym0532;
 pub mod jym0564;
 pub mod mcf8014;
 pub mod md001;
+pub mod mf1101h;
+pub mod msh32f01;
 pub mod ps2024;
 pub mod qf9408;
+pub mod sh30f9010;
+pub mod sh30f9011;
+pub mod sh30f9013;
+pub mod sh30f9014;
+pub mod sh30f9020;
+pub mod sh30f9021;
+pub mod sh30f9025;
+pub mod sh30f9071;
+pub mod sh30f9072;
+pub mod sh30f9073;
+pub mod sh30f9074;
+pub mod sh30f9082;
+pub mod sh30f9810;
+pub mod sh30f9820;
+pub mod sh30f9821;
+pub mod sh30f9822;
+pub mod sh30f9823;
+pub mod sh30f9871;
+pub mod sh30f9872;
+pub mod sh32f205;
+pub mod sh32f2053;
+pub mod sh32f2601;
+pub mod sh32f284;
+pub mod sh32f9001;
+pub mod sh32f9002;
+pub mod sh32f9061;
+pub mod sh32f9062;
+pub mod sh32f9801;
+pub mod sh32f9803;
+pub mod sh32f9861;
+pub mod sh32f9b00;
+pub mod sh33f2053;
+pub mod sh33f2054;
+pub mod sh33f2056;
+pub mod sh33f2057;
+pub mod sh33f2063;
+pub mod sh33f2801;
+pub mod sh33f2802;
+pub mod sh33f2811;
+pub mod sh33f2821;
 pub mod sh366002;
 pub mod sh366006;
+pub mod sh39a325;
 pub mod sh39f003;
 pub mod sh39f003a;
 pub mod sh39f004;
@@ -44,17 +89,26 @@ pub mod sh39f325c;
 pub mod sh39f3510;
 pub mod sh39f5005;
 pub mod sh39f5007;
+pub mod sh4223a;
+pub mod sh4225;
 pub mod sh68f091;
 pub mod sh68f093;
 pub mod sh68f093c;
 pub mod sh68f097;
 pub mod sh68f097b;
+pub mod sh68f097w;
+pub mod sh68f099a;
 pub mod sh68f1000;
 pub mod sh68f1001;
+pub mod sh68f1002;
+pub mod sh68f1010;
+pub mod sh68f1050;
 pub mod sh68f83;
 pub mod sh68f86;
 pub mod sh68f88;
 pub mod sh68f881;
+pub mod sh68f881w;
+pub mod sh68f88h;
 pub mod sh68f89;
 pub mod sh68f90;
 pub mod sh68f902;
@@ -139,10 +193,12 @@ pub mod sh79f2211;
 pub mod sh79f2221;
 pub mod sh79f2401;
 pub mod sh79f2601;
+pub mod sh79f2603;
 pub mod sh79f2611;
 pub mod sh79f32;
 pub mod sh79f321;
 pub mod sh79f3212;
+pub mod sh79f3212w;
 pub mod sh79f3213;
 pub mod sh79f3213a;
 pub mod sh79f3214;
@@ -187,6 +243,7 @@ pub mod sh79f6485;
 pub mod sh79f6486;
 pub mod sh79f6488;
 pub mod sh79f6489;
+pub mod sh79f6489h;
 pub mod sh79f649;
 pub mod sh79f7010;
 pub mod sh79f7011a;
@@ -282,9 +339,15 @@ pub mod sh86331;
 pub mod sh86f6601;
 pub mod sh86f7061;
 pub mod sh86f7066;
+pub mod sh86f7066w;
 pub mod sh86f7086;
 pub mod sh86f7088;
+pub mod sh87f8801;
+pub mod sh87f8805;
+pub mod sh87f8810;
+pub mod sh87f8815;
 pub mod sh87f8941;
+pub mod sh87f8962;
 pub mod sh88f2049;
 pub mod sh88f2051;
 pub mod sh88f2051a;
@@ -304,6 +367,7 @@ pub mod sh99f201;
 pub mod sh99f201b;
 pub mod sh99f221;
 pub mod xa2000;
+pub mod zm102;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Region {
@@ -527,6 +591,8 @@ impl Part {
 pub static PARTS: phf::Map<&'static str, &'static Part> = phf_map! {
     "adc2015" => &adc2015::PART,
     "ch6935a" => &ch6935a::PART,
+    "chks011" => &chks011::PART,
+    "chks012" => &chks012::PART,
     "cm7916" => &cm7916::PART,
     "gs16lf601" => &gs16lf601::PART,
     "gs16lf602a" => &gs16lf602a::PART,
@@ -551,10 +617,53 @@ pub static PARTS: phf::Map<&'static str, &'static Part> = phf_map! {
     "jym0564" => &jym0564::PART,
     "mcf8014" => &mcf8014::PART,
     "md001" => &md001::PART,
+    "mf1101h" => &mf1101h::PART,
+    "msh32f01" => &msh32f01::PART,
     "ps2024" => &ps2024::PART,
     "qf9408" => &qf9408::PART,
+    "sh30f9010" => &sh30f9010::PART,
+    "sh30f9011" => &sh30f9011::PART,
+    "sh30f9013" => &sh30f9013::PART,
+    "sh30f9014" => &sh30f9014::PART,
+    "sh30f9020" => &sh30f9020::PART,
+    "sh30f9021" => &sh30f9021::PART,
+    "sh30f9025" => &sh30f9025::PART,
+    "sh30f9071" => &sh30f9071::PART,
+    "sh30f9072" => &sh30f9072::PART,
+    "sh30f9073" => &sh30f9073::PART,
+    "sh30f9074" => &sh30f9074::PART,
+    "sh30f9082" => &sh30f9082::PART,
+    "sh30f9810" => &sh30f9810::PART,
+    "sh30f9820" => &sh30f9820::PART,
+    "sh30f9821" => &sh30f9821::PART,
+    "sh30f9822" => &sh30f9822::PART,
+    "sh30f9823" => &sh30f9823::PART,
+    "sh30f9871" => &sh30f9871::PART,
+    "sh30f9872" => &sh30f9872::PART,
+    "sh32f205" => &sh32f205::PART,
+    "sh32f2053" => &sh32f2053::PART,
+    "sh32f2601" => &sh32f2601::PART,
+    "sh32f284" => &sh32f284::PART,
+    "sh32f9001" => &sh32f9001::PART,
+    "sh32f9002" => &sh32f9002::PART,
+    "sh32f9061" => &sh32f9061::PART,
+    "sh32f9062" => &sh32f9062::PART,
+    "sh32f9801" => &sh32f9801::PART,
+    "sh32f9803" => &sh32f9803::PART,
+    "sh32f9861" => &sh32f9861::PART,
+    "sh32f9b00" => &sh32f9b00::PART,
+    "sh33f2053" => &sh33f2053::PART,
+    "sh33f2054" => &sh33f2054::PART,
+    "sh33f2056" => &sh33f2056::PART,
+    "sh33f2057" => &sh33f2057::PART,
+    "sh33f2063" => &sh33f2063::PART,
+    "sh33f2801" => &sh33f2801::PART,
+    "sh33f2802" => &sh33f2802::PART,
+    "sh33f2811" => &sh33f2811::PART,
+    "sh33f2821" => &sh33f2821::PART,
     "sh366002" => &sh366002::PART,
     "sh366006" => &sh366006::PART,
+    "sh39a325" => &sh39a325::PART,
     "sh39f003" => &sh39f003::PART,
     "sh39f003a" => &sh39f003a::PART,
     "sh39f004" => &sh39f004::PART,
@@ -568,17 +677,26 @@ pub static PARTS: phf::Map<&'static str, &'static Part> = phf_map! {
     "sh39f3510" => &sh39f3510::PART,
     "sh39f5005" => &sh39f5005::PART,
     "sh39f5007" => &sh39f5007::PART,
+    "sh4223a" => &sh4223a::PART,
+    "sh4225" => &sh4225::PART,
     "sh68f091" => &sh68f091::PART,
     "sh68f093" => &sh68f093::PART,
     "sh68f093c" => &sh68f093c::PART,
     "sh68f097" => &sh68f097::PART,
     "sh68f097b" => &sh68f097b::PART,
+    "sh68f097w" => &sh68f097w::PART,
+    "sh68f099a" => &sh68f099a::PART,
     "sh68f1000" => &sh68f1000::PART,
     "sh68f1001" => &sh68f1001::PART,
+    "sh68f1002" => &sh68f1002::PART,
+    "sh68f1010" => &sh68f1010::PART,
+    "sh68f1050" => &sh68f1050::PART,
     "sh68f83" => &sh68f83::PART,
     "sh68f86" => &sh68f86::PART,
     "sh68f88" => &sh68f88::PART,
     "sh68f881" => &sh68f881::PART,
+    "sh68f881w" => &sh68f881w::PART,
+    "sh68f88h" => &sh68f88h::PART,
     "sh68f89" => &sh68f89::PART,
     "sh68f90" => &sh68f90::PART,
     "sh68f90a" => &sh68f90a::PART,
@@ -663,10 +781,12 @@ pub static PARTS: phf::Map<&'static str, &'static Part> = phf_map! {
     "sh79f2221" => &sh79f2221::PART,
     "sh79f2401" => &sh79f2401::PART,
     "sh79f2601" => &sh79f2601::PART,
+    "sh79f2603" => &sh79f2603::PART,
     "sh79f2611" => &sh79f2611::PART,
     "sh79f32" => &sh79f32::PART,
     "sh79f321" => &sh79f321::PART,
     "sh79f3212" => &sh79f3212::PART,
+    "sh79f3212w" => &sh79f3212w::PART,
     "sh79f3213" => &sh79f3213::PART,
     "sh79f3213a" => &sh79f3213a::PART,
     "sh79f3214" => &sh79f3214::PART,
@@ -711,6 +831,7 @@ pub static PARTS: phf::Map<&'static str, &'static Part> = phf_map! {
     "sh79f6486" => &sh79f6486::PART,
     "sh79f6488" => &sh79f6488::PART,
     "sh79f6489" => &sh79f6489::PART,
+    "sh79f6489h" => &sh79f6489h::PART,
     "sh79f649" => &sh79f649::PART,
     "sh79f7010" => &sh79f7010::PART,
     "sh79f7011a" => &sh79f7011a::PART,
@@ -806,9 +927,15 @@ pub static PARTS: phf::Map<&'static str, &'static Part> = phf_map! {
     "sh86f6601" => &sh86f6601::PART,
     "sh86f7061" => &sh86f7061::PART,
     "sh86f7066" => &sh86f7066::PART,
+    "sh86f7066w" => &sh86f7066w::PART,
     "sh86f7086" => &sh86f7086::PART,
     "sh86f7088" => &sh86f7088::PART,
+    "sh87f8801" => &sh87f8801::PART,
+    "sh87f8805" => &sh87f8805::PART,
+    "sh87f8810" => &sh87f8810::PART,
+    "sh87f8815" => &sh87f8815::PART,
     "sh87f8941" => &sh87f8941::PART,
+    "sh87f8962" => &sh87f8962::PART,
     "sh88f2049" => &sh88f2049::PART,
     "sh88f2051" => &sh88f2051::PART,
     "sh88f2051a" => &sh88f2051a::PART,
@@ -828,6 +955,7 @@ pub static PARTS: phf::Map<&'static str, &'static Part> = phf_map! {
     "sh99f201b" => &sh99f201b::PART,
     "sh99f221" => &sh99f221::PART,
     "xa2000" => &xa2000::PART,
+    "zm102" => &zm102::PART,
 };
 
 /// Find all part names that match a given JTAG ID

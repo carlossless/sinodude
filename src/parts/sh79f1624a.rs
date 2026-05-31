@@ -5,7 +5,7 @@ use hex_literal::hex;
 use indexmap::IndexMap;
 
 pub const PART: Part = Part {
-    part_number: hex!("79f1624a00"),
+    part_number: hex!("79f084a000"),
     chip_type: 0x02,
     custom_block: 0x02,
     product_block: 0x01,

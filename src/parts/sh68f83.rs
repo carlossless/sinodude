@@ -12,7 +12,7 @@ pub const PART: Part = Part {
     flash_size: 16384,
     eeprom_size: 0,
     default_code_options: &hex!("00000000"),
-    code_option_mask: &hex!("00000000"),
+    code_option_mask: &hex!("01000000"),
     jtag_id: 0xf830,
     sector_size: 1024,
     option_byte_count: 4,
