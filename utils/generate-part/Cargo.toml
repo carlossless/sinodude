@@ -8,3 +8,4 @@ description = "GPT file decryption and part definition generator for Sinowealth 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 thiserror = "2.0"
+sha2 = "0.10"

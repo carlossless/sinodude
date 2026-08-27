@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for SH4225
+// Source GPT SHA-256: b5276e236daf47879e56f8377c7e66436de00cc8d89e25efe40b462ac734756a
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

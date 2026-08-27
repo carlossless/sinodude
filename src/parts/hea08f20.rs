@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for HEA08F20
+// Source GPT SHA-256: c736a6b296c5bc5f31642aadba18871003cc2d8e5e56d8f2cb9ebab39897d0e4
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

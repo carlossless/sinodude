@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for GS16LF607
+// Source GPT SHA-256: 11594603fee0baf2ea5ec0b5890051f21059fd9280bb0f2b80ed1947659608e7
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

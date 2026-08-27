@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for XA2000
+// Source GPT SHA-256: ba7e65b53eaad34169c675537e0aadd7dcd3b65d7b237e82a562928cf4ef6631
 
 use super::{AddressField, Options, Part, Voltage};
 use hex_literal::hex;

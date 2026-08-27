@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for ZM102
+// Source GPT SHA-256: 6386efdc5ffc0622d29314fb0cce71636ba7b28fca84eee3afaa8bb5e2da5547
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for SH30F9810
+// Source GPT SHA-256: c472135c606a3801496289a7e3fa3ea5558f3549e2fc707f550820a7627a58c4
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

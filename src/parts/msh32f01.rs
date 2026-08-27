@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for MSH32F01
+// Source GPT SHA-256: 3b699222f0873eb6ba0f615f3f0ff6727a6abdce50ce15801dd2745d7977bc7d
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

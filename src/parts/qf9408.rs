@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for QF9408
+// Source GPT SHA-256: ad56dd6aa6fcf3abd850cd62d5537f7e2dbd1b19b83f4ee908efc790a2a3dfcf
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

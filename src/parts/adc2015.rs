@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for ADC2015
+// Source GPT SHA-256: 854e6afb91d19018b366754382d630816c213b12d6d8a9c7a7fce4ac129d04a7
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

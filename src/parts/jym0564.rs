@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for JYM0564
+// Source GPT SHA-256: 2b7a04b69bf57b8f9f6906ff83c2b6239f6b918e19e91b4d178bd94f9de22711
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

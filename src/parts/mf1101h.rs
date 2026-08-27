@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for MF1101H
+// Source GPT SHA-256: 4e178c0a189b57c0110b701555faa3ccdf3d13e61cbb473c28a28b17e4c8fe65
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

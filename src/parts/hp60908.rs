@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for HP60908
+// Source GPT SHA-256: e2f60a1637d62b9ba52afbcfbd41420dcddf995298643899557cb4d94ac0f232
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

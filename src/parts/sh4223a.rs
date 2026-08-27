@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for SH4223A
+// Source GPT SHA-256: 176b51a025d779a66687ba4708a937d7d3f71e04d9fdae4b3b567d636ba6edfa
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for MD001
+// Source GPT SHA-256: aa04c7e851635c88da41f64829591e80a79ac005aa8a779cc4d5995cf9296842
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

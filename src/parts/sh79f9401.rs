@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for SH79F9401
+// Source GPT SHA-256: de47fc2bfb823440066a6e87a47cc2f67b8bf7eb87efbbe843e7deafda711ad4
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

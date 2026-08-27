@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for HP60207
+// Source GPT SHA-256: 7ab53fb9166e13436648c5775a864b498b67f54519d5e1241ed732c9a252d21a
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

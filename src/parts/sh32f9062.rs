@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for SH32F9062
+// Source GPT SHA-256: 6d9eccd29b075aec3e7b206af939ea0a0c4a24e1b78ecd33bf12f30cdeccf132
 
 use super::{AddressField, Options, Part, Voltage};
 use hex_literal::hex;

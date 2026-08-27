@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for CHKS011
+// Source GPT SHA-256: 18274186d7206636a35cbce3fd12851b76dc02054138443f2a99a2c8e9623151
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

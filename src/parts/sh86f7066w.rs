@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for SH86F7066W
+// Source GPT SHA-256: f7d009db0987e54c000fe147a9e865159f09b30e3baa52eae2a54d48c42bcbc2
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

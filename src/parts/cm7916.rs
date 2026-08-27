@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for CM7916
+// Source GPT SHA-256: 2db6a4d9d616ca2260cd1f549539481af62d3549214704c1948566d85e9a50d3
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

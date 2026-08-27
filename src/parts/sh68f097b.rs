@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for SH68F097B
+// Source GPT SHA-256: 4d1a7423f99635525ab900cfbf095aa13d37a6e18ccfa987dd6e43927336b5d5
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for MCF8014
+// Source GPT SHA-256: bb98c805bd1aeb906e66118e616a1439d407a14ddfc15d6a03a51e7acfe0d8d5
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

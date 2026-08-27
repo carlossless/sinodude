@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for SH39A325
+// Source GPT SHA-256: e963ef23c27ed1821ef3326a3d9f121084cc139ca3d9c35b6061a2017cbab903
 
 use super::{AddressField, Options, Part, Voltage};
 use hex_literal::hex;

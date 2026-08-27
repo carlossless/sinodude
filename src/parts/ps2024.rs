@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for PS2024
+// Source GPT SHA-256: ecb7db81e50bb21b75605eee2dfed19df0db7f17f0641296092559712e075679
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

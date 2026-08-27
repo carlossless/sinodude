@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for SH33F2811
+// Source GPT SHA-256: 68f0bec47b3142532cc7b8265461ca206517b17c8699ca7723712ba086dd586b
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

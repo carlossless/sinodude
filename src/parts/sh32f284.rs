@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for SH32F284
+// Source GPT SHA-256: fc50f34e24837feefbc42befa04ed932586a1f28d97373adc916be946a9d294f
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

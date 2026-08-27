@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for SH366002
+// Source GPT SHA-256: af68d18e39fd74e83673f61110edc29b2a7fd9047f66399fea601ab1d42caf64
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

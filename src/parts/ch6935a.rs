@@ -1,4 +1,5 @@
 // Auto-generated from GPT file for CH6935A
+// Source GPT SHA-256: 2d1f101c72edf32e9e4fe2a9386aebf518b63cd922ed78990dce2d5d9a9d4d33
 
 use super::{AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;

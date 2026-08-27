@@ -1,4 +1,5 @@
 use clap::Parser;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use thiserror::Error;
@@ -396,7 +397,7 @@ fn parse_gpt_content(content: &str) -> Result<PartDefinition, GptError> {
     })
 }
 
-fn generate_rust_part_definition(part: &PartDefinition) -> String {
+fn generate_rust_part_definition(part: &PartDefinition, source_hash: &str) -> String {
     let part_number_bytes = format_part_number(&part.part_number);
     let default_code_options = format_initial_options(part.initial_option, part.option_byte_count);
     let code_option_mask = format_initial_options(part.option_mask, part.option_byte_count);
@@ -404,8 +405,8 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
     let mut output = String::new();
 
     output.push_str(&format!(
-        "// Auto-generated from GPT file for {}\n\n",
-        part.chip_name
+        "// Auto-generated from GPT file for {}\n// Source GPT SHA-256: {}\n\n",
+        part.chip_name, source_hash
     ));
     if part.options.is_empty() {
         output.push_str("use super::{AddressField, Options, Part, Voltage};\n");
@@ -566,6 +567,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Read, recover keys, decrypt
         let file_content = fs::read(file_path)?;
+        let source_hash: String = Sha256::digest(&file_content)
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect();
         let (alias_prefix, keys, decrypted_body) = find_keys_and_decrypt(&file_content)?;
         println!("  Keys: ({:#04x}, {:#04x})", keys.0, keys.1);
 
@@ -587,7 +592,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Generate part definition
-        let rust_code = generate_rust_part_definition(&part);
+        let rust_code = generate_rust_part_definition(&part, &source_hash);
         let output_filename = format!(
             "{}/{}.rs",
             cli.output_dir,
