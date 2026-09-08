@@ -21,7 +21,8 @@ use atmega_hal::{
 // Power - D6 (output)
 
 // Firmware version
-const VERSION_MAJOR: u8 = 2;
+// v3: CMD_READ_FLASH_JTAG (0x0F) added: JTAG debug-port MOVC bypass read, host-selected by `read --jtag`.
+const VERSION_MAJOR: u8 = 3;
 const VERSION_MINOR: u8 = 0;
 
 // Serial protocol commands
@@ -47,6 +48,9 @@ mod cmd {
     pub const CMD_MASS_ERASE: u8 = 0x0B;
     pub const CMD_READ_CUSTOM_REGION: u8 = 0x0C;
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
+
+    // Read flash over the JTAG debug-port MOVC bypass instead of the ICP read (CMD_READ_FLASH).
+    pub const CMD_READ_FLASH_JTAG: u8 = 0x0F;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -92,6 +96,7 @@ struct IcpController {
     connected: bool,
     mode: Mode,
     chip_type: Option<u8>,
+    jtag_gadget: Option<u16>,
 }
 
 impl IcpController {
@@ -102,6 +107,7 @@ impl IcpController {
             connected: false,
             mode: Mode::Unset,
             chip_type: None,
+            jtag_gadget: None,
         }
     }
 
@@ -158,6 +164,7 @@ impl IcpController {
     }
 
     fn connect(&mut self) -> bool {
+        self.jtag_gadget = None;
         self.power_on();
 
         // Wait for power stabilization
@@ -573,6 +580,101 @@ impl IcpController {
         true
     }
 
+    /// One debug-port execution step (gashtaan dumper 0x398); returns the 17-bit status word >> 1.
+    fn jtag_debug_step(&mut self, n: u16) -> u16 {
+        self.jtag_send_data(8u8, 0x00u8);
+        self.jtag_send_data(8u8, 0x00u8);
+        self.jtag_send_data(8u8, 0x00u8);
+        self.jtag_send_data(8u8, 0x40u8);
+        self.jtag_send_data(8u8, ((n >> 8) as u8).reverse_bits());
+        self.jtag_send_data(8u8, (n as u8).reverse_bits());
+
+        self.jtag_send_instruction(2);
+        self.jtag_send_data(4u8, 4u8);
+        self.jtag_send_instruction(3);
+        self.jtag_send_data(23u8, 0x402000u32);
+        self.jtag_send_instruction(4);
+        self.delay_us(1000);
+        self.jtag_send_instruction(2);
+        self.jtag_send_data(4u8, 4u8);
+        self.jtag_send_instruction(3);
+        self.jtag_send_data(23u8, 0x400000u32);
+        self.jtag_send_instruction(2);
+        self.jtag_send_data(4u8, 1u8);
+        self.jtag_send_instruction(12);
+        self.delay_us(1000);
+
+        let status: u32 = self.jtag_receive_data(17u8);
+        (status >> 1) as u16
+    }
+
+    /// Read one flash byte via the target's own MOVC gadget over the debug port, bypassing read-protect.
+    fn jtag_debug_read_byte(&mut self, n: u16, address: u16) -> u8 {
+        self.jtag_send_data(8u8, 0x27u8);
+        self.jtag_send_data(8u8, 0x09u8);
+        self.jtag_send_data(8u8, ((address >> 8) as u8).reverse_bits());
+        self.jtag_send_data(8u8, (address as u8).reverse_bits());
+
+        self.jtag_debug_step(n);
+
+        self.jtag_send_data(8u8, 0x00u8);
+        self.jtag_send_data(8u8, 0x00u8);
+        self.jtag_send_data(8u8, 0x00u8);
+
+        let data: u32 = self.jtag_receive_data(30u8);
+        data as u8
+    }
+
+    /// Scan for the target's MOVC gadget (gashtaan dumper 0x72a). See docs/sh68f90a-jtag-debug-read.md.
+    fn jtag_find_gadget(&mut self) -> u16 {
+        const TABLE: [u8; 32] = [
+            0x18, 0x00, 0x18, 0x00, 0x1f, 0xff, 0x1f, 0xff, 0x0f, 0xff, 0x0f, 0xff, 0x0f, 0xff,
+            0x08, 0x00, 0x18, 0x00, 0x1f, 0xff, 0x08, 0x00, 0x00, 0x00, 0x0f, 0xff, 0x0b, 0x00,
+            0xbf, 0xff, 0x08, 0x00,
+        ];
+        let start = self.jtag_debug_step(0);
+        let stop = start.wrapping_sub(1);
+        let mut c = start;
+        let mut param: u16 = 0;
+        loop {
+            if c == stop {
+                return param;
+            }
+            if self.jtag_debug_read_byte(c, c) == 0x93 && self.jtag_debug_read_byte(c, 0) == 0x02 {
+                param = c;
+                let b = self.jtag_debug_read_byte(c, c.wrapping_add(1));
+                if (TABLE[(b >> 3) as usize] >> (b & 3)) & 1 == 0 {
+                    return c;
+                }
+            }
+            c = c.wrapping_add(1);
+        }
+    }
+
+    /// Read code flash over the JTAG debug port, bypassing the ICP read-protect.
+    fn jtag_read_flash(&mut self, addr: u32, buffer: &mut [u8]) -> bool {
+        self.switch_mode(Mode::Jtag);
+
+        let gadget = match self.jtag_gadget {
+            Some(g) => g,
+            None => {
+                let g = self.jtag_find_gadget();
+                self.jtag_gadget = Some(g);
+                g
+            }
+        };
+        if gadget == 0 {
+            return false;
+        }
+
+        let base = addr as u16;
+        for (i, b) in buffer.iter_mut().enumerate() {
+            *b = self.jtag_debug_read_byte(gadget, base.wrapping_add(i as u16));
+        }
+
+        true
+    }
+
     fn icp_write_region(&mut self, addr: u32, data: &[u8], custom_block: bool) -> bool {
         self.switch_mode(Mode::Icp);
 
@@ -819,7 +921,7 @@ fn main() -> ! {
                 }
             }
 
-            cmd::CMD_READ_FLASH => {
+            cmd::CMD_READ_FLASH | cmd::CMD_READ_FLASH_JTAG => {
                 // Read address (4 bytes) and length (2 bytes)
                 let addr = {
                     let b0 = nb::block!(rx.read()).unwrap_or(0);
@@ -837,7 +939,12 @@ fn main() -> ! {
                 // Clamp length to buffer size
                 let read_len = len.min(buffer.len());
 
-                if icp.icp_read_flash(addr, &mut buffer[..read_len], false) {
+                let ok = if cmd_byte == cmd::CMD_READ_FLASH_JTAG {
+                    icp.jtag_read_flash(addr, &mut buffer[..read_len])
+                } else {
+                    icp.icp_read_flash(addr, &mut buffer[..read_len], false)
+                };
+                if ok {
                     let _ = nb::block!(tx.write(cmd::RSP_DATA));
                     let _ = nb::block!(tx.write(read_len as u8));
                     let _ = nb::block!(tx.write((read_len >> 8) as u8));

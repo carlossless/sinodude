@@ -56,6 +56,11 @@ fn cli() -> Command {
                 .arg(
                     arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
                         .required(false),
+                )
+                .arg(
+                    arg!(--jtag "Read flash over the JTAG debug-port MOVC bypass instead of the fast ICP read; slower, recovers read-protected flash where supported")
+                        .action(ArgAction::SetTrue)
+                        .required(false),
                 ),
         )
         .subcommand(
@@ -156,6 +161,9 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 .get_one::<String>("port")
                 .expect("--port is required for sinodude-serial programmer");
             let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            if sub_matches.get_flag("jtag") {
+                programmer.set_jtag_read(true);
+            }
             programmer.read_init()?;
             let result = programmer.read_flash()?;
             programmer.finish()?;

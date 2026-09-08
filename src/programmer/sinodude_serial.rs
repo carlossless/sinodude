@@ -11,7 +11,8 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 
 // Expected firmware version (must match firmware)
-const EXPECTED_VERSION_MAJOR: u8 = 2;
+// v3: CMD_READ_FLASH is the fast ICP read; the JTAG debug-port bypass is CMD_READ_FLASH_JTAG.
+const EXPECTED_VERSION_MAJOR: u8 = 3;
 
 // Serial protocol commands (must match firmware)
 mod cmd {
@@ -37,6 +38,7 @@ mod cmd {
     pub const CMD_MASS_ERASE: u8 = 0x0B;
     pub const CMD_READ_CUSTOM_REGION: u8 = 0x0C;
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
+    pub const CMD_READ_FLASH_JTAG: u8 = 0x0F;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -47,6 +49,8 @@ mod cmd {
 const CHUNK_SIZE: usize = 1024;
 const BAUD_RATE: u32 = 115200;
 const TIMEOUT: Duration = Duration::from_secs(5);
+// First-chunk allowance for the one-time JTAG debug-read gadget scan (a full address-space sweep).
+const GADGET_SCAN_TIMEOUT: Duration = Duration::from_secs(300);
 
 #[derive(Debug, Error)]
 pub enum SinodudeSerialProgrammerError {
@@ -114,6 +118,8 @@ pub struct SinodudeSerialProgrammer {
     stored_customer_option: Option<Vec<u8>>,
     stored_security: Option<Vec<u8>>,
     stored_serial_number: Option<[u8; 4]>,
+    /// Read flash over the JTAG debug-port MOVC bypass instead of the fast ICP read
+    use_jtag_read: bool,
 }
 
 impl SinodudeSerialProgrammer {
@@ -154,7 +160,13 @@ impl SinodudeSerialProgrammer {
             stored_customer_option: None,
             stored_security: None,
             stored_serial_number: None,
+            use_jtag_read: false,
         })
+    }
+
+    /// Read flash over the JTAG debug-port MOVC bypass instead of the fast ICP read.
+    pub fn set_jtag_read(&mut self, enabled: bool) {
+        self.use_jtag_read = enabled;
     }
 
     fn check_cancelled(&self) -> Result<(), SinodudeSerialProgrammerError> {
@@ -588,6 +600,12 @@ impl SinodudeSerialProgrammer {
         progress.set_message("Reading");
 
         let start = Instant::now();
+        // With --jtag the first chunk runs the firmware's one-time gadget scan; widen its timeout, then restore.
+        let mut timeout_restored = true;
+        if self.use_jtag_read {
+            let _ = self.port.set_timeout(GADGET_SCAN_TIMEOUT);
+            timeout_restored = false;
+        }
         for addr in (0..flash_size).step_by(buffer_size as usize) {
             self.check_cancelled().inspect_err(|_| {
                 progress.abandon_with_message("Cancelled");
@@ -595,6 +613,10 @@ impl SinodudeSerialProgrammer {
             let result = self.read_chunk(addr, buffer_size).inspect_err(|_| {
                 progress.abandon_with_message("Read failed");
             })?;
+            if !timeout_restored {
+                let _ = self.port.set_timeout(TIMEOUT);
+                timeout_restored = true;
+            }
             contents.extend_from_slice(&result);
             progress.set_position(addr as u64 + buffer_size as u64);
         }
@@ -610,7 +632,12 @@ impl SinodudeSerialProgrammer {
         length: u16,
     ) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
         debug!("Reading {} bytes at {:#x}", length, addr);
-        self.send_command(cmd::CMD_READ_FLASH)?;
+        let read_cmd = if self.use_jtag_read {
+            cmd::CMD_READ_FLASH_JTAG
+        } else {
+            cmd::CMD_READ_FLASH
+        };
+        self.send_command(read_cmd)?;
 
         // Send address (4 bytes, little endian)
         let addr_bytes = addr.to_le_bytes();
