@@ -1,6 +1,6 @@
 // Auto-generated from GPT file for SH33F2802
 
-use super::{AddressField, OptionInfo, Options, Part, Voltage};
+use super::{SecurityRecordFormat, AddressField, OptionInfo, Options, Part, Voltage};
 use hex_literal::hex;
 use indexmap::IndexMap;
 
@@ -18,6 +18,7 @@ pub const PART: Part = Part {
     option_byte_count: 8,
     security_level: 10,
     bank_type: 0,
+    single_wire: false,
     customer_id: AddressField { address: 0x0000 },
     operation_number: AddressField { address: 0x0000 },
     customer_option: AddressField { address: 0x0000 },
@@ -25,6 +26,10 @@ pub const PART: Part = Part {
     serial_number: AddressField { address: 0x0000 },
     compatible_voltages: &[Voltage::V5_0, Voltage::V3_3],
     options,
+    erase_full_mode: 5,
+    option_high_addr: None,
+    security_record_format: SecurityRecordFormat::Record19,
+    isp_password_addr: None,
 };
 
 /// Get all code options metadata

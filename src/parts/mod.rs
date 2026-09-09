@@ -524,6 +524,8 @@ pub struct Part {
     pub option_byte_count: usize,
     pub security_level: u8,
     pub bank_type: u8,
+    /// Single-wire ICP transport selector: true = single-wire 8051 ICP bit-bang, false = JTAG frame path.
+    pub single_wire: bool,
     pub customer_id: AddressField,
     pub operation_number: AddressField,
     pub customer_option: AddressField,
@@ -531,6 +533,25 @@ pub struct Part {
     pub serial_number: AddressField,
     pub compatible_voltages: &'static [Voltage],
     pub options: fn() -> Options,
+    /// Full-erase mode index: 5 = full erase, 1 = mass, 2 = protected mass; most parts use 5, some CT2/CT3 start lower and escalate. Defaults to 5.
+    pub erase_full_mode: u8,
+    /// Flash address for the upper 4 option-fuse bytes when OptionByteCount == 8 (sh68f90a = 0x1100); None for parts with no high option region.
+    pub option_high_addr: Option<u32>,
+    /// Wire format of the security (protect) record; Record19 for parts with a security region, None when none is defined.
+    pub security_record_format: SecurityRecordFormat,
+    /// ISP-password address; None for all current parts (kept for completeness).
+    pub isp_password_addr: Option<u32>,
+}
+
+/// Wire format of a part.s security (read/write-protect) record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecurityRecordFormat {
+    /// No security region defined; security ops are unsupported for this part.
+    None,
+    /// `0x19`-byte a640 record (per-sector bitmap + flag + password tail). Default for 8051 parts.
+    Record19,
+    /// `0x38`-byte b200 record (fixed 2 sectors/bit, no ChipType/SecLvl branch).
+    Record38,
 }
 
 impl Part {

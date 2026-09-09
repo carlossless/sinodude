@@ -126,6 +126,7 @@ pub struct PartDefinition {
     pub option_byte_count: usize,
     pub security_level: u8,
     pub bank_type: u8,
+    pub single_wire: bool,
     pub customer_id: AddressField,
     pub operation_number: AddressField,
     pub customer_option: AddressField,
@@ -327,6 +328,13 @@ fn parse_gpt_content(content: &str) -> Result<PartDefinition, GptError> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
 
+    // SWE = Single Wire Enable: SWE=1 selects the single-wire 8051 ICP path, SWE=0 the JTAG frame path.
+    let single_wire = fields
+        .get("SWE")
+        .and_then(|s| s.parse::<u8>().ok())
+        .map(|v| v == 1)
+        .unwrap_or(false);
+
     // Parse VDD voltages (ignore 0.0)
     let mut compatible_voltages = Vec::new();
     for key in ["VDD0", "VDD1", "VDD2"] {
@@ -386,6 +394,7 @@ fn parse_gpt_content(content: &str) -> Result<PartDefinition, GptError> {
         option_byte_count,
         security_level,
         bank_type,
+        single_wire,
         customer_id,
         operation_number,
         customer_option,
@@ -445,6 +454,7 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
     ));
     output.push_str(&format!("    security_level: {},\n", part.security_level));
     output.push_str(&format!("    bank_type: {},\n", part.bank_type));
+    output.push_str(&format!("    single_wire: {},\n", part.single_wire));
 
     // Address fields
     fn format_address_field(addr: &AddressField) -> String {

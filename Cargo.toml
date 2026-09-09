@@ -5,7 +5,7 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-nusb = "0.2"
+nusb = "0.2.3"
 futures-lite = "2.6"
 hex-literal = "1.1"
 clap = "4.5"

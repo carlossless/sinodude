@@ -1,6 +1,6 @@
 // Auto-generated from GPT file for SH68F099A
 
-use super::{AddressField, Options, Part, Voltage};
+use super::{SecurityRecordFormat, AddressField, Options, Part, Voltage};
 use hex_literal::hex;
 use indexmap::IndexMap;
 
@@ -18,6 +18,7 @@ pub const PART: Part = Part {
     option_byte_count: 4,
     security_level: 6,
     bank_type: 0,
+    single_wire: false,
     customer_id: AddressField { address: 0x20000 },
     operation_number: AddressField { address: 0x20004 },
     customer_option: AddressField { address: 0x20008 },
@@ -25,6 +26,10 @@ pub const PART: Part = Part {
     serial_number: AddressField { address: 0x20050 },
     compatible_voltages: &[Voltage::V5_0, Voltage::V3_3],
     options,
+    erase_full_mode: 5,
+    option_high_addr: None,
+    security_record_format: SecurityRecordFormat::Record19,
+    isp_password_addr: None,
 };
 
 /// Get all code options metadata
