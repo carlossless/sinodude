@@ -10,8 +10,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
-// Expected firmware version (must match firmware)
-const EXPECTED_VERSION_MAJOR: u8 = 2;
+// Expected firmware version (must match firmware); v6 = CMD_READ_FLASH_OCD (0x0F), the 3-wire OCD MOVC bypass (read --ocd).
+const EXPECTED_VERSION_MAJOR: u8 = 6;
 
 // Serial protocol commands (must match firmware)
 mod cmd {
@@ -38,6 +38,10 @@ mod cmd {
     pub const CMD_READ_CUSTOM_REGION: u8 = 0x0C;
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
 
+    // Security: send the 8-byte unlock key (password) to a protected part
+    pub const CMD_SEND_KEY: u8 = 0x0E;
+    pub const CMD_READ_FLASH_OCD: u8 = 0x0F; // OCD MOVC read-protect bypass (range read)
+
     // Response codes
     pub const RSP_OK: u8 = 0x00;
     pub const RSP_ERR: u8 = 0xFF;
@@ -47,6 +51,8 @@ mod cmd {
 const CHUNK_SIZE: usize = 1024;
 const BAUD_RATE: u32 = 115200;
 const TIMEOUT: Duration = Duration::from_secs(5);
+/// Timeout for the slow OCD MOVC read (one debug run per byte), well past the fast-ICP TIMEOUT.
+const OCD_READ_TIMEOUT: Duration = Duration::from_secs(300);
 
 #[derive(Debug, Error)]
 pub enum SinodudeSerialProgrammerError {
@@ -114,6 +120,10 @@ pub struct SinodudeSerialProgrammer {
     stored_customer_option: Option<Vec<u8>>,
     stored_security: Option<Vec<u8>>,
     stored_serial_number: Option<[u8; 4]>,
+    /// 8-byte unlock key (chip password) sent right after connect for protected parts
+    unlock_key: Option<[u8; 8]>,
+    /// Read flash over the 3-wire OCD MOVC bypass instead of the fast ICP read
+    use_ocd_read: bool,
 }
 
 impl SinodudeSerialProgrammer {
@@ -154,7 +164,19 @@ impl SinodudeSerialProgrammer {
             stored_customer_option: None,
             stored_security: None,
             stored_serial_number: None,
+            unlock_key: None,
+            use_ocd_read: false,
         })
+    }
+
+    /// Provide the 8-byte password sent right after connect() to unlock a protected part.
+    pub fn set_unlock_key(&mut self, key: [u8; 8]) {
+        self.unlock_key = Some(key);
+    }
+
+    /// Read flash over the 3-wire OCD MOVC bypass (recovers read-protected flash: the CPU code-fetch is ungated) instead of the fast ICP read.
+    pub fn set_ocd_read(&mut self, enabled: bool) {
+        self.use_ocd_read = enabled;
     }
 
     fn check_cancelled(&self) -> Result<(), SinodudeSerialProgrammerError> {
@@ -542,6 +564,7 @@ impl SinodudeSerialProgrammer {
         self.ping()?;
         self.check_version()?;
         self.connect()?;
+        self.send_unlock_key_if_present()?;
         self.get_id()?;
         self.set_config()?;
         self.get_part_number()?;
@@ -553,6 +576,7 @@ impl SinodudeSerialProgrammer {
         self.ping()?;
         self.check_version()?;
         self.connect()?;
+        self.send_unlock_key_if_present()?;
         self.get_id()?;
         self.set_config()?;
         self.get_part_number()?;
@@ -564,9 +588,14 @@ impl SinodudeSerialProgrammer {
         self.ping()?;
         self.check_version()?;
         self.connect()?;
+        self.send_unlock_key_if_present()?;
         self.get_id()?;
         self.set_config()?;
         self.get_part_number()?;
+        // Read code options so mass_erase() can auto-select the erase opcode from live content; a locked/unreadable part falls back to the plain code mass erase.
+        if let Err(e) = self.get_code_options() {
+            debug!("erase_init: code-option read failed ({e:?}); using default erase mode");
+        }
         Ok(())
     }
 
@@ -588,6 +617,10 @@ impl SinodudeSerialProgrammer {
         progress.set_message("Reading");
 
         let start = Instant::now();
+        // The OCD MOVC bypass reads one byte per debug run (~16 ms/byte); widen the timeout for the whole OCD read while the ICP path keeps the fast one.
+        if self.use_ocd_read {
+            let _ = self.port.set_timeout(OCD_READ_TIMEOUT);
+        }
         for addr in (0..flash_size).step_by(buffer_size as usize) {
             self.check_cancelled().inspect_err(|_| {
                 progress.abandon_with_message("Cancelled");
@@ -597,6 +630,18 @@ impl SinodudeSerialProgrammer {
             })?;
             contents.extend_from_slice(&result);
             progress.set_position(addr as u64 + buffer_size as u64);
+        }
+        if self.use_ocd_read {
+            let _ = self.port.set_timeout(TIMEOUT);
+            // Addresses 0..2 (reset vector) misdecode over the OCD MOVC path; patch them from a fast ICP read of the always-readable sector 0.
+            if contents.len() >= 3 {
+                self.use_ocd_read = false;
+                let patch = self.read_chunk(0, 3);
+                self.use_ocd_read = true;
+                if let Ok(p) = patch {
+                    contents[..3].copy_from_slice(&p[..3]);
+                }
+            }
         }
         let elapsed = start.elapsed();
 
@@ -610,7 +655,12 @@ impl SinodudeSerialProgrammer {
         length: u16,
     ) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
         debug!("Reading {} bytes at {:#x}", length, addr);
-        self.send_command(cmd::CMD_READ_FLASH)?;
+        let read_cmd = if self.use_ocd_read {
+            cmd::CMD_READ_FLASH_OCD
+        } else {
+            cmd::CMD_READ_FLASH
+        };
+        self.send_command(read_cmd)?;
 
         // Send address (4 bytes, little endian)
         let addr_bytes = addr.to_le_bytes();
@@ -703,9 +753,18 @@ impl SinodudeSerialProgrammer {
         }
         let start = Instant::now();
 
+        // Erase mode; the firmware combines it with chip_type/JTAG ID to pick the ICP opcode. Keep the plain code mass erase (mode 1) and escalate only when non-default code-option bits are set.
+        let mode = if self.use_alternate_erase {
+            if self.chip_type.chip_type == 7 && self.chip_type.jtag_id != 0x3213 {
+                5 // mainstream chip_type 7: 0xC3 (erase code + ISP + data-EEPROM)
+            } else {
+                2 // non-CT7 -> 0xDA; chip_type 7 + JTAG 0x3213 -> 0x3C
+            }
+        } else {
+            1 // standard code mass erase: 0x4B (chip_type 7) / 0xAA (others)
+        };
         self.send_command(cmd::CMD_MASS_ERASE)?;
-        // Send flag: 1 = alternate erase (0xc3), 0 = normal erase (0x4b)
-        self.send_bytes(&[if self.use_alternate_erase { 1 } else { 0 }])?;
+        self.send_bytes(&[mode])?;
         self.expect_ok()
             .map_err(|_| SinodudeSerialProgrammerError::MassEraseFailed)?;
 
@@ -715,6 +774,45 @@ impl SinodudeSerialProgrammer {
         // Blank security and set high code option defaults
         self.blank_security_and_set_code_option_defaults()?;
 
+        Ok(())
+    }
+
+    /// Send the supplied 8-byte password to a protected part (not a bypass: the chip stays locked unless it matches); warn when the part is password-protected and no --key was given.
+    fn send_unlock_key_if_present(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
+        if let Some(key) = self.unlock_key {
+            self.send_unlock_key(&key)?;
+        } else if self.chip_type.security_level > 1 {
+            eprintln!(
+                "Note: this part has SecurityLevel {} (customer-password protected). If the \
+                 target already has a password programmed, supply it with --key <16hex> or \
+                 read/write will fail.",
+                self.chip_type.security_level
+            );
+        }
+        Ok(())
+    }
+
+    pub fn send_unlock_key(&mut self, key: &[u8; 8]) -> Result<(), SinodudeSerialProgrammerError> {
+        eprintln!(
+            "Sending unlock key: {}",
+            key.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+        );
+        self.send_command(cmd::CMD_SEND_KEY)?;
+        self.send_bytes(key)?;
+        // Firmware loads the password and runs the verify read-back, returning 0xC0 when accepted; a mismatch is a warning only, since the subsequent read/write reveals the real outcome.
+        const PWD_ACCEPTED_MARKER: u8 = 0xC0;
+        let marker = self
+            .read_byte()
+            .map_err(|_| SinodudeSerialProgrammerError::OperationFailed)?;
+        if marker == PWD_ACCEPTED_MARKER {
+            eprintln!("Unlock key accepted (verify marker 0x{:02x})", marker);
+        } else {
+            eprintln!(
+                "Warning: unlock-key verify marker 0x{:02x} (expected 0x{:02x}) -- the password \
+                 may be incorrect; read/write may fail.",
+                marker, PWD_ACCEPTED_MARKER
+            );
+        }
         Ok(())
     }
 

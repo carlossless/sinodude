@@ -56,6 +56,11 @@ fn cli() -> Command {
                 .arg(
                     arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
                         .required(false),
+                )
+                .arg(
+                    arg!(--ocd "Read flash over the 3-wire OCD MOVC read-protect bypass instead of the fast ICP read. Recovers read-protected flash (the chip's own CPU code-fetch is not gated); slower (~16 ms/byte).")
+                        .action(ArgAction::SetTrue)
+                        .required(false),
                 ),
         )
         .subcommand(
@@ -156,6 +161,9 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 .get_one::<String>("port")
                 .expect("--port is required for sinodude-serial programmer");
             let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            if sub_matches.get_flag("ocd") {
+                programmer.set_ocd_read(true);
+            }
             programmer.read_init()?;
             let result = programmer.read_flash()?;
             programmer.finish()?;
