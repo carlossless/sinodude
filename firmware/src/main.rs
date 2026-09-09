@@ -13,15 +13,10 @@ use atmega_hal::{
     usart::{Baudrate, Usart},
 };
 
-// ICP Pin assignments (matching reference implementation)
-// TDO - D2 (input)
-// TMS - D3 (output)
-// TDI - D4 (output)
-// TCK - D5 (output)
-// Power - D6 (output)
+// ICP pins: TDO=D2 (in), TMS=D3, TDI=D4, TCK=D5, Power=D6 (out).
 
-// Firmware version
-const VERSION_MAJOR: u8 = 2;
+// v6: CMD_READ_FLASH is the fast ICP read; CMD_READ_FLASH_OCD (0x0F) is the 3-wire OCD MOVC read-protect bypass (read --ocd).
+const VERSION_MAJOR: u8 = 6;
 const VERSION_MINOR: u8 = 0;
 
 // Serial protocol commands
@@ -49,7 +44,10 @@ mod cmd {
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
     pub const CMD_ERASE_EEPROM_PAGE: u8 = 0x0E;
     pub const CMD_SEND_KEY: u8 = 0x0F;
-    pub const CMD_PROBE: u8 = 0x10;
+
+    // Read read-protected flash over the 3-wire OCD MOVC bypass (the CPU code-fetch is not gated); same wire args as CMD_READ_FLASH.
+    pub const CMD_READ_FLASH_OCD: u8 = 0x10; // addr(u32 LE), len(u16 LE) -> len bytes
+    pub const CMD_PROBE: u8 = 0x11;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -57,7 +55,7 @@ mod cmd {
     pub const RSP_DATA: u8 = 0x01;
 }
 
-// ICP Commands (from reference)
+// ICP command opcodes.
 mod icp_cmd {
     pub const ICP_SET_IB_OFFSET_L: u8 = 0x40;
     pub const ICP_SET_IB_OFFSET_H: u8 = 0x41;
@@ -71,6 +69,15 @@ mod icp_cmd {
 
 mod jtag_instructions {
     pub const JTAG_IDCODE: u8 = 14;
+}
+
+// 8051 opcodes injected into the target CPU over the debug link.
+mod op8051 {
+    pub const NOP: u8 = 0x00;
+    pub const LJMP: u8 = 0x02; // LJMP addr16
+    pub const MOV_DPTR: u8 = 0x90; // MOV DPTR,#data16
+    pub const MOVC_A_DPTR: u8 = 0x93; // MOVC A,@A+DPTR
+    pub const CLR_A: u8 = 0xe4;
 }
 
 #[derive(PartialEq)]
@@ -95,6 +102,9 @@ struct IcpController {
     connected: bool,
     mode: Mode,
     chip_type: Option<u8>,
+    jtag_gadget: Option<u16>,
+    clk_delay: u32,
+    ocd_slow: u16,
 }
 
 impl IcpController {
@@ -105,6 +115,9 @@ impl IcpController {
             connected: false,
             mode: Mode::Unset,
             chip_type: None,
+            jtag_gadget: None,
+            clk_delay: 2,
+            ocd_slow: 8,
         }
     }
 
@@ -161,6 +174,7 @@ impl IcpController {
     }
 
     fn connect(&mut self) -> bool {
+        self.jtag_gadget = None;
         self.power_on();
 
         // Wait for power stabilization
@@ -202,8 +216,8 @@ impl IcpController {
             self.delay_us(2);
         }
 
-        // 20480 TMS cycles
-        for _ in 0..20480u16 {
+        // 25600 TMS cycles
+        for _ in 0..25600u16 {
             self.tms_low();
             self.delay_us(2);
             self.tms_high();
@@ -357,8 +371,7 @@ impl IcpController {
             self.jtag_send_data(23, 0x402000u32);
             self.jtag_send_data(23, 0x400000u32);
 
-            // most likely breakpoints initialization
-            // SH68F881W works without it, but maybe for other chips it's mandatory
+            // most likely breakpoint init; SH68F881W works without it, maybe mandatory for other chips
             {
                 self.jtag_send_data(23, 0x630000u32);
                 self.jtag_send_data(23, 0x670000u32);
@@ -489,11 +502,11 @@ impl IcpController {
         }
 
         self.pins.tck.set_high();
-        self.delay_us(2);
+        self.delay_us(self.clk_delay);
 
         let b = self.pins.tdo.is_high();
         self.pins.tck.set_low();
-        self.delay_us(2);
+        self.delay_us(self.clk_delay);
 
         b
     }
@@ -663,6 +676,324 @@ impl IcpController {
         self.reset();
 
         true
+    }
+
+    // 3-wire OCD debug link: clk = TCK (PD5), data-out = TDI (PD4), data-in = TDO (PD2), FRAME = TMS (PD3); frame-marked transfers, not JTAG TAP.
+    fn ocd_pulse(&mut self, d: u32) {
+        self.tck_high();
+        self.delay_us(d);
+        self.tck_low();
+        self.delay_us(d);
+    }
+
+    /// Frame-marked 4-bit send, LSB-first; `typ` 0 = type A (IR select), 1 = type B (4-bit DR shift); `d` = pulse delay.
+    fn ocd_send4(&mut self, n: u8, d: u32, typ: u8) {
+        let s = self.clk_delay;
+        self.tms_high();
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        if typ == 0 {
+            self.delay_us(s);
+            self.ocd_pulse(d);
+        }
+        self.tms_low();
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        for i in 0..3u8 {
+            if (n >> i) & 1 != 0 {
+                self.tdi_high();
+            } else {
+                self.tdi_low();
+            }
+            self.delay_us(s);
+            self.ocd_pulse(d);
+        }
+        if (n >> 3) & 1 != 0 {
+            self.tdi_high();
+        } else {
+            self.tdi_low();
+        }
+        self.tms_high();
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        if typ == 0 {
+            self.delay_us(s);
+            self.ocd_pulse(d);
+            self.tms_low();
+            self.tdi_low();
+            self.delay_us(s);
+            self.ocd_pulse(d);
+        } else {
+            self.tdi_low();
+            self.delay_us(s);
+            self.ocd_pulse(d);
+            self.tms_low();
+            self.delay_us(s);
+            self.ocd_pulse(d);
+            self.ocd_pulse(d);
+        }
+    }
+
+    /// Frame-marked 16-bit read, MSB-first.
+    fn ocd_read16(&mut self) -> u16 {
+        let s = self.clk_delay;
+        self.tms_high();
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        self.tms_low();
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        let mut val: u16 = 0;
+        for _ in 0..15 {
+            self.tck_high();
+            self.delay_us(s);
+            let bit = self.tdo_read() as u16;
+            val = (val | bit) << 1;
+            self.tck_low();
+            self.delay_us(s);
+        }
+        self.tms_high();
+        self.delay_us(s);
+        self.tck_high();
+        self.delay_us(s);
+        val |= self.tdo_read() as u16;
+        self.tck_low();
+        self.delay_us(s);
+        self.tms_low();
+        val
+    }
+
+    /// Inject one 8051 opcode byte, MSB-first, with frame-marked preamble and postamble.
+    fn ocd_inject_opcode(&mut self, b: u8) {
+        let s = self.clk_delay;
+        self.tms_high();
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        self.tms_low();
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        let mut i = 7i8;
+        while i >= 1 {
+            if (b >> (i as u8)) & 1 != 0 {
+                self.tdi_high();
+            } else {
+                self.tdi_low();
+            }
+            self.delay_us(s);
+            self.ocd_pulse(s);
+            i -= 1;
+        }
+        if b & 1 != 0 {
+            self.tdi_high();
+        } else {
+            self.tdi_low();
+        }
+        self.tms_high();
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        self.tdi_low();
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        self.tms_low();
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        self.delay_us(s);
+        self.ocd_pulse(s);
+    }
+
+    /// Send a 23-bit debug value: 16 bits `lo` LSB-first, then 7 bits `hi`, the last with frame raised.
+    fn ocd_send23(&mut self, lo: u16, hi: u8, d: u32) {
+        let s = self.clk_delay;
+        self.tms_high();
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        self.tms_low();
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        for i in 0..16u8 {
+            if (lo >> i) & 1 != 0 {
+                self.tdi_high();
+            } else {
+                self.tdi_low();
+            }
+            self.delay_us(s);
+            self.ocd_pulse(d);
+        }
+        for i in 0..6u8 {
+            if (hi >> i) & 1 != 0 {
+                self.tdi_high();
+            } else {
+                self.tdi_low();
+            }
+            self.delay_us(s);
+            self.ocd_pulse(d);
+        }
+        if (hi >> 6) & 1 != 0 {
+            self.tdi_high();
+        } else {
+            self.tdi_low();
+        }
+        self.tms_high();
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        self.tdi_low();
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        self.tms_low();
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        self.delay_us(s);
+        self.ocd_pulse(d);
+    }
+
+    /// Read the halted CPU context into `out` (out[0]=status, out[1]=byte0, out[2..8]=6 register bytes).
+    fn ocd_read_context(&mut self, out: &mut [u8; 8]) {
+        let s = self.clk_delay;
+        let d = self.ocd_slow as u32;
+        self.tms_high();
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        self.tms_low();
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        // status bit0, bit1
+        self.tck_high();
+        self.delay_us(s);
+        let b0 = self.tdo_read() as u8;
+        self.tck_low();
+        self.delay_us(s);
+        self.tck_high();
+        self.delay_us(s);
+        let b1 = self.tdo_read() as u8;
+        self.tck_low();
+        self.delay_us(s);
+        // 8-bit byte0, LSB-first
+        let mut byte0: u8 = 0;
+        for i in 0..8u8 {
+            self.tck_high();
+            self.delay_us(s);
+            byte0 |= (self.tdo_read() as u8) << i;
+            self.tck_low();
+            self.delay_us(s);
+        }
+        // status bit2, bit3
+        self.tck_high();
+        self.delay_us(s);
+        let b2 = self.tdo_read() as u8;
+        self.tck_low();
+        self.delay_us(s);
+        self.tck_high();
+        self.delay_us(s);
+        let b3 = self.tdo_read() as u8;
+        self.tck_low();
+        self.delay_us(s);
+        out[0] = b0 | (b1 << 1) | (b2 << 2) | (b3 << 3);
+        out[1] = byte0;
+        // 4 dummy clocks
+        for _ in 0..4 {
+            self.ocd_pulse(s);
+        }
+        // 6 context bytes, LSB-first
+        for n in 0..6usize {
+            let mut v: u8 = 0;
+            for i in 0..8u8 {
+                self.tck_high();
+                self.delay_us(s);
+                self.tck_low();
+                v |= (self.tdo_read() as u8) << i;
+                self.delay_us(s);
+            }
+            out[2 + n] = v;
+        }
+        // postamble
+        self.tms_high();
+        self.delay_us(s);
+        self.ocd_pulse(d);
+        self.tms_low();
+        self.delay_us(s);
+        self.ocd_pulse(d);
+    }
+
+    /// Enter OCD debug mode: framed control-register init (0x403000/0x402000/0x400000 + breakpoint regs 0x63..0x7F), then inject MOV 0xFF,#0x80 (SFR 0xFF) to arm the debug/ISP engine; assumes the target is already connected.
+    fn ocd_enter(&mut self) {
+        let f = self.clk_delay;
+        self.ocd_send4(2, f, 0); // IR2
+        self.ocd_send4(4, f, 1); // data4(4)
+        self.ocd_send4(3, f, 0); // IR3
+        self.ocd_send23(0x3000, 0x40, f); // 0x403000
+        self.ocd_send23(0x2000, 0x40, f); // 0x402000
+        self.ocd_send23(0x0000, 0x40, f); // 0x400000
+        self.ocd_send23(0x0000, 0x63, f); // breakpoint regs 0x63..0x7F, disabled
+        self.ocd_send23(0x0000, 0x67, f);
+        self.ocd_send23(0x0000, 0x6b, f);
+        self.ocd_send23(0x0000, 0x6f, f);
+        self.ocd_send23(0x0000, 0x73, f);
+        self.ocd_send23(0x0000, 0x77, f);
+        self.ocd_send23(0x0000, 0x7b, f);
+        self.ocd_send23(0x0000, 0x7f, f);
+        self.ocd_send4(2, f, 0); // IR2
+        self.ocd_send4(1, f, 1); // data4(1)
+        self.ocd_send4(0x0c, f, 0); // IR12
+        // Enable debug/ISP: inject MOV 0xFF,#0x80 (SFR 0xFF <- 0x80).
+        self.ocd_inject_opcode(0x75);
+        self.ocd_inject_opcode(0xff);
+        self.ocd_inject_opcode(0x80);
+        self.ocd_inject_opcode(0x00);
+        self.ocd_inject_opcode(0x00);
+    }
+
+    /// Read one flash byte over the OCD MOVC bypass (reads read-protected flash; the CPU code-fetch is not gated); requires ocd_enter() first.
+    fn ocd_movc_byte(&mut self, addr: u16) -> u8 {
+        let f = self.clk_delay;
+        self.ocd_inject_opcode(op8051::NOP);
+        self.ocd_inject_opcode(op8051::NOP);
+        self.ocd_inject_opcode(op8051::NOP);
+        self.ocd_inject_opcode(op8051::CLR_A);
+        self.ocd_inject_opcode(op8051::MOV_DPTR);
+        self.ocd_inject_opcode((addr >> 8) as u8);
+        self.ocd_inject_opcode(addr as u8);
+        self.ocd_inject_opcode(op8051::MOVC_A_DPTR);
+        // run one debug step (run 0x402000, halt 0x400000)
+        self.ocd_send4(2, f, 0);
+        self.ocd_send4(4, f, 1);
+        self.ocd_send4(3, f, 0);
+        self.ocd_send23(0x2000, 0x40, f);
+        self.ocd_send4(4, f, 0);
+        self.delay_us(self.ocd_slow as u32);
+        self.ocd_send4(2, f, 0);
+        self.ocd_send4(4, f, 1);
+        self.ocd_send4(3, f, 0);
+        self.ocd_send23(0x0000, 0x40, f);
+        self.ocd_send4(2, f, 0);
+        self.ocd_send4(1, f, 1);
+        self.ocd_send4(0x0c, f, 0);
+        self.delay_us(self.ocd_slow as u32);
+        let mut ctx = [0u8; 8];
+        self.ocd_read_context(&mut ctx);
+        // decode: flash = rev6(ctx[3] low 6 bits) | ctx[2] bit7 -> bit6 | bit6 -> bit7
+        let low6 = (ctx[3].reverse_bits() >> 2) & 0x3f;
+        low6 | (((ctx[2] >> 7) & 1) << 6) | (((ctx[2] >> 6) & 1) << 7)
+    }
+
+    /// Read `buf.len()` read-protected flash bytes from `addr` over the OCD MOVC bypass; addresses 0..2 misdecode here and are patched host-side from an ICP read.
+    fn ocd_read_flash(&mut self, addr: u32, buf: &mut [u8]) {
+        self.clk_delay = 1;
+        self.ocd_slow = 50;
+        self.jtag_get_id();
+        self.ocd_enter();
+        for (i, b) in buf.iter_mut().enumerate() {
+            *b = self.ocd_movc_byte((addr as u16).wrapping_add(i as u16));
+        }
     }
 
     fn icp_write_region(&mut self, addr: u32, data: &[u8], custom_block: bool) -> bool {
@@ -916,7 +1247,7 @@ fn main() -> ! {
                 }
             }
 
-            cmd::CMD_READ_FLASH => {
+            cmd::CMD_READ_FLASH | cmd::CMD_READ_FLASH_OCD => {
                 // Read address (4 bytes) and length (2 bytes)
                 let addr = {
                     let b0 = nb::block!(rx.read()).unwrap_or(0);
@@ -934,7 +1265,14 @@ fn main() -> ! {
                 // Clamp length to buffer size
                 let read_len = len.min(buffer.len());
 
-                if icp.icp_read_flash(addr, &mut buffer[..read_len], false) {
+                // CMD_READ_FLASH_OCD (0x0F) = 3-wire OCD MOVC bypass; CMD_READ_FLASH (0x08) = fast ICP read.
+                let ok = if cmd_byte == cmd::CMD_READ_FLASH_OCD {
+                    icp.ocd_read_flash(addr, &mut buffer[..read_len]);
+                    true
+                } else {
+                    icp.icp_read_flash(addr, &mut buffer[..read_len], false)
+                };
+                if ok {
                     let _ = nb::block!(tx.write(cmd::RSP_DATA));
                     let _ = nb::block!(tx.write(read_len as u8));
                     let _ = nb::block!(tx.write((read_len >> 8) as u8));
@@ -1104,7 +1442,6 @@ fn main() -> ! {
             }
 
             cmd::CMD_WRITE_CUSTOM_REGION => {
-                // Read address (4 bytes)
                 let addr = {
                     let b0 = nb::block!(rx.read()).unwrap_or(0);
                     let b1 = nb::block!(rx.read()).unwrap_or(0);
@@ -1112,27 +1449,22 @@ fn main() -> ! {
                     let b3 = nb::block!(rx.read()).unwrap_or(0);
                     u32::from_le_bytes([b0, b1, b2, b3])
                 };
-                // Read length (2 bytes)
                 let len = {
                     let low = nb::block!(rx.read()).unwrap_or(0);
                     let high = nb::block!(rx.read()).unwrap_or(0);
                     u16::from_le_bytes([low, high]) as usize
                 };
-
-                // Clamp length to buffer size
                 let write_len = len.min(buffer.len());
-
-                // Read data to write
                 for byte in buffer[..write_len].iter_mut() {
                     *byte = nb::block!(rx.read()).unwrap_or(0);
                 }
-
                 if icp.icp_write_custom_region(addr, &buffer[..write_len]) {
                     let _ = nb::block!(tx.write(cmd::RSP_OK));
                 } else {
                     let _ = nb::block!(tx.write(cmd::RSP_ERR));
                 }
             }
+
 
             _ => {
                 // Unknown command
