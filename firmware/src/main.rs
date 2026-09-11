@@ -47,6 +47,7 @@ mod cmd {
     pub const CMD_MASS_ERASE: u8 = 0x0B;
     pub const CMD_READ_CUSTOM_REGION: u8 = 0x0C;
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
+    pub const CMD_ERASE_EEPROM_PAGE: u8 = 0x0E;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -534,6 +535,46 @@ impl IcpController {
         value
     }
 
+    fn icp_select_program_space(&mut self, chip_type: u8) {
+        let space: u8 = match chip_type {
+            0 => 0xfe,
+            2 | 4 | 6 | 7 => 0xf0,
+            _ => return,
+        };
+        self.send_icp_byte(0x46);
+        self.send_icp_byte(space);
+        self.send_icp_byte(0xff);
+    }
+
+    fn icp_erase_opcode(mode: u8, sub_flag: u8, chip_type: u8) -> u8 {
+        match mode {
+            0 => {
+                if sub_flag == 0 {
+                    0xe6
+                } else {
+                    0x55
+                }
+            }
+            1 => {
+                if chip_type == 7 {
+                    0x4b
+                } else {
+                    0xaa
+                }
+            }
+            2 => {
+                if chip_type == 7 {
+                    0x3c
+                } else {
+                    0xda
+                }
+            }
+            3 => 0x5e,
+            4 => 0x2d,
+            _ => 0xc3,
+        }
+    }
+
     fn icp_read_flash(&mut self, addr: u32, buffer: &mut [u8], custom_block: bool) -> bool {
         self.switch_mode(Mode::Icp);
 
@@ -580,11 +621,7 @@ impl IcpController {
             return false;
         };
 
-        if chip_type != 1 {
-            self.send_icp_byte(0x46);
-            self.send_icp_byte(0xF0);
-            self.send_icp_byte(0xFF);
-        }
+        self.icp_select_program_space(chip_type);
 
         self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
         self.send_icp_byte((addr & 0xFF) as u8);
@@ -641,18 +678,20 @@ impl IcpController {
         self.icp_write_region(addr, data, false)
     }
 
-    fn icp_mass_erase(&mut self, alternate: bool) -> bool {
+    fn icp_select_erase_space(&mut self) {
+        self.send_icp_byte(0x46);
+        self.send_icp_byte(0xf0);
+        self.send_icp_byte(0xff);
+    }
+
+    fn icp_mass_erase(&mut self, mode: u8) -> bool {
         self.switch_mode(Mode::Icp);
 
         let Some(chip_type) = self.chip_type else {
             return false;
         };
 
-        if chip_type != 1 {
-            self.send_icp_byte(0x46);
-            self.send_icp_byte(0xF0);
-            self.send_icp_byte(0xFF);
-        }
+        self.icp_select_erase_space();
 
         self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
         self.send_icp_byte(0x00);
@@ -666,9 +705,7 @@ impl IcpController {
         self.send_icp_byte(icp_cmd::ICP_SET_IB_DATA);
         self.send_icp_byte(0x00);
 
-        // 0x4b - normal mass erase
-        // 0xc3 - alternate mass erase (used when code options have non-default bits)
-        let erase_cmd = if alternate { 0xc3 } else { 0x4b };
+        let erase_cmd = Self::icp_erase_opcode(mode, 0, chip_type);
         self.send_icp_byte(erase_cmd);
         self.send_icp_byte(0x15);
         self.send_icp_byte(0x0a);
@@ -679,26 +716,35 @@ impl IcpController {
         self.pins.tdi.set_high(); // keep tdi line high
 
         self.delay.delay_ms(30u8);
+        let mut waited_ms: u16 = 0;
         while !self.tdo_read() {
             self.delay.delay_ms(5u8);
             self.send_icp_byte(0x00);
+            waited_ms += 5;
+            if waited_ms >= 5000 {
+                return false;
+            }
         }
 
-        true // TODO: at some point, time out and return false
+        true
     }
 
     fn icp_erase_flash(&mut self, addr: u32) -> bool {
+        self.icp_erase_at(addr, 0)
+    }
+
+    fn icp_erase_eeprom_page(&mut self, addr: u32) -> bool {
+        self.icp_erase_at(addr, 1)
+    }
+
+    fn icp_erase_at(&mut self, addr: u32, sub_flag: u8) -> bool {
         self.switch_mode(Mode::Icp);
 
         let Some(chip_type) = self.chip_type else {
             return false;
         };
 
-        if chip_type != 1 {
-            self.send_icp_byte(0x46);
-            self.send_icp_byte(0xF0);
-            self.send_icp_byte(0xFF);
-        }
+        self.icp_select_erase_space();
 
         self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
         self.send_icp_byte((addr & 0xFF) as u8);
@@ -712,7 +758,7 @@ impl IcpController {
         self.send_icp_byte(icp_cmd::ICP_SET_IB_DATA);
         self.send_icp_byte(0x00);
 
-        self.send_icp_byte(0xe6);
+        self.send_icp_byte(Self::icp_erase_opcode(0, sub_flag, chip_type));
         self.send_icp_byte(0x15);
         self.send_icp_byte(0x0a);
         self.send_icp_byte(0x09);
@@ -909,6 +955,22 @@ fn main() -> ! {
                 }
             }
 
+            cmd::CMD_ERASE_EEPROM_PAGE => {
+                let addr = {
+                    let b0 = nb::block!(rx.read()).unwrap_or(0);
+                    let b1 = nb::block!(rx.read()).unwrap_or(0);
+                    let b2 = nb::block!(rx.read()).unwrap_or(0);
+                    let b3 = nb::block!(rx.read()).unwrap_or(0);
+                    u32::from_le_bytes([b0, b1, b2, b3])
+                };
+
+                if icp.icp_erase_eeprom_page(addr) {
+                    let _ = nb::block!(tx.write(cmd::RSP_OK));
+                } else {
+                    let _ = nb::block!(tx.write(cmd::RSP_ERR));
+                }
+            }
+
             cmd::CMD_ERASE_FLASH_SECTOR => {
                 // Read address (4 bytes)
                 let addr = {
@@ -927,8 +989,8 @@ fn main() -> ! {
             }
 
             cmd::CMD_MASS_ERASE => {
-                let alternate = nb::block!(rx.read()).unwrap_or(0) != 0;
-                if icp.icp_mass_erase(alternate) {
+                let mode = nb::block!(rx.read()).unwrap_or(1);
+                if icp.icp_mass_erase(mode) {
                     let _ = nb::block!(tx.write(cmd::RSP_OK));
                 } else {
                     let _ = nb::block!(tx.write(cmd::RSP_ERR));
