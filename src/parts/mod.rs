@@ -1,6 +1,19 @@
 use indexmap::IndexMap;
 use phf::phf_map;
 
+pub const PROTECTION_RECORD_LEN: usize = SecurityRecordFormat::Record19.byte_len();
+
+pub fn hex_string(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+pub const MAX_PROTECT_GROUPS: usize = 32;
+
+pub const PROTECTION_BITMAP_LEN: usize = 0x10;
+pub const PROTECTION_FLAG_OFFSET: usize = 0x10;
+pub const PROTECTION_MARK_OFFSET: usize = 0x11;
+pub const PROTECTION_MARK_LEN: usize = 6;
+
 pub mod adc2015;
 pub mod ch6935a;
 pub mod chks011;
@@ -531,6 +544,24 @@ pub struct Part {
     pub serial_number: AddressField,
     pub compatible_voltages: &'static [Voltage],
     pub options: fn() -> Options,
+    pub security_record_format: SecurityRecordFormat,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecurityRecordFormat {
+    None,
+    Record19,
+    Record38,
+}
+
+impl SecurityRecordFormat {
+    pub const fn byte_len(self) -> usize {
+        match self {
+            Self::None => 0,
+            Self::Record19 => 0x19,
+            Self::Record38 => 0x38,
+        }
+    }
 }
 
 impl Part {
@@ -550,19 +581,94 @@ impl Part {
     }
 
     /// Returns the security region length for this part.
-    pub fn security_length(&self) -> usize {
-        if self.part_number == sh68f90::PART.part_number
-            || self.part_number == sh68f90a::PART.part_number
-        {
-            17
-        } else {
-            let size = self.serial_number.address as usize - self.security.address as usize;
-            eprintln!(
-                "Warning: exact security length for this part is unknown, using the full {} bytes",
-                size
-            );
-            size
+    pub fn sectors_per_protect_bit(&self) -> usize {
+        if self.security_level == 3 {
+            return 4;
         }
+        match self.chip_type {
+            0 | 1 => 1,
+            2 => 2,
+            7 => 8,
+            _ => 2,
+        }
+    }
+
+    pub fn protect_group_size(&self) -> usize {
+        self.sector_size * self.sectors_per_protect_bit()
+    }
+
+    pub fn protect_group_count(&self) -> usize {
+        let sectors = self.flash_size.div_ceil(self.sector_size);
+        sectors
+            .div_ceil(self.sectors_per_protect_bit())
+            .min(MAX_PROTECT_GROUPS)
+    }
+
+    pub fn build_protection_record(
+        &self,
+        read_protect: &[bool],
+        write_protect: &[bool],
+        custom_mark: &[u8; 6],
+    ) -> Vec<u8> {
+        let mut record = vec![0u8; PROTECTION_RECORD_LEN];
+        let groups = self.protect_group_count();
+
+        for group in 0..groups {
+            let r = read_protect.get(group).copied().unwrap_or(false);
+            let w = write_protect.get(group).copied().unwrap_or(false);
+            let mut nibble = 0u8;
+            if r {
+                nibble |= 0b0011;
+            }
+            if w {
+                nibble |= if self.security_level == 4 {
+                    0b1000
+                } else {
+                    0b1100
+                };
+            }
+            let bit = group * 4;
+            record[bit / 8] |= nibble << (bit % 8);
+        }
+
+        let any_write = write_protect.iter().take(groups).any(|&b| b);
+        record[PROTECTION_FLAG_OFFSET] = if any_write { 0x33 } else { 0x00 };
+        record[PROTECTION_MARK_OFFSET..PROTECTION_MARK_OFFSET + PROTECTION_MARK_LEN]
+            .copy_from_slice(custom_mark);
+
+        record
+    }
+
+    pub fn decode_protection_record(&self, record: &[u8]) -> (Vec<bool>, Vec<bool>) {
+        let groups = self.protect_group_count();
+        let mut read_protect = vec![false; groups];
+        let mut write_protect = vec![false; groups];
+
+        for group in 0..groups {
+            let bit = group * 4;
+            let Some(&byte) = record.get(bit / 8) else {
+                break;
+            };
+            let nibble = (byte >> (bit % 8)) & 0x0f;
+            read_protect[group] = nibble & 0b0001 != 0;
+            write_protect[group] = if self.security_level == 4 {
+                nibble & 0b1000 != 0
+            } else {
+                nibble & 0b0100 != 0
+            };
+        }
+
+        (read_protect, write_protect)
+    }
+
+    pub fn security_length(&self) -> usize {
+        if self.security_record_format != SecurityRecordFormat::None {
+            return self.security_record_format.byte_len();
+        }
+        if self.security.address == 0 {
+            return 0;
+        }
+        self.serial_number.address as usize - self.security.address as usize
     }
 
     /// Returns the non-editable default bits for the upper code options (bytes 4+).
@@ -974,4 +1080,83 @@ pub fn find_parts_by_part_number(part_number: &[u8; 5]) -> Vec<&'static str> {
         .filter(|(_, part)| &part.part_number == part_number)
         .map(|(name, _)| *name)
         .collect()
+}
+
+#[cfg(test)]
+mod protection_tests {
+    use super::*;
+
+    #[test]
+    fn sh68f89_factory_record_round_trips() {
+        let part = &sh68f89::PART;
+        assert_eq!(part.sectors_per_protect_bit(), 4);
+        assert_eq!(part.protect_group_size(), 0x1000);
+        assert_eq!(part.protect_group_count(), 16);
+
+        let protected = [1usize, 2, 5, 6, 9, 10, 13];
+        let mut read = vec![false; 16];
+        for &g in &protected {
+            read[g] = true;
+        }
+        let write = vec![false; 16];
+
+        let record = part.build_protection_record(&read, &write, &[0u8; 6]);
+        assert_eq!(record.len(), PROTECTION_RECORD_LEN);
+        assert_eq!(
+            &record[..8],
+            &[0x30, 0x03, 0x30, 0x03, 0x30, 0x03, 0x30, 0x00]
+        );
+        assert_eq!(record[0x10], 0x00);
+        assert!(record[8..0x10].iter().all(|&b| b == 0));
+        assert!(record[0x11..].iter().all(|&b| b == 0));
+
+        let (decoded_read, decoded_write) = part.decode_protection_record(&record);
+        assert_eq!(decoded_read, read);
+        assert_eq!(decoded_write, write);
+    }
+
+    #[test]
+    fn sh68f90a_protect_all_matches_validated_record() {
+        let part = &sh68f90a::PART;
+        assert_eq!(part.security_level, 4);
+        assert_eq!(part.sectors_per_protect_bit(), 8);
+        assert_eq!(part.protect_group_count(), 16);
+
+        let all = vec![true; 16];
+        let record = part.build_protection_record(&all, &all, &[0u8; 6]);
+
+        assert!(record[..8].iter().all(|&b| b == 0xbb));
+        assert_eq!(record[0x10], 0x33);
+
+        let (r, w) = part.decode_protection_record(&record);
+        assert_eq!(r, all);
+        assert_eq!(w, all);
+    }
+
+    #[test]
+    fn sh79f6488_fully_read_protected_record() {
+        let part = &sh79f6488::PART;
+        assert_eq!(part.sectors_per_protect_bit(), 4);
+        assert_eq!(part.protect_group_count(), 16);
+
+        let all = vec![true; 16];
+        let none = vec![false; 16];
+        let record = part.build_protection_record(&all, &none, &[0u8; 6]);
+
+        assert_eq!(&record[..8], &[0x33; 8]);
+        assert_eq!(record[0x10], 0x00);
+
+        let (r, w) = part.decode_protection_record(&record);
+        assert_eq!(r, all);
+        assert_eq!(w, none);
+    }
+
+    #[test]
+    fn security_level_3_overrides_chip_type_granularity() {
+        for part in PARTS.values() {
+            if part.security_level == 3 {
+                assert_eq!(part.sectors_per_protect_bit(), 4, "{:?}", part.part_number);
+            }
+        }
+    }
 }
