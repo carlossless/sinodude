@@ -5,8 +5,14 @@ rustflags = ["-C", "target-cpu=atmega328p"]
 [target.'cfg(target_arch = "avr")']
 runner = "ravedude"
 
+# Build scripts link with the host toolchain, whose bundled ld.lld will not run on NixOS.
+[host]
+rustflags = ["-C", "linker-features=-lld"]
+
 [unstable]
 build-std = ["core"]
+host-config = true
+target-applies-to-host = true
 
 # To build for ATmega328PB instead, override RUSTFLAGS:
 # RUSTFLAGS="-C target-cpu=atmega328pb" cargo build --release --no-default-features --features atmega328pb
