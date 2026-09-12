@@ -74,7 +74,6 @@ const CHUNK_SIZE: usize = 1024;
 const EEPROM_PAGE_SIZE: usize = 256;
 const BAUD_RATE: u32 = 115200;
 const TIMEOUT: Duration = Duration::from_secs(5);
-const UNLOCK_ACCEPTED_MARKER: u8 = 0xc0;
 
 #[derive(Debug, Error)]
 pub enum SinodudeSerialProgrammerError {
@@ -125,8 +124,8 @@ pub enum SinodudeSerialProgrammerError {
         expected: Vec<u8>,
         actual: Vec<u8>,
     },
-    #[error("Unlock key rejected by the target (marker {marker:#04x}, expected 0xc0)")]
-    UnlockKeyRejected { marker: u8 },
+    #[error("Unlock key rejected: the target ID reads back all 0xff")]
+    UnlockKeyRejected,
     #[error("Part has no data EEPROM")]
     NoDataEeprom,
     #[error("Part {part} defines no supported protection record format")]
@@ -577,23 +576,31 @@ impl SinodudeSerialProgrammer {
         let Some(key) = self.unlock_key else {
             return Ok(());
         };
-        let verify_addr = self.chip_type.customer_option.address;
+        let commit_addr = self.chip_type.customer_option.address;
         eprintln!("Sending unlock key...");
         self.send_command(cmd::CMD_SEND_KEY)?;
         self.send_bytes(&key)?;
-        self.send_bytes(&verify_addr.to_le_bytes())?;
+        self.send_bytes(&commit_addr.to_le_bytes())?;
 
         let response = self.read_byte()?;
         if response != cmd::RSP_DATA {
             return Err(SinodudeSerialProgrammerError::InvalidResponse);
         }
-        let marker = self.read_byte()?;
-        if marker == UNLOCK_ACCEPTED_MARKER {
-            eprintln!("Unlock key accepted");
-            Ok(())
-        } else {
-            Err(SinodudeSerialProgrammerError::UnlockKeyRejected { marker })
+        let _commit = self.read_byte()?;
+
+        self.send_command(cmd::CMD_GET_ID)?;
+        let response = self.read_byte()?;
+        if response != cmd::RSP_DATA {
+            return Err(SinodudeSerialProgrammerError::InvalidResponse);
         }
+        let lo = self.read_byte()?;
+        let hi = self.read_byte()?;
+        let id = u16::from_le_bytes([lo, hi]);
+        if id == 0xffff {
+            return Err(SinodudeSerialProgrammerError::UnlockKeyRejected);
+        }
+        eprintln!("Unlock key accepted (id reads back {:#06x})", id);
+        Ok(())
     }
 
     pub fn read_init(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
