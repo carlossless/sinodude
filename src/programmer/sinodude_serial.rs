@@ -39,6 +39,7 @@ mod cmd {
     pub const CMD_READ_CUSTOM_REGION: u8 = 0x0C;
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
     pub const CMD_ERASE_EEPROM_PAGE: u8 = 0x0E;
+    pub const CMD_SEND_KEY: u8 = 0x0F;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -73,6 +74,7 @@ const CHUNK_SIZE: usize = 1024;
 const EEPROM_PAGE_SIZE: usize = 256;
 const BAUD_RATE: u32 = 115200;
 const TIMEOUT: Duration = Duration::from_secs(5);
+const UNLOCK_ACCEPTED_MARKER: u8 = 0xc0;
 
 #[derive(Debug, Error)]
 pub enum SinodudeSerialProgrammerError {
@@ -123,6 +125,8 @@ pub enum SinodudeSerialProgrammerError {
         expected: Vec<u8>,
         actual: Vec<u8>,
     },
+    #[error("Unlock key rejected by the target (marker {marker:#04x}, expected 0xc0)")]
+    UnlockKeyRejected { marker: u8 },
     #[error("Part has no data EEPROM")]
     NoDataEeprom,
     #[error("Part {part} defines no supported protection record format")]
@@ -150,6 +154,7 @@ pub struct SinodudeSerialProgrammer {
     cancelled: Arc<AtomicBool>,
     /// True if code options have non-editable bits that differ from defaults (use 0xc3 erase)
     non_default_option_bits: bool,
+    unlock_key: Option<[u8; 8]>,
     /// Stored custom fields read from device during init
     stored_customer_id: Option<[u8; 4]>,
     stored_operation_number: Option<[u8; 2]>,
@@ -191,6 +196,7 @@ impl SinodudeSerialProgrammer {
             connected: false,
             cancelled,
             non_default_option_bits: false,
+            unlock_key: None,
             stored_customer_id: None,
             stored_operation_number: None,
             stored_customer_option: None,
@@ -563,12 +569,40 @@ impl SinodudeSerialProgrammer {
         Ok(())
     }
 
+    pub fn set_unlock_key(&mut self, key: [u8; 8]) {
+        self.unlock_key = Some(key);
+    }
+
+    fn send_unlock_key_if_present(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
+        let Some(key) = self.unlock_key else {
+            return Ok(());
+        };
+        let verify_addr = self.chip_type.customer_option.address;
+        eprintln!("Sending unlock key...");
+        self.send_command(cmd::CMD_SEND_KEY)?;
+        self.send_bytes(&key)?;
+        self.send_bytes(&verify_addr.to_le_bytes())?;
+
+        let response = self.read_byte()?;
+        if response != cmd::RSP_DATA {
+            return Err(SinodudeSerialProgrammerError::InvalidResponse);
+        }
+        let marker = self.read_byte()?;
+        if marker == UNLOCK_ACCEPTED_MARKER {
+            eprintln!("Unlock key accepted");
+            Ok(())
+        } else {
+            Err(SinodudeSerialProgrammerError::UnlockKeyRejected { marker })
+        }
+    }
+
     pub fn read_init(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         self.ping()?;
         self.check_version()?;
         self.connect()?;
         self.get_id()?;
         self.set_config()?;
+        self.send_unlock_key_if_present()?;
         self.get_part_number()?;
         self.get_code_options()?;
         Ok(())
@@ -580,6 +614,7 @@ impl SinodudeSerialProgrammer {
         self.connect()?;
         self.get_id()?;
         self.set_config()?;
+        self.send_unlock_key_if_present()?;
         self.get_part_number()?;
         self.get_code_options()?;
         Ok(())
@@ -591,6 +626,7 @@ impl SinodudeSerialProgrammer {
         self.connect()?;
         self.get_id()?;
         self.set_config()?;
+        self.send_unlock_key_if_present()?;
         self.get_part_number()?;
         if let Err(e) = self.get_code_options() {
             debug!("erase_init: code-option read failed ({e:?}); using default erase mode");

@@ -99,6 +99,10 @@ fn cli() -> Command {
                 .arg(
                     arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
                         .required(false),
+                )
+                .arg(
+                    arg!(--key <KEY> "Customer unlock key for a password-protected part (8 bytes hex)")
+                        .required(false),
                 ),
         )
         .subcommand(
@@ -118,6 +122,10 @@ fn cli() -> Command {
                 )
                 .arg(
                     arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--key <KEY> "Customer unlock key for a password-protected part (8 bytes hex)")
                         .required(false),
                 )
                 .arg(
@@ -168,6 +176,10 @@ fn cli() -> Command {
                         .required(false),
                 )
                 .arg(
+                    arg!(--key <KEY> "Customer unlock key for a password-protected part (8 bytes hex)")
+                        .required(false),
+                )
+                .arg(
                     arg!(--start_addr <START_ADDR> "Start address for sector erase (hex, e.g., 0x1000)")
                         .required(false),
                 )
@@ -203,6 +215,10 @@ fn cli() -> Command {
                         .required(false),
                 )
                 .arg(
+                    arg!(--key <KEY> "Customer unlock key for a password-protected part (8 bytes hex)")
+                        .required(false),
+                )
+                .arg(
                     arg!(--read_protect <GROUPS> "Read-protect these groups: \"all\", or a list like 1,2,5-6,13")
                         .required(false),
                 )
@@ -234,6 +250,14 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 .get_one::<String>("port")
                 .expect("--port is required for sinodude-serial programmer");
             let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            if let Some(key) = sub_matches.get_one::<String>("key") {
+                let bytes = parse_hex(key)?;
+                let key: [u8; 8] = bytes
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| "Unlock key must be exactly 8 bytes")?;
+                programmer.set_unlock_key(key);
+            }
             programmer.read_init()?;
             let result = programmer.read_flash()?;
             programmer.finish()?;
@@ -302,6 +326,14 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            if let Some(key) = sub_matches.get_one::<String>("key") {
+                let bytes = parse_hex(key)?;
+                let key: [u8; 8] = bytes
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| "Unlock key must be exactly 8 bytes")?;
+                programmer.set_unlock_key(key);
+            }
             programmer.write_init()?;
 
             // Use sector-based erase for partial writes, mass erase for full writes
@@ -407,6 +439,14 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 .expect("--port is required for sinodude-serial programmer");
 
             let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            if let Some(key) = sub_matches.get_one::<String>("key") {
+                let bytes = parse_hex(key)?;
+                let key: [u8; 8] = bytes
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| "Unlock key must be exactly 8 bytes")?;
+                programmer.set_unlock_key(key);
+            }
             programmer.read_init()?;
 
             let groups = part.protect_group_count();
@@ -500,6 +540,14 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            if let Some(key) = sub_matches.get_one::<String>("key") {
+                let bytes = parse_hex(key)?;
+                let key: [u8; 8] = bytes
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| "Unlock key must be exactly 8 bytes")?;
+                programmer.set_unlock_key(key);
+            }
             programmer.erase_init()?;
 
             if sub_matches.get_flag("eeprom") {

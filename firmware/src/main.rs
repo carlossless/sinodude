@@ -48,6 +48,7 @@ mod cmd {
     pub const CMD_READ_CUSTOM_REGION: u8 = 0x0C;
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
     pub const CMD_ERASE_EEPROM_PAGE: u8 = 0x0E;
+    pub const CMD_SEND_KEY: u8 = 0x0F;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -575,6 +576,22 @@ impl IcpController {
         }
     }
 
+    fn icp_send_key(&mut self, key: &[u8; 8], verify_addr: u32) -> u8 {
+        self.switch_mode(Mode::Icp);
+
+        self.send_icp_byte(0x4b);
+        for &b in key.iter() {
+            self.send_icp_byte(b);
+        }
+
+        let mut marker = [0u8; 1];
+        if self.icp_read_flash(verify_addr, &mut marker, true) {
+            marker[0]
+        } else {
+            0
+        }
+    }
+
     fn icp_read_flash(&mut self, addr: u32, buffer: &mut [u8], custom_block: bool) -> bool {
         self.switch_mode(Mode::Icp);
 
@@ -953,6 +970,24 @@ fn main() -> ! {
                 } else {
                     let _ = nb::block!(tx.write(cmd::RSP_ERR));
                 }
+            }
+
+            cmd::CMD_SEND_KEY => {
+                let mut key = [0u8; 8];
+                for b in key.iter_mut() {
+                    *b = nb::block!(rx.read()).unwrap_or(0);
+                }
+                let verify_addr = {
+                    let b0 = nb::block!(rx.read()).unwrap_or(0);
+                    let b1 = nb::block!(rx.read()).unwrap_or(0);
+                    let b2 = nb::block!(rx.read()).unwrap_or(0);
+                    let b3 = nb::block!(rx.read()).unwrap_or(0);
+                    u32::from_le_bytes([b0, b1, b2, b3])
+                };
+
+                let marker = icp.icp_send_key(&key, verify_addr);
+                let _ = nb::block!(tx.write(cmd::RSP_DATA));
+                let _ = nb::block!(tx.write(marker));
             }
 
             cmd::CMD_ERASE_EEPROM_PAGE => {
