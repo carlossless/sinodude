@@ -551,7 +551,6 @@ pub struct Part {
 pub enum SecurityRecordFormat {
     None,
     Record19,
-    Record38,
 }
 
 impl SecurityRecordFormat {
@@ -559,7 +558,6 @@ impl SecurityRecordFormat {
         match self {
             Self::None => 0,
             Self::Record19 => 0x19,
-            Self::Record38 => 0x38,
         }
     }
 }
