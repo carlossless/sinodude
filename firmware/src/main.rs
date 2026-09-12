@@ -49,6 +49,7 @@ mod cmd {
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
     pub const CMD_ERASE_EEPROM_PAGE: u8 = 0x0E;
     pub const CMD_SEND_KEY: u8 = 0x0F;
+    pub const CMD_PROBE: u8 = 0x10;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -592,6 +593,39 @@ impl IcpController {
         }
     }
 
+    fn icp_probe_read(
+        &mut self,
+        prefix: &[u8],
+        opcode: u8,
+        addr: u32,
+        xpage: bool,
+        buffer: &mut [u8],
+    ) {
+        self.switch_mode(Mode::Icp);
+
+        for b in prefix.iter() {
+            self.send_icp_byte(*b);
+        }
+
+        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
+        self.send_icp_byte((addr & 0xFF) as u8);
+        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_H);
+        self.send_icp_byte(((addr & 0xFF00) >> 8) as u8);
+
+        if xpage {
+            self.send_icp_byte(icp_cmd::ICP_SET_XPAGE);
+            self.send_icp_byte(((addr & 0xFF0000) >> 16) as u8);
+        }
+
+        self.send_icp_byte(opcode);
+
+        for byte in buffer.iter_mut() {
+            *byte = self.receive_icp_byte();
+        }
+
+        self.reset();
+    }
+
     fn icp_read_flash(&mut self, addr: u32, buffer: &mut [u8], custom_block: bool) -> bool {
         self.switch_mode(Mode::Icp);
 
@@ -969,6 +1003,43 @@ fn main() -> ! {
                     let _ = nb::block!(tx.write(cmd::RSP_OK));
                 } else {
                     let _ = nb::block!(tx.write(cmd::RSP_ERR));
+                }
+            }
+
+            cmd::CMD_PROBE => {
+                let prefix_len = nb::block!(rx.read()).unwrap_or(0) as usize;
+                let mut prefix = [0u8; 16];
+                for i in 0..prefix_len.min(16) {
+                    prefix[i] = nb::block!(rx.read()).unwrap_or(0);
+                }
+                let opcode = nb::block!(rx.read()).unwrap_or(0x44);
+                let addr = {
+                    let b0 = nb::block!(rx.read()).unwrap_or(0);
+                    let b1 = nb::block!(rx.read()).unwrap_or(0);
+                    let b2 = nb::block!(rx.read()).unwrap_or(0);
+                    u32::from_le_bytes([b0, b1, b2, 0])
+                };
+                let xpage = nb::block!(rx.read()).unwrap_or(0) != 0;
+                let len = {
+                    let lo = nb::block!(rx.read()).unwrap_or(0);
+                    let hi = nb::block!(rx.read()).unwrap_or(0);
+                    u16::from_le_bytes([lo, hi]) as usize
+                };
+                let n = len.min(buffer.len());
+
+                icp.icp_probe_read(
+                    &prefix[..prefix_len.min(16)],
+                    opcode,
+                    addr,
+                    xpage,
+                    &mut buffer[..n],
+                );
+
+                let _ = nb::block!(tx.write(cmd::RSP_DATA));
+                let _ = nb::block!(tx.write(n as u8));
+                let _ = nb::block!(tx.write((n >> 8) as u8));
+                for byte in buffer[..n].iter() {
+                    let _ = nb::block!(tx.write(*byte));
                 }
             }
 

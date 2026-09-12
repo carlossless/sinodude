@@ -259,6 +259,29 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 programmer.set_unlock_key(key);
             }
             programmer.read_init()?;
+            if let Ok(spec_file) = std::env::var("SINODUDE_PROBE") {
+                for line in fs::read_to_string(&spec_file)?.lines() {
+                    let line = line.trim();
+                    if line.is_empty() || line.starts_with('#') {
+                        continue;
+                    }
+                    let f: Vec<&str> = line.split_whitespace().collect();
+                    let prefix = if f[0] == "-" { Vec::new() } else { parse_hex(f[0])? };
+                    let opcode = u8::from_str_radix(f[1], 16)?;
+                    let addr = u32::from_str_radix(f[2], 16)?;
+                    let xpage = f.get(3).is_some_and(|v| *v == "1");
+                    let len: u16 = f.get(4).map_or(16, |v| v.parse().unwrap_or(16));
+                    match programmer.probe_read(&prefix, opcode, addr, xpage, len) {
+                        Ok(d) => {
+                            let hex: String = d.iter().map(|b| format!("{:02x}", b)).collect();
+                            eprintln!("{} -> {}", line, hex);
+                        }
+                        Err(e) => eprintln!("{} -> ERR {}", line, e),
+                    }
+                }
+                programmer.finish()?;
+                return Ok(());
+            }
             let result = programmer.read_flash()?;
             programmer.finish()?;
 

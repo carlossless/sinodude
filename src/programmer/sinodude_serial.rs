@@ -40,6 +40,7 @@ mod cmd {
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
     pub const CMD_ERASE_EEPROM_PAGE: u8 = 0x0E;
     pub const CMD_SEND_KEY: u8 = 0x0F;
+    pub const CMD_PROBE: u8 = 0x10;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -708,6 +709,36 @@ impl SinodudeSerialProgrammer {
         // Read data
         let data = self.read_bytes(length as usize)?;
         Ok(data)
+    }
+
+    pub fn probe_read(
+        &mut self,
+        prefix: &[u8],
+        opcode: u8,
+        addr: u32,
+        xpage: bool,
+        length: u16,
+    ) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
+        self.send_command(cmd::CMD_PROBE)?;
+        self.send_bytes(&[prefix.len() as u8])?;
+        self.send_bytes(prefix)?;
+        self.send_bytes(&[
+            opcode,
+            (addr & 0xff) as u8,
+            ((addr >> 8) & 0xff) as u8,
+            ((addr >> 16) & 0xff) as u8,
+            u8::from(xpage),
+        ])?;
+        self.send_bytes(&length.to_le_bytes())?;
+
+        let response = self.read_byte()?;
+        if response != cmd::RSP_DATA {
+            return Err(SinodudeSerialProgrammerError::OperationFailed);
+        }
+        let lo = self.read_byte()?;
+        let hi = self.read_byte()?;
+        let recv_len = u16::from_le_bytes([lo, hi]);
+        self.read_bytes(recv_len as usize)
     }
 
     fn erase_sector(&mut self, addr: u32) -> Result<(), SinodudeSerialProgrammerError> {
