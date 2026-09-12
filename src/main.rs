@@ -109,7 +109,7 @@ fn cli() -> Command {
                         .required(false),
                 )
                 .arg(
-                    arg!(--eeprom "Read the data EEPROM instead of the flash")
+                    arg!(--xdata "Read the target's XDATA space over the OCD path (MOVX A,@DPTR). Not the data EEPROM: on the parts tested so far this window is internal XRAM.")
                         .required(false),
                 ),
         )
@@ -277,12 +277,14 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                         continue;
                     }
                     let f: Vec<&str> = line.split_whitespace().collect();
-                    let prefix = if f[0] == "-" { Vec::new() } else { parse_hex(f[0])? };
-                    let opcode = u8::from_str_radix(f[1], 16)?;
-                    let addr = u32::from_str_radix(f[2], 16)?;
-                    let xpage = f.get(3).is_some_and(|v| *v == "1");
-                    let len: u16 = f.get(4).map_or(16, |v| v.parse().unwrap_or(16));
-                    match programmer.probe_read(&prefix, opcode, addr, xpage, len) {
+                    let r = if f[0] == "x" {
+                        let reps = f.get(2).map_or(1, |v| v.parse().unwrap_or(1));
+                        let step = f.get(3).is_some_and(|v| *v == "1");
+                        programmer.probe_sfr(&parse_hex(f[1])?, reps, step)
+                    } else {
+                        programmer.read_xdata_chunk(u16::from_str_radix(f[0], 16)?, 16)
+                    };
+                    match r {
                         Ok(d) => {
                             let hex: String = d.iter().map(|b| format!("{:02x}", b)).collect();
                             eprintln!("{} -> {}", line, hex);
@@ -293,7 +295,11 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 programmer.finish()?;
                 return Ok(());
             }
-            let result = programmer.read_flash()?;
+            let result = if sub_matches.get_flag("xdata") {
+                programmer.read_xdata()?
+            } else {
+                programmer.read_flash()?
+            };
             programmer.finish()?;
 
             let digest = md5::compute(&result);

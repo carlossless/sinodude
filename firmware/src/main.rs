@@ -47,7 +47,10 @@ mod cmd {
 
     // Read read-protected flash over the 3-wire OCD MOVC bypass (the CPU code-fetch is not gated); same wire args as CMD_READ_FLASH.
     pub const CMD_READ_FLASH_OCD: u8 = 0x10; // addr(u32 LE), len(u16 LE) -> len bytes
-    pub const CMD_PROBE: u8 = 0x11;
+
+    // Read the data EEPROM, which the target maps into XDATA, over the OCD path.
+    pub const CMD_READ_XDATA: u8 = 0x11; // addr(u16 LE), len(u16 LE) -> len bytes
+    pub const CMD_PROBE: u8 = 0x12; // sfr(u8), region(u8), apply(u8) -> before, after
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -77,6 +80,7 @@ mod op8051 {
     pub const LJMP: u8 = 0x02; // LJMP addr16
     pub const MOV_DPTR: u8 = 0x90; // MOV DPTR,#data16
     pub const MOVC_A_DPTR: u8 = 0x93; // MOVC A,@A+DPTR
+    pub const MOVX_A_DPTR: u8 = 0xe0; // MOVX A,@DPTR
     pub const CLR_A: u8 = 0xe4;
 }
 
@@ -606,39 +610,6 @@ impl IcpController {
         }
     }
 
-    fn icp_probe_read(
-        &mut self,
-        prefix: &[u8],
-        opcode: u8,
-        addr: u32,
-        xpage: bool,
-        buffer: &mut [u8],
-    ) {
-        self.switch_mode(Mode::Icp);
-
-        for b in prefix.iter() {
-            self.send_icp_byte(*b);
-        }
-
-        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_L);
-        self.send_icp_byte((addr & 0xFF) as u8);
-        self.send_icp_byte(icp_cmd::ICP_SET_IB_OFFSET_H);
-        self.send_icp_byte(((addr & 0xFF00) >> 8) as u8);
-
-        if xpage {
-            self.send_icp_byte(icp_cmd::ICP_SET_XPAGE);
-            self.send_icp_byte(((addr & 0xFF0000) >> 16) as u8);
-        }
-
-        self.send_icp_byte(opcode);
-
-        for byte in buffer.iter_mut() {
-            *byte = self.receive_icp_byte();
-        }
-
-        self.reset();
-    }
-
     fn icp_read_flash(&mut self, addr: u32, buffer: &mut [u8], custom_block: bool) -> bool {
         self.switch_mode(Mode::Icp);
 
@@ -679,6 +650,7 @@ impl IcpController {
     }
 
     // 3-wire OCD debug link: clk = TCK (PD5), data-out = TDI (PD4), data-in = TDO (PD2), FRAME = TMS (PD3); frame-marked transfers, not JTAG TAP.
+    #[inline(never)]
     fn ocd_pulse(&mut self, d: u32) {
         self.tck_high();
         self.delay_us(d);
@@ -687,6 +659,7 @@ impl IcpController {
     }
 
     /// Frame-marked 4-bit send, LSB-first; `typ` 0 = type A (IR select), 1 = type B (4-bit DR shift); `d` = pulse delay.
+    #[inline(never)]
     fn ocd_send4(&mut self, n: u8, d: u32, typ: u8) {
         let s = self.clk_delay;
         self.tms_high();
@@ -737,6 +710,7 @@ impl IcpController {
     }
 
     /// Frame-marked 16-bit read, MSB-first.
+    #[inline(never)]
     fn ocd_read16(&mut self) -> u16 {
         let s = self.clk_delay;
         self.tms_high();
@@ -768,6 +742,7 @@ impl IcpController {
     }
 
     /// Inject one 8051 opcode byte, MSB-first, with frame-marked preamble and postamble.
+    #[inline(never)]
     fn ocd_inject_opcode(&mut self, b: u8) {
         let s = self.clk_delay;
         self.tms_high();
@@ -808,6 +783,7 @@ impl IcpController {
     }
 
     /// Send a 23-bit debug value: 16 bits `lo` LSB-first, then 7 bits `hi`, the last with frame raised.
+    #[inline(never)]
     fn ocd_send23(&mut self, lo: u16, hi: u8, d: u32) {
         let s = self.clk_delay;
         self.tms_high();
@@ -855,6 +831,7 @@ impl IcpController {
     }
 
     /// Read the halted CPU context into `out` (out[0]=status, out[1]=byte0, out[2..8]=6 register bytes).
+    #[inline(never)]
     fn ocd_read_context(&mut self, out: &mut [u8; 8]) {
         let s = self.clk_delay;
         let d = self.ocd_slow as u32;
@@ -953,17 +930,10 @@ impl IcpController {
     }
 
     /// Read one flash byte over the OCD MOVC bypass (reads read-protected flash; the CPU code-fetch is not gated); requires ocd_enter() first.
-    fn ocd_movc_byte(&mut self, addr: u16) -> u8 {
+    /// Run the injected instructions (run 0x402000, halt 0x400000) and read back the halted context.
+    #[inline(never)]
+    fn ocd_step(&mut self, ctx: &mut [u8; 8]) {
         let f = self.clk_delay;
-        self.ocd_inject_opcode(op8051::NOP);
-        self.ocd_inject_opcode(op8051::NOP);
-        self.ocd_inject_opcode(op8051::NOP);
-        self.ocd_inject_opcode(op8051::CLR_A);
-        self.ocd_inject_opcode(op8051::MOV_DPTR);
-        self.ocd_inject_opcode((addr >> 8) as u8);
-        self.ocd_inject_opcode(addr as u8);
-        self.ocd_inject_opcode(op8051::MOVC_A_DPTR);
-        // run one debug step (run 0x402000, halt 0x400000)
         self.ocd_send4(2, f, 0);
         self.ocd_send4(4, f, 1);
         self.ocd_send4(3, f, 0);
@@ -978,8 +948,21 @@ impl IcpController {
         self.ocd_send4(1, f, 1);
         self.ocd_send4(0x0c, f, 0);
         self.delay_us(self.ocd_slow as u32);
+        self.ocd_read_context(ctx);
+    }
+
+    #[inline(never)]
+    fn ocd_movc_byte(&mut self, addr: u16) -> u8 {
+        self.ocd_inject_opcode(op8051::NOP);
+        self.ocd_inject_opcode(op8051::NOP);
+        self.ocd_inject_opcode(op8051::NOP);
+        self.ocd_inject_opcode(op8051::CLR_A);
+        self.ocd_inject_opcode(op8051::MOV_DPTR);
+        self.ocd_inject_opcode((addr >> 8) as u8);
+        self.ocd_inject_opcode(addr as u8);
+        self.ocd_inject_opcode(op8051::MOVC_A_DPTR);
         let mut ctx = [0u8; 8];
-        self.ocd_read_context(&mut ctx);
+        self.ocd_step(&mut ctx);
         // decode: flash = rev6(ctx[3] low 6 bits) | ctx[2] bit7 -> bit6 | bit6 -> bit7
         let low6 = (ctx[3].reverse_bits() >> 2) & 0x3f;
         low6 | (((ctx[2] >> 7) & 1) << 6) | (((ctx[2] >> 6) & 1) << 7)
@@ -993,6 +976,124 @@ impl IcpController {
         self.ocd_enter();
         for (i, b) in buf.iter_mut().enumerate() {
             *b = self.ocd_movc_byte((addr as u16).wrapping_add(i as u16));
+        }
+    }
+
+    /// Point the target's flash controller at `region`: MOV 0xB7,#0x55 unlocks the control SFR,
+    /// MOV 0xB6,#region selects the bank. Region 0 is code flash; the data EEPROM is another bank,
+    /// and a code fetch then reads through the selected window.
+    fn ocd_select_flash_region(&mut self, region: u8) {
+        for b in [op8051::LJMP, 0, 0, 0, 0, 0, 0, 0] {
+            self.ocd_inject_opcode(b);
+        }
+        for b in [0x75, 0xb7, 0x55, 0x75, 0xb6, region, 0, 0, 0, 0] {
+            self.ocd_inject_opcode(b);
+        }
+    }
+
+
+    /// Read one byte through the target flash controller's read port: 16 address bits then the
+    /// 6-bit command (`ICP_READ_FLASH & 0x3f`), both MSB-first on TDI, then the byte on TDO.
+    /// The port is pipelined: the byte returned is the one addressed by the previous request.
+    #[inline(never)]
+    fn ocd_read_port(&mut self, addr: u16, cmd: u8) -> u8 {
+        let s = self.clk_delay;
+        self.tms_high();
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        self.tms_low();
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        let mut i = 16u8;
+        while i > 0 {
+            i -= 1;
+            if (addr >> i) & 1 != 0 {
+                self.tdi_high();
+            } else {
+                self.tdi_low();
+            }
+            self.delay_us(s);
+            self.ocd_pulse(s);
+        }
+        let mut j = 6u8;
+        while j > 0 {
+            j -= 1;
+            if (cmd >> j) & 1 != 0 {
+                self.tdi_high();
+            } else {
+                self.tdi_low();
+            }
+            self.delay_us(s);
+            self.ocd_pulse(s);
+        }
+        self.tdi_low();
+        self.delay_us(s);
+        let mut val: u8 = 0;
+        for _ in 0..7 {
+            self.tck_high();
+            self.delay_us(s);
+            self.tck_low();
+            val = (val | self.tdo_read() as u8) << 1;
+            self.delay_us(s);
+        }
+        self.tms_high();
+        self.delay_us(s);
+        self.tck_high();
+        self.delay_us(s);
+        val |= self.tdo_read() as u8;
+        self.tck_low();
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        self.tms_low();
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        self.delay_us(s);
+        self.ocd_pulse(s);
+        val
+    }
+
+    /// Execute an instruction stream on the target and fetch the accumulator back over TDO.
+    #[inline(never)]
+    fn ocd_exec_read(&mut self, code: &[u8], step: bool) -> u8 {
+        for b in code.iter() {
+            self.ocd_inject_opcode(*b);
+        }
+        if !step {
+            return self.ocd_read_port(0, 0);
+        }
+        let mut ctx = [0u8; 8];
+        self.ocd_step(&mut ctx);
+        let low6 = (ctx[3].reverse_bits() >> 2) & 0x3f;
+        low6 | (((ctx[2] >> 7) & 1) << 6) | (((ctx[2] >> 6) & 1) << 7)
+    }
+
+    /// Read `buf.len()` bytes from flash `region` through the controller read port.
+    /// Read one XDATA byte over the OCD path by running the target's own MOVX A,@DPTR.
+    #[inline(never)]
+    fn ocd_movx_byte(&mut self, addr: u16) -> u8 {
+        self.ocd_inject_opcode(op8051::NOP);
+        self.ocd_inject_opcode(op8051::NOP);
+        self.ocd_inject_opcode(op8051::NOP);
+        self.ocd_inject_opcode(op8051::MOV_DPTR);
+        self.ocd_inject_opcode((addr >> 8) as u8);
+        self.ocd_inject_opcode(addr as u8);
+        self.ocd_inject_opcode(op8051::MOVX_A_DPTR);
+        let mut ctx = [0u8; 8];
+        self.ocd_step(&mut ctx);
+        let low6 = (ctx[3].reverse_bits() >> 2) & 0x3f;
+        low6 | (((ctx[2] >> 7) & 1) << 6) | (((ctx[2] >> 6) & 1) << 7)
+    }
+
+    /// Read `buf.len()` bytes of the data EEPROM, which the target maps into XDATA.
+    fn ocd_read_xdata(&mut self, addr: u32, buf: &mut [u8]) {
+        self.clk_delay = 1;
+        self.ocd_slow = 50;
+        self.jtag_get_id();
+        self.ocd_enter();
+        for (i, b) in buf.iter_mut().enumerate() {
+            *b = self.ocd_movx_byte((addr as u16).wrapping_add(i as u16));
         }
     }
 
@@ -1344,39 +1445,50 @@ fn main() -> ! {
                 }
             }
 
-            cmd::CMD_PROBE => {
-                let prefix_len = nb::block!(rx.read()).unwrap_or(0) as usize;
-                let mut prefix = [0u8; 16];
-                for i in 0..prefix_len.min(16) {
-                    prefix[i] = nb::block!(rx.read()).unwrap_or(0);
-                }
-                let opcode = nb::block!(rx.read()).unwrap_or(0x44);
+            cmd::CMD_READ_XDATA => {
                 let addr = {
                     let b0 = nb::block!(rx.read()).unwrap_or(0);
                     let b1 = nb::block!(rx.read()).unwrap_or(0);
-                    let b2 = nb::block!(rx.read()).unwrap_or(0);
-                    u32::from_le_bytes([b0, b1, b2, 0])
+                    u16::from_le_bytes([b0, b1]) as u32
                 };
-                let xpage = nb::block!(rx.read()).unwrap_or(0) != 0;
                 let len = {
-                    let lo = nb::block!(rx.read()).unwrap_or(0);
-                    let hi = nb::block!(rx.read()).unwrap_or(0);
-                    u16::from_le_bytes([lo, hi]) as usize
+                    let low = nb::block!(rx.read()).unwrap_or(0);
+                    let high = nb::block!(rx.read()).unwrap_or(0);
+                    u16::from_le_bytes([low, high]) as usize
                 };
                 let n = len.min(buffer.len());
 
-                icp.icp_probe_read(
-                    &prefix[..prefix_len.min(16)],
-                    opcode,
-                    addr,
-                    xpage,
-                    &mut buffer[..n],
-                );
+                icp.ocd_read_xdata(addr, &mut buffer[..n]);
 
                 let _ = nb::block!(tx.write(cmd::RSP_DATA));
                 let _ = nb::block!(tx.write(n as u8));
                 let _ = nb::block!(tx.write((n >> 8) as u8));
                 for byte in buffer[..n].iter() {
+                    let _ = nb::block!(tx.write(*byte));
+                }
+            }
+
+            cmd::CMD_PROBE => {
+                let n = nb::block!(rx.read()).unwrap_or(0) as usize;
+                let reps = nb::block!(rx.read()).unwrap_or(1) as usize;
+                let step = nb::block!(rx.read()).unwrap_or(0) != 0;
+                let mut code = [0u8; 24];
+                for i in 0..n.min(24) {
+                    code[i] = nb::block!(rx.read()).unwrap_or(0);
+                }
+                icp.clk_delay = 1;
+                icp.ocd_slow = 50;
+                icp.jtag_get_id();
+                icp.ocd_enter();
+                let m = reps.min(buffer.len());
+                for i in 0..m {
+                    buffer[i] = icp.ocd_exec_read(&code[..n.min(24)], step);
+                }
+
+                let _ = nb::block!(tx.write(cmd::RSP_DATA));
+                let _ = nb::block!(tx.write(m as u8));
+                let _ = nb::block!(tx.write((m >> 8) as u8));
+                for byte in buffer[..m].iter() {
                     let _ = nb::block!(tx.write(*byte));
                 }
             }
