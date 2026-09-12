@@ -31,6 +31,49 @@ fn parse_addr(s: &str) -> Result<usize, Box<dyn std::error::Error>> {
     }
 }
 
+fn parse_group_spec(
+    spec: Option<&str>,
+    groups: usize,
+) -> Result<Vec<bool>, Box<dyn std::error::Error>> {
+    let mut selected = vec![false; groups];
+    let Some(spec) = spec else {
+        return Ok(selected);
+    };
+    let spec = spec.trim();
+    if spec.eq_ignore_ascii_case("all") {
+        return Ok(vec![true; groups]);
+    }
+    if spec.is_empty() || spec.eq_ignore_ascii_case("none") {
+        return Ok(selected);
+    }
+    for part in spec.split(',') {
+        let part = part.trim();
+        let (lo, hi) = match part.split_once('-') {
+            Some((a, b)) => (a.trim().parse::<usize>()?, b.trim().parse::<usize>()?),
+            None => {
+                let g = part.parse::<usize>()?;
+                (g, g)
+            }
+        };
+        if lo > hi {
+            return Err(format!("group range {} is inverted", part).into());
+        }
+        if hi >= groups {
+            return Err(format!(
+                "group {} is out of range; this part has {} group(s), 0-{}",
+                hi,
+                groups,
+                groups - 1
+            )
+            .into());
+        }
+        for slot in selected.iter_mut().take(hi + 1).skip(lo) {
+            *slot = true;
+        }
+    }
+    Ok(selected)
+}
+
 fn cli() -> Command {
     Command::new("sinodude")
         .about("programming tool for sinowealth devices")
@@ -56,6 +99,10 @@ fn cli() -> Command {
                 .arg(
                     arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
                         .required(false),
+                )
+                .arg(
+                    arg!(--key <KEY> "Customer unlock key for a password-protected part (8 bytes hex)")
+                        .required(false),
                 ),
         )
         .subcommand(
@@ -75,6 +122,10 @@ fn cli() -> Command {
                 )
                 .arg(
                     arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--key <KEY> "Customer unlock key for a password-protected part (8 bytes hex)")
                         .required(false),
                 )
                 .arg(
@@ -125,11 +176,54 @@ fn cli() -> Command {
                         .required(false),
                 )
                 .arg(
+                    arg!(--key <KEY> "Customer unlock key for a password-protected part (8 bytes hex)")
+                        .required(false),
+                )
+                .arg(
                     arg!(--start_addr <START_ADDR> "Start address for sector erase (hex, e.g., 0x1000)")
                         .required(false),
                 )
                 .arg(
                     arg!(--end_addr <END_ADDR> "End address for sector erase (hex, e.g., 0x2000)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--eeprom "Erase the data EEPROM (256-byte pages) instead of code flash")
+                        .required(false)
+                        .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    arg!(--erase_mode <MODE> "Force a vendor erase-mode index (0-5) instead of the part's own; 3 and 4 are not otherwise reachable")
+                        .required(false),
+                ),
+        )
+        .subcommand(
+            Command::new("security")
+                .about("Show or apply the chip's per-group read/write protection")
+                .arg(
+                    arg!(-c --programmer <PROGRAMMER>)
+                        .value_parser(["sinodude-serial"])
+                        .required(true),
+                )
+                .arg(
+                    arg!(-p --part <PART>)
+                        .value_parser(PARTS.keys().copied().collect::<Vec<_>>())
+                        .required(true),
+                )
+                .arg(
+                    arg!(--port <PORT> "Serial port for sinodude-serial programmer (e.g., /dev/ttyUSB0)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--key <KEY> "Customer unlock key for a password-protected part (8 bytes hex)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--read_protect <GROUPS> "Read-protect these groups: \"all\", or a list like 1,2,5-6,13")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--write_protect <GROUPS> "Write-protect these groups: \"all\", or a list like 1,2,5-6,13")
                         .required(false),
                 ),
         )
@@ -156,6 +250,14 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 .get_one::<String>("port")
                 .expect("--port is required for sinodude-serial programmer");
             let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            if let Some(key) = sub_matches.get_one::<String>("key") {
+                let bytes = parse_hex(key)?;
+                let key: [u8; 8] = bytes
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| "Unlock key must be exactly 8 bytes")?;
+                programmer.set_unlock_key(key);
+            }
             programmer.read_init()?;
             let result = programmer.read_flash()?;
             programmer.finish()?;
@@ -224,6 +326,14 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            if let Some(key) = sub_matches.get_one::<String>("key") {
+                let bytes = parse_hex(key)?;
+                let key: [u8; 8] = bytes
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| "Unlock key must be exactly 8 bytes")?;
+                programmer.set_unlock_key(key);
+            }
             programmer.write_init()?;
 
             // Use sector-based erase for partial writes, mass erase for full writes
@@ -237,9 +347,10 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 (None, Some(end)) => {
                     programmer.erase_sectors(0, end as u32)?;
                 }
-                (None, None) => {
-                    programmer.mass_erase()?;
-                }
+                (None, None) => match sub_matches.get_one::<String>("erase_mode") {
+                    Some(m) => programmer.mass_erase_with_mode(m.parse::<u8>()?)?,
+                    None => programmer.mass_erase()?,
+                },
             }
 
             // Parse custom fields
@@ -317,6 +428,75 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
 
             programmer.finish()?;
         }
+        Some(("security", sub_matches)) => {
+            let part_name = sub_matches
+                .get_one::<String>("part")
+                .map(|s| s.as_str())
+                .unwrap();
+            let part = PARTS.get(part_name).unwrap();
+            let port = sub_matches
+                .get_one::<String>("port")
+                .expect("--port is required for sinodude-serial programmer");
+
+            let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            if let Some(key) = sub_matches.get_one::<String>("key") {
+                let bytes = parse_hex(key)?;
+                let key: [u8; 8] = bytes
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| "Unlock key must be exactly 8 bytes")?;
+                programmer.set_unlock_key(key);
+            }
+            programmer.read_init()?;
+
+            let groups = part.protect_group_count();
+            let group_size = part.protect_group_size();
+
+            let read_spec = sub_matches.get_one::<String>("read_protect");
+            let write_spec = sub_matches.get_one::<String>("write_protect");
+
+            if read_spec.is_none() && write_spec.is_none() {
+                let prot = programmer.read_protection()?;
+                println!(
+                    "Protection: {} group(s) of {:#x} bytes ({} sector(s) per bit)",
+                    groups,
+                    group_size,
+                    part.sectors_per_protect_bit()
+                );
+                println!("Record: {}", hex_string(&prot.record));
+                let mut any = false;
+                for g in 0..groups {
+                    if prot.read[g] || prot.write[g] {
+                        any = true;
+                        println!(
+                            "  group {:<2} {:#06x}-{:#06x}  {}{}",
+                            g,
+                            g * group_size,
+                            (g + 1) * group_size - 1,
+                            if prot.read[g] { "read " } else { "" },
+                            if prot.write[g] { "write" } else { "" },
+                        );
+                    }
+                }
+                if !any {
+                    println!("  (unprotected)");
+                }
+            } else {
+                let read = parse_group_spec(read_spec.map(|s| s.as_str()), groups)?;
+                let write = parse_group_spec(write_spec.map(|s| s.as_str()), groups)?;
+                eprintln!(
+                    "Applying protection: {} read-protected, {} write-protected, of {} group(s)",
+                    read.iter().filter(|&&b| b).count(),
+                    write.iter().filter(|&&b| b).count(),
+                    groups
+                );
+                eprintln!("This cannot be undone without a full mass erase.");
+                programmer.apply_protection(&read, &write)?;
+                eprintln!("Protection applied.");
+            }
+
+            programmer.finish()?;
+        }
         Some(("erase", sub_matches)) => {
             let part_name = sub_matches
                 .get_one::<String>("part")
@@ -360,7 +540,21 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            if let Some(key) = sub_matches.get_one::<String>("key") {
+                let bytes = parse_hex(key)?;
+                let key: [u8; 8] = bytes
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| "Unlock key must be exactly 8 bytes")?;
+                programmer.set_unlock_key(key);
+            }
             programmer.erase_init()?;
+
+            if sub_matches.get_flag("eeprom") {
+                programmer.erase_eeprom()?;
+                programmer.finish()?;
+                return Ok(());
+            }
 
             // Use sector-based erase for partial erases, mass erase otherwise
             match (start_addr, end_addr) {

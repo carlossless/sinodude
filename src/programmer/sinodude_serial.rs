@@ -1,6 +1,7 @@
 use super::super::parts::{
-    find_parts_by_jtag_id, find_parts_by_part_number, format_parsed_options, parse_code_options,
-    Part, Region, Voltage,
+    find_parts_by_jtag_id, find_parts_by_part_number, format_parsed_options, hex_string,
+    parse_code_options, Part, Region, SecurityRecordFormat, Voltage, PROTECTION_MARK_LEN,
+    PROTECTION_MARK_OFFSET, PROTECTION_RECORD_LEN,
 };
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
@@ -37,6 +38,8 @@ mod cmd {
     pub const CMD_MASS_ERASE: u8 = 0x0B;
     pub const CMD_READ_CUSTOM_REGION: u8 = 0x0C;
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
+    pub const CMD_ERASE_EEPROM_PAGE: u8 = 0x0E;
+    pub const CMD_SEND_KEY: u8 = 0x0F;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -44,7 +47,31 @@ mod cmd {
     pub const RSP_DATA: u8 = 0x01;
 }
 
+fn erase_opcode_desc(mode: u8, chip_type: u8) -> &'static str {
+    match mode {
+        0 => "0xe6 sector",
+        1 => {
+            if chip_type == 7 {
+                "0x4b mass"
+            } else {
+                "0xaa mass"
+            }
+        }
+        2 => {
+            if chip_type == 7 {
+                "0x3c protected mass"
+            } else {
+                "0xda protected mass"
+            }
+        }
+        3 => "0x5e",
+        4 => "0x2d",
+        _ => "0xc3 code+ISP+EEPROM",
+    }
+}
+
 const CHUNK_SIZE: usize = 1024;
+const EEPROM_PAGE_SIZE: usize = 256;
 const BAUD_RATE: u32 = 115200;
 const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -97,8 +124,26 @@ pub enum SinodudeSerialProgrammerError {
         expected: Vec<u8>,
         actual: Vec<u8>,
     },
+    #[error("Unlock key rejected: the target ID reads back all 0xff")]
+    UnlockKeyRejected,
+    #[error("Part has no data EEPROM")]
+    NoDataEeprom,
+    #[error("Part {part} defines no supported protection record format")]
+    UnsupportedProtection { part: String },
+    #[error("Protection can only be added, not removed: byte {offset} is {current:#04x} and the requested record has {requested:#04x}; clear it with a mass erase first")]
+    ProtectionNotReducible {
+        offset: usize,
+        current: u8,
+        requested: u8,
+    },
     #[error("Part does not support 5.0V required by sinodude-serial programmer. Supported voltages: {supported}")]
     UnsupportedVoltage { supported: String },
+}
+
+pub struct Protection {
+    pub read: Vec<bool>,
+    pub write: Vec<bool>,
+    pub record: Vec<u8>,
 }
 
 pub struct SinodudeSerialProgrammer {
@@ -107,7 +152,8 @@ pub struct SinodudeSerialProgrammer {
     connected: bool,
     cancelled: Arc<AtomicBool>,
     /// True if code options have non-editable bits that differ from defaults (use 0xc3 erase)
-    use_alternate_erase: bool,
+    non_default_option_bits: bool,
+    unlock_key: Option<[u8; 8]>,
     /// Stored custom fields read from device during init
     stored_customer_id: Option<[u8; 4]>,
     stored_operation_number: Option<[u8; 2]>,
@@ -148,7 +194,8 @@ impl SinodudeSerialProgrammer {
             chip_type,
             connected: false,
             cancelled,
-            use_alternate_erase: false,
+            non_default_option_bits: false,
+            unlock_key: None,
             stored_customer_id: None,
             stored_operation_number: None,
             stored_customer_option: None,
@@ -360,18 +407,12 @@ impl SinodudeSerialProgrammer {
         let mut part_number = [0u8; 5];
         part_number.copy_from_slice(&data[9..14]);
 
-        let actual_str = part_number
-            .iter()
-            .map(|b| format!("{:02x}", b))
-            .collect::<String>();
+        let actual_str = hex_string(&part_number);
         eprintln!("Target Part Number: {}", actual_str);
 
         let expected_part_number = self.chip_type.part_number;
         if part_number != expected_part_number {
-            let expected_str = expected_part_number
-                .iter()
-                .map(|b| format!("{:02x}", b))
-                .collect::<String>();
+            let expected_str = hex_string(&expected_part_number);
             let matching_parts = find_parts_by_part_number(&part_number);
             if !matching_parts.is_empty() {
                 eprintln!(
@@ -430,13 +471,7 @@ impl SinodudeSerialProgrammer {
 
         // Extract customer_id (at offset 0)
         let customer_id: [u8; 4] = buffer[0..4].try_into().unwrap();
-        eprintln!(
-            "Customer ID: {}",
-            customer_id
-                .iter()
-                .map(|b| format!("{:02x}", b))
-                .collect::<String>()
-        );
+        eprintln!("Customer ID: {}", hex_string(&customer_id));
         self.stored_customer_id = Some(customer_id);
 
         // Extract operation_number
@@ -444,13 +479,7 @@ impl SinodudeSerialProgrammer {
         let offset = (field.address - customer_id_addr) as usize;
         if offset + 2 <= REGION_SIZE {
             let operation_number: [u8; 2] = buffer[offset..offset + 2].try_into().unwrap();
-            eprintln!(
-                "Operation Number: {}",
-                operation_number
-                    .iter()
-                    .map(|b| format!("{:02x}", b))
-                    .collect::<String>()
-            );
+            eprintln!("Operation Number: {}", hex_string(&operation_number));
             self.stored_operation_number = Some(operation_number);
         }
 
@@ -458,15 +487,28 @@ impl SinodudeSerialProgrammer {
         let field = &self.chip_type.security;
         let offset = (field.address - customer_id_addr) as usize;
         let security_len = self.chip_type.security_length();
-        if offset + security_len <= REGION_SIZE {
+        if security_len > 0 && offset + security_len <= REGION_SIZE {
             let security_bits = buffer[offset..offset + security_len].to_vec();
-            eprintln!(
-                "Security Bits: {}",
-                security_bits
-                    .iter()
-                    .map(|b| format!("{:02x}", b))
-                    .collect::<String>()
-            );
+            if self.chip_type.security_record_format == SecurityRecordFormat::Record19 {
+                let (read, write) = self.chip_type.decode_protection_record(&security_bits);
+                let groups = self.chip_type.protect_group_count();
+                let r = read.iter().filter(|&&b| b).count();
+                let w = write.iter().filter(|&&b| b).count();
+                if r == 0 && w == 0 {
+                    eprintln!("Security: unprotected ({} groups)", groups);
+                } else {
+                    eprintln!(
+                        "Security: {}/{} group(s) read-protected, {}/{} write-protected (sinodude security to list them)",
+                        r, groups, w, groups
+                    );
+                }
+            } else {
+                eprintln!(
+                    "Security region ({} bytes, record format unknown): {}",
+                    security_len,
+                    hex_string(&security_bits)
+                );
+            }
             self.stored_security = Some(security_bits);
         }
 
@@ -475,13 +517,7 @@ impl SinodudeSerialProgrammer {
         let offset = (field.address - customer_id_addr) as usize;
         if offset + 4 <= REGION_SIZE {
             let serial_number: [u8; 4] = buffer[offset..offset + 4].try_into().unwrap();
-            eprintln!(
-                "Serial Number: {}",
-                serial_number
-                    .iter()
-                    .map(|b| format!("{:02x}", b))
-                    .collect::<String>()
-            );
+            eprintln!("Serial Number: {}", hex_string(&serial_number));
             self.stored_serial_number = Some(serial_number);
         }
 
@@ -504,13 +540,7 @@ impl SinodudeSerialProgrammer {
         // Store the full customer_option (both parts)
         self.stored_customer_option = Some(code_options.clone());
 
-        eprintln!(
-            "Code Options: {}",
-            code_options
-                .iter()
-                .map(|b| format!("{:02x}", b))
-                .collect::<String>()
-        );
+        eprintln!("Code Options: {}", hex_string(&code_options));
 
         // Check if non-editable bits differ from defaults (only upper bytes for >4-byte options)
         if let Some(expected_upper) = self.chip_type.upper_code_option_defaults() {
@@ -524,7 +554,7 @@ impl SinodudeSerialProgrammer {
                                 "Warning: Code option byte {} has non-editable bits that differ from defaults (current: {:#04x}, expected: {:#04x})",
                                 idx, current, expected
                             );
-                        self.use_alternate_erase = true;
+                        self.non_default_option_bits = true;
                     }
                 }
             }
@@ -538,12 +568,48 @@ impl SinodudeSerialProgrammer {
         Ok(())
     }
 
+    pub fn set_unlock_key(&mut self, key: [u8; 8]) {
+        self.unlock_key = Some(key);
+    }
+
+    fn send_unlock_key_if_present(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
+        let Some(key) = self.unlock_key else {
+            return Ok(());
+        };
+        let commit_addr = self.chip_type.customer_option.address;
+        eprintln!("Sending unlock key...");
+        self.send_command(cmd::CMD_SEND_KEY)?;
+        self.send_bytes(&key)?;
+        self.send_bytes(&commit_addr.to_le_bytes())?;
+
+        let response = self.read_byte()?;
+        if response != cmd::RSP_DATA {
+            return Err(SinodudeSerialProgrammerError::InvalidResponse);
+        }
+        let _commit = self.read_byte()?;
+
+        self.send_command(cmd::CMD_GET_ID)?;
+        let response = self.read_byte()?;
+        if response != cmd::RSP_DATA {
+            return Err(SinodudeSerialProgrammerError::InvalidResponse);
+        }
+        let lo = self.read_byte()?;
+        let hi = self.read_byte()?;
+        let id = u16::from_le_bytes([lo, hi]);
+        if id == 0xffff {
+            return Err(SinodudeSerialProgrammerError::UnlockKeyRejected);
+        }
+        eprintln!("Unlock key accepted (id reads back {:#06x})", id);
+        Ok(())
+    }
+
     pub fn read_init(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         self.ping()?;
         self.check_version()?;
         self.connect()?;
         self.get_id()?;
         self.set_config()?;
+        self.send_unlock_key_if_present()?;
         self.get_part_number()?;
         self.get_code_options()?;
         Ok(())
@@ -555,6 +621,7 @@ impl SinodudeSerialProgrammer {
         self.connect()?;
         self.get_id()?;
         self.set_config()?;
+        self.send_unlock_key_if_present()?;
         self.get_part_number()?;
         self.get_code_options()?;
         Ok(())
@@ -566,7 +633,11 @@ impl SinodudeSerialProgrammer {
         self.connect()?;
         self.get_id()?;
         self.set_config()?;
+        self.send_unlock_key_if_present()?;
         self.get_part_number()?;
+        if let Err(e) = self.get_code_options() {
+            debug!("erase_init: code-option read failed ({e:?}); using default erase mode");
+        }
         Ok(())
     }
 
@@ -695,27 +766,109 @@ impl SinodudeSerialProgrammer {
         Ok(())
     }
 
-    pub fn mass_erase(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
-        if self.use_alternate_erase {
-            eprintln!("Mass erasing flash (alternate mode due to non-default code options)...");
-        } else {
-            eprintln!("Mass erasing flash...");
+    fn full_erase_modes(&self) -> Vec<u8> {
+        let protected = self
+            .stored_security
+            .as_deref()
+            .is_some_and(|s| s.iter().any(|&b| b != 0));
+
+        if self.non_default_option_bits && self.chip_type.chip_type == 7 {
+            return vec![5, 1];
         }
+
+        if protected {
+            vec![2, 1]
+        } else {
+            vec![1, 2]
+        }
+    }
+
+    fn try_mass_erase(&mut self, mode: u8) -> Result<(), SinodudeSerialProgrammerError> {
+        self.send_command(cmd::CMD_MASS_ERASE)?;
+        self.send_bytes(&[mode])?;
+        let _ = self.port.set_timeout(Duration::from_secs(30));
+        let r = self
+            .expect_ok()
+            .map_err(|_| SinodudeSerialProgrammerError::MassEraseFailed);
+        let _ = self.port.set_timeout(TIMEOUT);
+        r
+    }
+
+    pub fn erase_eeprom(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
+        let size = self.chip_type.eeprom_size;
+        if size == 0 {
+            return Err(SinodudeSerialProgrammerError::NoDataEeprom);
+        }
+        let pages = size.div_ceil(EEPROM_PAGE_SIZE);
+        eprintln!(
+            "Erasing data EEPROM: {} page(s) of {} bytes...",
+            pages, EEPROM_PAGE_SIZE
+        );
+
+        let progress = ProgressBar::new(pages as u64);
+        progress.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg} [{bar:40.cyan/blue}] {pos}/{len}")
+                .unwrap()
+                .progress_chars("=>-"),
+        );
+        progress.set_message("Erasing");
+
+        let start = Instant::now();
+        for page in 0..pages {
+            self.check_cancelled().inspect_err(|_| {
+                progress.abandon_with_message("Cancelled");
+            })?;
+            let addr = (page * EEPROM_PAGE_SIZE) as u32;
+            self.send_command(cmd::CMD_ERASE_EEPROM_PAGE)?;
+            self.send_bytes(&addr.to_le_bytes())?;
+            self.expect_ok().map_err(|_| {
+                progress.abandon_with_message("Erase failed");
+                SinodudeSerialProgrammerError::EraseFailed(addr)
+            })?;
+            progress.inc(1);
+        }
+        progress.finish_with_message(format!("EEPROM erase complete in {:.2?}", start.elapsed()));
+        Ok(())
+    }
+
+    pub fn mass_erase_with_mode(&mut self, mode: u8) -> Result<(), SinodudeSerialProgrammerError> {
+        eprintln!(
+            "Mass erasing flash (mode {}, {})...",
+            mode,
+            erase_opcode_desc(mode, self.chip_type.chip_type)
+        );
+        let start = Instant::now();
+        self.try_mass_erase(mode)?;
+        eprintln!("Mass erase complete in {:.2?}", start.elapsed());
+        self.blank_security_and_set_code_option_defaults()?;
+        Ok(())
+    }
+
+    pub fn mass_erase(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
+        let modes = self.full_erase_modes();
         let start = Instant::now();
 
-        self.send_command(cmd::CMD_MASS_ERASE)?;
-        // Send flag: 1 = alternate erase (0xc3), 0 = normal erase (0x4b)
-        self.send_bytes(&[if self.use_alternate_erase { 1 } else { 0 }])?;
-        self.expect_ok()
-            .map_err(|_| SinodudeSerialProgrammerError::MassEraseFailed)?;
-
-        let elapsed = start.elapsed();
-        eprintln!("Mass erase complete in {:.2?}", elapsed);
-
-        // Blank security and set high code option defaults
-        self.blank_security_and_set_code_option_defaults()?;
-
-        Ok(())
+        for (i, &mode) in modes.iter().enumerate() {
+            eprintln!(
+                "Mass erasing flash (mode {}, {})...",
+                mode,
+                erase_opcode_desc(mode, self.chip_type.chip_type)
+            );
+            match self.try_mass_erase(mode) {
+                Ok(()) => {
+                    eprintln!("Mass erase complete in {:.2?}", start.elapsed());
+                    self.blank_security_and_set_code_option_defaults()?;
+                    return Ok(());
+                }
+                Err(e) if i + 1 < modes.len() => {
+                    eprintln!("  target refused mode {}, falling back", mode);
+                    debug!("mass erase mode {} failed: {:?}", mode, e);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Err(SinodudeSerialProgrammerError::MassEraseFailed)
     }
 
     /// Blank security region and set high code option defaults after mass erase.
@@ -727,12 +880,14 @@ impl SinodudeSerialProgrammer {
         {
             let security = &self.chip_type.security;
             let security_length = self.chip_type.security_length();
-            eprintln!(
-                "Blanking security region at {:#x} ({} bytes)...",
-                security.address, security_length
-            );
-            let zeros = vec![0u8; security_length];
-            self.write_custom_region(security.address, &zeros)?;
+            if security_length > 0 {
+                eprintln!(
+                    "Blanking security region at {:#x} ({} bytes)...",
+                    security.address, security_length
+                );
+                let zeros = vec![0u8; security_length];
+                self.write_custom_region(security.address, &zeros)?;
+            }
         }
 
         // Set high code option defaults for parts with >4 byte options
@@ -746,6 +901,72 @@ impl SinodudeSerialProgrammer {
         }
 
         Ok(())
+    }
+
+    pub fn read_protection(&mut self) -> Result<Protection, SinodudeSerialProgrammerError> {
+        if self.chip_type.security_record_format != SecurityRecordFormat::Record19 {
+            return Err(SinodudeSerialProgrammerError::UnsupportedProtection {
+                part: self.part_label(),
+            });
+        }
+        let addr = self.chip_type.security.address;
+        let raw = self.read_region(Region::Custom, addr, PROTECTION_RECORD_LEN)?;
+        let (read, write) = self.chip_type.decode_protection_record(&raw);
+        Ok(Protection {
+            read,
+            write,
+            record: raw,
+        })
+    }
+
+    pub fn apply_protection(
+        &mut self,
+        read_protect: &[bool],
+        write_protect: &[bool],
+    ) -> Result<(), SinodudeSerialProgrammerError> {
+        if self.chip_type.security_record_format != SecurityRecordFormat::Record19 {
+            return Err(SinodudeSerialProgrammerError::UnsupportedProtection {
+                part: self.part_label(),
+            });
+        }
+
+        let existing = self
+            .read_region(
+                Region::Custom,
+                self.chip_type.security.address,
+                PROTECTION_RECORD_LEN,
+            )
+            .unwrap_or_else(|_| vec![0u8; PROTECTION_RECORD_LEN]);
+        let mut custom_mark = [0u8; PROTECTION_MARK_LEN];
+        if existing.len() >= PROTECTION_MARK_OFFSET + PROTECTION_MARK_LEN {
+            custom_mark.copy_from_slice(
+                &existing[PROTECTION_MARK_OFFSET..PROTECTION_MARK_OFFSET + PROTECTION_MARK_LEN],
+            );
+        }
+
+        let record =
+            self.chip_type
+                .build_protection_record(read_protect, write_protect, &custom_mark);
+
+        for (i, (&want, &have)) in record.iter().zip(existing.iter()).enumerate() {
+            if have & !want != 0 {
+                return Err(SinodudeSerialProgrammerError::ProtectionNotReducible {
+                    offset: i,
+                    current: have,
+                    requested: want,
+                });
+            }
+        }
+
+        eprintln!(
+            "Writing protection record ({} bytes) at {:#x}...",
+            PROTECTION_RECORD_LEN, self.chip_type.security.address
+        );
+        self.write_custom_region(self.chip_type.security.address, &record)
+    }
+
+    fn part_label(&self) -> String {
+        hex_string(&self.chip_type.part_number)
     }
 
     pub fn write_custom_region(
@@ -969,13 +1190,7 @@ impl SinodudeSerialProgrammer {
         }
 
         {
-            let stored = if use_stored_defaults {
-                self.stored_security.as_deref()
-            } else {
-                None
-            };
-            let data = security.or(stored);
-            if let Some(data) = data {
+            if let Some(data) = security {
                 let field = &self.chip_type.security;
                 let offset = (field.address - customer_id_addr) as usize;
                 let len = data.len().min(REGION_SIZE - offset);

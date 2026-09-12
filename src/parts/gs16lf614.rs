@@ -1,6 +1,6 @@
 // Auto-generated from GPT file for GS16LF614
 
-use super::{AddressField, OptionInfo, Options, Part, Voltage};
+use super::{AddressField, OptionInfo, Options, Part, SecurityRecordFormat, Voltage};
 use hex_literal::hex;
 use indexmap::IndexMap;
 
@@ -25,6 +25,7 @@ pub const PART: Part = Part {
     serial_number: AddressField { address: 0x103c },
     compatible_voltages: &[Voltage::V5_0, Voltage::V3_3],
     options,
+    security_record_format: SecurityRecordFormat::Record19,
 };
 
 /// Get all code options metadata
