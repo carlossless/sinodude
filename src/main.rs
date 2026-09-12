@@ -109,7 +109,7 @@ fn cli() -> Command {
                         .required(false),
                 )
                 .arg(
-                    arg!(--xdata "Read the target's XDATA space over the OCD path (MOVX A,@DPTR). Not the data EEPROM: on the parts tested so far this window is internal XRAM.")
+                    arg!(--eeprom "Read the data EEPROM instead of code flash")
                         .required(false),
                 ),
         )
@@ -162,6 +162,10 @@ fn cli() -> Command {
                 )
                 .arg(
                     arg!(--end_addr <END_ADDR> "End address for partial write (hex, e.g., 0x2000)")
+                        .required(false),
+                )
+                .arg(
+                    arg!(--eeprom "Write the data EEPROM instead of code flash (erases the whole EEPROM first)")
                         .required(false),
                 ),
         )
@@ -270,33 +274,8 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 programmer.set_ocd_read(true);
             }
             programmer.read_init()?;
-            if let Ok(spec_file) = std::env::var("SINODUDE_PROBE") {
-                for line in fs::read_to_string(&spec_file)?.lines() {
-                    let line = line.trim();
-                    if line.is_empty() || line.starts_with('#') {
-                        continue;
-                    }
-                    let f: Vec<&str> = line.split_whitespace().collect();
-                    let r = if f[0] == "x" {
-                        let reps = f.get(2).map_or(1, |v| v.parse().unwrap_or(1));
-                        let step = f.get(3).is_some_and(|v| *v == "1");
-                        programmer.probe_sfr(&parse_hex(f[1])?, reps, step)
-                    } else {
-                        programmer.read_xdata_chunk(u16::from_str_radix(f[0], 16)?, 16)
-                    };
-                    match r {
-                        Ok(d) => {
-                            let hex: String = d.iter().map(|b| format!("{:02x}", b)).collect();
-                            eprintln!("{} -> {}", line, hex);
-                        }
-                        Err(e) => eprintln!("{} -> ERR {}", line, e),
-                    }
-                }
-                programmer.finish()?;
-                return Ok(());
-            }
-            let result = if sub_matches.get_flag("xdata") {
-                programmer.read_xdata()?
+            let result = if sub_matches.get_flag("eeprom") {
+                programmer.read_eeprom()?
             } else {
                 programmer.read_flash()?
             };
@@ -325,15 +304,37 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
             let mut file_buf = Vec::new();
             file.read_to_end(&mut file_buf)?;
             let file_str = String::from_utf8_lossy(&file_buf[..]);
+
+            let port = sub_matches
+                .get_one::<String>("port")
+                .expect("--port is required for sinodude-serial programmer");
+
+            if sub_matches.get_flag("eeprom") {
+                if part.eeprom_size == 0 {
+                    return Err(format!("{} has no data EEPROM", part_name).into());
+                }
+                let mut data = from_ihex(&file_str, part.eeprom_size)?;
+                data.resize(part.eeprom_size, 0);
+                let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+                if let Some(key) = sub_matches.get_one::<String>("key") {
+                    let bytes = parse_hex(key)?;
+                    let key: [u8; 8] = bytes
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| "Unlock key must be exactly 8 bytes")?;
+                    programmer.set_unlock_key(key);
+                }
+                programmer.write_init()?;
+                programmer.write_eeprom(&data)?;
+                programmer.finish()?;
+                return Ok(());
+            }
+
             let mut firmware = from_ihex(&file_str, part.flash_size)?;
 
             if firmware.len() < part.flash_size {
                 firmware.resize(part.flash_size, 0);
             }
-
-            let port = sub_matches
-                .get_one::<String>("port")
-                .expect("--port is required for sinodude-serial programmer");
 
             // Parse and validate address range before connecting
             let sector_size = part.sector_size;

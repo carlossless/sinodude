@@ -41,8 +41,6 @@ mod cmd {
     pub const CMD_ERASE_EEPROM_PAGE: u8 = 0x0E;
     pub const CMD_SEND_KEY: u8 = 0x0F;
     pub const CMD_READ_FLASH_OCD: u8 = 0x10; // OCD MOVC read-protect bypass (range read)
-    pub const CMD_READ_XDATA: u8 = 0x11; // addr(u16 LE), len(u16 LE)
-    pub const CMD_PROBE: u8 = 0x12;
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -749,13 +747,14 @@ impl SinodudeSerialProgrammer {
         Ok(data)
     }
 
-    pub fn read_xdata(&mut self) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
+    /// The data EEPROM is the first `eeprom_size` bytes of the ICP custom-block (0x4a) space, not code flash.
+    pub fn read_eeprom(&mut self) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
         let size = self.chip_type.eeprom_size;
         if size == 0 {
             return Err(SinodudeSerialProgrammerError::NoDataEeprom);
         }
 
-        eprintln!("Reading {} bytes of XDATA...", size);
+        eprintln!("Reading {} bytes from data EEPROM...", size);
 
         let progress = ProgressBar::new(size as u64);
         progress.set_style(
@@ -767,69 +766,60 @@ impl SinodudeSerialProgrammer {
         progress.set_message("Reading");
 
         let mut contents = Vec::with_capacity(size);
-        let _ = self.port.set_timeout(OCD_READ_TIMEOUT);
         let start = Instant::now();
-        for addr in (0..size).step_by(EEPROM_PAGE_SIZE) {
+        for addr in (0..size).step_by(CHUNK_SIZE) {
             self.check_cancelled().inspect_err(|_| {
                 progress.abandon_with_message("Cancelled");
             })?;
-            let len = EEPROM_PAGE_SIZE.min(size - addr) as u16;
-            let chunk = self.read_xdata_chunk(addr as u16, len).inspect_err(|_| {
-                progress.abandon_with_message("Read failed");
-            })?;
+            let len = CHUNK_SIZE.min(size - addr);
+            let chunk = self
+                .read_region(Region::Custom, addr as u32, len)
+                .inspect_err(|_| {
+                    progress.abandon_with_message("Read failed");
+                })?;
             contents.extend_from_slice(&chunk);
             progress.set_position(contents.len() as u64);
         }
-        let _ = self.port.set_timeout(TIMEOUT);
         progress.finish_with_message(format!("Read complete in {:.2?}", start.elapsed()));
 
         Ok(contents)
     }
 
-    pub fn read_xdata_chunk(
-        &mut self,
-        addr: u16,
-        length: u16,
-    ) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
-        debug!("Reading {} EEPROM bytes at {:#x}", length, addr);
-        self.send_command(cmd::CMD_READ_XDATA)?;
-
-        self.send_bytes(&addr.to_le_bytes())?;
-        self.send_bytes(&length.to_le_bytes())?;
-
-        let response = self.read_byte()?;
-        if response != cmd::RSP_DATA {
-            return Err(SinodudeSerialProgrammerError::OperationFailed);
+    /// Erase the whole data EEPROM, then program and verify `data` one 256-byte page at a time.
+    pub fn write_eeprom(&mut self, data: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
+        if self.chip_type.eeprom_size == 0 {
+            return Err(SinodudeSerialProgrammerError::NoDataEeprom);
         }
-        let lo = self.read_byte()?;
-        let hi = self.read_byte()?;
-        let recv_len = u16::from_le_bytes([lo, hi]);
-        if recv_len != length {
-            return Err(SinodudeSerialProgrammerError::InvalidResponse);
-        }
-        self.read_bytes(length as usize)
-    }
+        let size = self.chip_type.eeprom_size.min(data.len());
 
-    pub fn probe_sfr(
-        &mut self,
-        code: &[u8],
-        reps: u8,
-        step: bool,
-    ) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
-        let _ = self.port.set_timeout(OCD_READ_TIMEOUT);
-        self.send_command(cmd::CMD_PROBE)?;
-        self.send_bytes(&[code.len() as u8, reps, u8::from(step)])?;
-        self.send_bytes(code)?;
-        let response = self.read_byte()?;
-        if response != cmd::RSP_DATA {
-            return Err(SinodudeSerialProgrammerError::OperationFailed);
+        self.erase_eeprom()?;
+
+        eprintln!("Writing {} bytes to data EEPROM...", size);
+
+        let progress = ProgressBar::new(size as u64);
+        progress.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                .unwrap()
+                .progress_chars("=>-"),
+        );
+        progress.set_message("Writing");
+
+        let start = Instant::now();
+        for addr in (0..size).step_by(EEPROM_PAGE_SIZE) {
+            self.check_cancelled().inspect_err(|_| {
+                progress.abandon_with_message("Cancelled");
+            })?;
+            let end = (addr + EEPROM_PAGE_SIZE).min(size);
+            self.write_custom_region(addr as u32, &data[addr..end])
+                .inspect_err(|_| {
+                    progress.abandon_with_message("Write failed");
+                })?;
+            progress.set_position(end as u64);
         }
-        let lo = self.read_byte()?;
-        let hi = self.read_byte()?;
-        let n = u16::from_le_bytes([lo, hi]) as usize;
-        let data = self.read_bytes(n);
-        let _ = self.port.set_timeout(TIMEOUT);
-        data
+        progress.finish_with_message(format!("Write complete in {:.2?}", start.elapsed()));
+
+        Ok(())
     }
 
     fn erase_sector(&mut self, addr: u32) -> Result<(), SinodudeSerialProgrammerError> {
