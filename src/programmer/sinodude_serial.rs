@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 
 // Expected firmware version (must match firmware)
-const EXPECTED_VERSION_MAJOR: u8 = 2;
+const EXPECTED_VERSION_MAJOR: u8 = 3;
 
 // Serial protocol commands (must match firmware)
 mod cmd {
@@ -202,6 +202,11 @@ impl SinodudeSerialProgrammer {
             stored_security: None,
             stored_serial_number: None,
         })
+    }
+
+    /// Provide the 8-byte password sent right after connect() to unlock a protected part.
+    pub fn set_unlock_key(&mut self, key: [u8; 8]) {
+        self.unlock_key = Some(key);
     }
 
     fn check_cancelled(&self) -> Result<(), SinodudeSerialProgrammerError> {
@@ -568,10 +573,6 @@ impl SinodudeSerialProgrammer {
         Ok(())
     }
 
-    pub fn set_unlock_key(&mut self, key: [u8; 8]) {
-        self.unlock_key = Some(key);
-    }
-
     fn send_unlock_key_if_present(&mut self) -> Result<(), SinodudeSerialProgrammerError> {
         let Some(key) = self.unlock_key else {
             return Ok(());
@@ -607,6 +608,7 @@ impl SinodudeSerialProgrammer {
         self.ping()?;
         self.check_version()?;
         self.connect()?;
+        self.send_unlock_key_if_present()?;
         self.get_id()?;
         self.set_config()?;
         self.send_unlock_key_if_present()?;
@@ -619,6 +621,7 @@ impl SinodudeSerialProgrammer {
         self.ping()?;
         self.check_version()?;
         self.connect()?;
+        self.send_unlock_key_if_present()?;
         self.get_id()?;
         self.set_config()?;
         self.send_unlock_key_if_present()?;
@@ -631,6 +634,7 @@ impl SinodudeSerialProgrammer {
         self.ping()?;
         self.check_version()?;
         self.connect()?;
+        self.send_unlock_key_if_present()?;
         self.get_id()?;
         self.set_config()?;
         self.send_unlock_key_if_present()?;
@@ -708,6 +712,81 @@ impl SinodudeSerialProgrammer {
         // Read data
         let data = self.read_bytes(length as usize)?;
         Ok(data)
+    }
+
+    /// The data EEPROM is the first `eeprom_size` bytes of the ICP custom-block (0x4a) space, not code flash.
+    pub fn read_eeprom(&mut self) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
+        let size = self.chip_type.eeprom_size;
+        if size == 0 {
+            return Err(SinodudeSerialProgrammerError::NoDataEeprom);
+        }
+
+        eprintln!("Reading {} bytes from data EEPROM...", size);
+
+        let progress = ProgressBar::new(size as u64);
+        progress.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                .unwrap()
+                .progress_chars("=>-"),
+        );
+        progress.set_message("Reading");
+
+        let mut contents = Vec::with_capacity(size);
+        let start = Instant::now();
+        for addr in (0..size).step_by(CHUNK_SIZE) {
+            self.check_cancelled().inspect_err(|_| {
+                progress.abandon_with_message("Cancelled");
+            })?;
+            let len = CHUNK_SIZE.min(size - addr);
+            let chunk = self
+                .read_region(Region::Custom, addr as u32, len)
+                .inspect_err(|_| {
+                    progress.abandon_with_message("Read failed");
+                })?;
+            contents.extend_from_slice(&chunk);
+            progress.set_position(contents.len() as u64);
+        }
+        progress.finish_with_message(format!("Read complete in {:.2?}", start.elapsed()));
+
+        Ok(contents)
+    }
+
+    /// Erase the whole data EEPROM, then program and verify `data` one 256-byte page at a time.
+    pub fn write_eeprom(&mut self, data: &[u8]) -> Result<(), SinodudeSerialProgrammerError> {
+        if self.chip_type.eeprom_size == 0 {
+            return Err(SinodudeSerialProgrammerError::NoDataEeprom);
+        }
+        let size = self.chip_type.eeprom_size.min(data.len());
+
+        self.erase_eeprom()?;
+
+        eprintln!("Writing {} bytes to data EEPROM...", size);
+
+        let progress = ProgressBar::new(size as u64);
+        progress.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                .unwrap()
+                .progress_chars("=>-"),
+        );
+        progress.set_message("Writing");
+
+        let start = Instant::now();
+        for addr in (0..size).step_by(EEPROM_PAGE_SIZE) {
+            self.check_cancelled().inspect_err(|_| {
+                progress.abandon_with_message("Cancelled");
+            })?;
+            let end = (addr + EEPROM_PAGE_SIZE).min(size);
+            self.write_custom_region(addr as u32, &data[addr..end])
+                .inspect_err(|_| {
+                    progress.abandon_with_message("Write failed");
+                })?;
+            progress.set_position(end as u64);
+        }
+        progress.finish_with_message(format!("Write complete in {:.2?}", start.elapsed()));
+
+        Ok(())
     }
 
     fn erase_sector(&mut self, addr: u32) -> Result<(), SinodudeSerialProgrammerError> {

@@ -21,7 +21,7 @@ use atmega_hal::{
 // Power - D6 (output)
 
 // Firmware version
-const VERSION_MAJOR: u8 = 2;
+const VERSION_MAJOR: u8 = 3;
 const VERSION_MINOR: u8 = 0;
 
 // Serial protocol commands
@@ -56,7 +56,7 @@ mod cmd {
     pub const RSP_DATA: u8 = 0x01;
 }
 
-// ICP Commands (from reference)
+// ICP command opcodes.
 mod icp_cmd {
     pub const ICP_SET_IB_OFFSET_L: u8 = 0x40;
     pub const ICP_SET_IB_OFFSET_H: u8 = 0x41;
@@ -355,19 +355,6 @@ impl IcpController {
             self.delay_us(50);
             self.jtag_send_data(23, 0x402000u32);
             self.jtag_send_data(23, 0x400000u32);
-
-            // most likely breakpoints initialization
-            // SH68F881W works without it, but maybe for other chips it's mandatory
-            {
-                self.jtag_send_data(23, 0x630000u32);
-                self.jtag_send_data(23, 0x670000u32);
-                self.jtag_send_data(23, 0x6B0000u32);
-                self.jtag_send_data(23, 0x6F0000u32);
-                self.jtag_send_data(23, 0x730000u32);
-                self.jtag_send_data(23, 0x770000u32);
-                self.jtag_send_data(23, 0x7B0000u32);
-                self.jtag_send_data(23, 0x7F0000u32);
-            }
 
             self.jtag_send_instruction(2);
             self.jtag_send_data(4, 1u8);
@@ -991,6 +978,7 @@ fn main() -> ! {
             }
 
             cmd::CMD_ERASE_EEPROM_PAGE => {
+                // Read address (4 bytes)
                 let addr = {
                     let b0 = nb::block!(rx.read()).unwrap_or(0);
                     let b1 = nb::block!(rx.read()).unwrap_or(0);

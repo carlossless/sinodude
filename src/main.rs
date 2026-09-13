@@ -3,7 +3,7 @@ use log::info;
 use simple_logger::SimpleLogger;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::{env, fs, io::Read};
+use std::{env, fs};
 
 mod ihex;
 pub mod parts;
@@ -84,8 +84,10 @@ fn cli() -> Command {
         .subcommand(
             Command::new("read")
                 .short_flag('r')
-                .about("Read the chips flash contents")
-                .arg(arg!(output_file: <OUTPUT_FILE> "file to write flash contents to"))
+                .about("Read the chip's code flash and/or data EEPROM into Intel HEX files")
+                .arg(arg!(--flash <FILE> "Write the code flash contents to this file").required(false))
+                .arg(arg!(--eeprom <FILE> "Write the data EEPROM contents to this file").required(false))
+                .group(ArgGroup::new("memory").args(["flash", "eeprom"]).multiple(true).required(true))
                 .arg(
                     arg!(-c --programmer <PROGRAMMER>)
                         .value_parser(["sinodude-serial"])
@@ -108,8 +110,10 @@ fn cli() -> Command {
         .subcommand(
             Command::new("write")
                 .short_flag('w')
-                .about("Write to flash")
-                .arg(arg!(input_file: <INPUT_FILE> "file to write to flash"))
+                .about("Write Intel HEX files to the chip's code flash and/or data EEPROM")
+                .arg(arg!(--flash <FILE> "Program the code flash from this file").required(false))
+                .arg(arg!(--eeprom <FILE> "Program the data EEPROM from this file (erases the whole EEPROM first)").required(false))
+                .group(ArgGroup::new("memory").args(["flash", "eeprom"]).multiple(true).required(true))
                 .arg(
                     arg!(-c --programmer <PROGRAMMER>)
                         .value_parser(["sinodude-serial"])
@@ -155,7 +159,8 @@ fn cli() -> Command {
                 .arg(
                     arg!(--end_addr <END_ADDR> "End address for partial write (hex, e.g., 0x2000)")
                         .required(false),
-                ),
+                )
+                ,
         )
         .subcommand(
             Command::new("erase")
@@ -234,10 +239,8 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
 
     match matches.subcommand() {
         Some(("read", sub_matches)) => {
-            let output_file = sub_matches
-                .get_one::<String>("output_file")
-                .map(|s| s.as_str())
-                .unwrap();
+            let flash_file = sub_matches.get_one::<String>("flash");
+            let eeprom_file = sub_matches.get_one::<String>("eeprom");
 
             let part_name = sub_matches
                 .get_one::<String>("part")
@@ -245,6 +248,9 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
 
             let part = PARTS.get(part_name).unwrap();
+            if eeprom_file.is_some() && part.eeprom_size == 0 {
+                return Err(format!("{} has no data EEPROM", part_name).into());
+            }
 
             let port = sub_matches
                 .get_one::<String>("port")
@@ -259,21 +265,18 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 programmer.set_unlock_key(key);
             }
             programmer.read_init()?;
-            let result = programmer.read_flash()?;
+            let flash = flash_file.map(|_| programmer.read_flash()).transpose()?;
+            let eeprom = eeprom_file.map(|_| programmer.read_eeprom()).transpose()?;
             programmer.finish()?;
 
-            let digest = md5::compute(&result);
-            info!("MD5: {:x}", digest);
-
-            let ihex = to_ihex(result)?;
-            fs::write(output_file, ihex)?;
+            for (file, data) in [(flash_file, flash), (eeprom_file, eeprom)] {
+                if let (Some(file), Some(data)) = (file, data) {
+                    info!("{} MD5: {:x}", file, md5::compute(&data));
+                    fs::write(file, to_ihex(data)?)?;
+                }
+            }
         }
         Some(("write", sub_matches)) => {
-            let input_file = sub_matches
-                .get_one::<String>("input_file")
-                .map(|s| s.as_str())
-                .unwrap();
-
             let part_name = sub_matches
                 .get_one::<String>("part")
                 .map(|s| s.as_str())
@@ -281,15 +284,26 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
 
             let part = PARTS.get(part_name).unwrap();
 
-            let mut file = fs::File::open(input_file)?;
-            let mut file_buf = Vec::new();
-            file.read_to_end(&mut file_buf)?;
-            let file_str = String::from_utf8_lossy(&file_buf[..]);
-            let mut firmware = from_ihex(&file_str, part.flash_size)?;
+            let firmware = sub_matches
+                .get_one::<String>("flash")
+                .map(|file| -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+                    let mut data = from_ihex(&fs::read_to_string(file)?, part.flash_size)?;
+                    data.resize(part.flash_size, 0);
+                    Ok(data)
+                })
+                .transpose()?;
 
-            if firmware.len() < part.flash_size {
-                firmware.resize(part.flash_size, 0);
-            }
+            let eeprom = sub_matches
+                .get_one::<String>("eeprom")
+                .map(|file| -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+                    if part.eeprom_size == 0 {
+                        return Err(format!("{} has no data EEPROM", part_name).into());
+                    }
+                    let mut data = from_ihex(&fs::read_to_string(file)?, part.eeprom_size)?;
+                    data.resize(part.eeprom_size, 0);
+                    Ok(data)
+                })
+                .transpose()?;
 
             let port = sub_matches
                 .get_one::<String>("port")
@@ -323,34 +337,6 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                     )
                     .into());
                 }
-            }
-
-            let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
-            if let Some(key) = sub_matches.get_one::<String>("key") {
-                let bytes = parse_hex(key)?;
-                let key: [u8; 8] = bytes
-                    .as_slice()
-                    .try_into()
-                    .map_err(|_| "Unlock key must be exactly 8 bytes")?;
-                programmer.set_unlock_key(key);
-            }
-            programmer.write_init()?;
-
-            // Use sector-based erase for partial writes, mass erase for full writes
-            match (start_addr, end_addr) {
-                (Some(start), Some(end)) => {
-                    programmer.erase_sectors(start as u32, end as u32)?;
-                }
-                (Some(start), None) => {
-                    programmer.erase_sectors(start as u32, part.flash_size as u32)?;
-                }
-                (None, Some(end)) => {
-                    programmer.erase_sectors(0, end as u32)?;
-                }
-                (None, None) => match sub_matches.get_one::<String>("erase_mode") {
-                    Some(m) => programmer.mass_erase_with_mode(m.parse::<u8>()?)?,
-                    None => programmer.mass_erase()?,
-                },
             }
 
             // Parse custom fields
@@ -400,30 +386,65 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 })
                 .transpose()?;
 
-            // Write all custom fields in one transaction (use stored values as defaults)
-            programmer.write_custom_fields(
-                customer_id.as_ref(),
-                operation_number.as_ref(),
-                customer_option.as_deref(),
-                security.as_deref(),
-                serial_number.as_ref(),
-                true, // use_stored_defaults
-            )?;
+            let mut programmer = SinodudeSerialProgrammer::new(port, part, cancelled.clone())?;
+            if let Some(key) = sub_matches.get_one::<String>("key") {
+                let bytes = parse_hex(key)?;
+                let key: [u8; 8] = bytes
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| "Unlock key must be exactly 8 bytes")?;
+                programmer.set_unlock_key(key);
+            }
+            programmer.write_init()?;
 
-            // Use range write for partial writes, full write otherwise
-            match (start_addr, end_addr) {
-                (Some(start), Some(end)) => {
-                    programmer.write_flash_range(&firmware, start, end)?;
+            // Flash goes first: its mass erase may take the EEPROM with it.
+            if let Some(firmware) = &firmware {
+                // Use sector-based erase for partial writes, mass erase for full writes
+                match (start_addr, end_addr) {
+                    (Some(start), Some(end)) => {
+                        programmer.erase_sectors(start as u32, end as u32)?;
+                    }
+                    (Some(start), None) => {
+                        programmer.erase_sectors(start as u32, part.flash_size as u32)?;
+                    }
+                    (None, Some(end)) => {
+                        programmer.erase_sectors(0, end as u32)?;
+                    }
+                    (None, None) => match sub_matches.get_one::<String>("erase_mode") {
+                        Some(m) => programmer.mass_erase_with_mode(m.parse::<u8>()?)?,
+                        None => programmer.mass_erase()?,
+                    },
                 }
-                (Some(start), None) => {
-                    programmer.write_flash_range(&firmware, start, firmware.len())?;
+
+                // Write all custom fields in one transaction (use stored values as defaults)
+                programmer.write_custom_fields(
+                    customer_id.as_ref(),
+                    operation_number.as_ref(),
+                    customer_option.as_deref(),
+                    security.as_deref(),
+                    serial_number.as_ref(),
+                    true, // use_stored_defaults
+                )?;
+
+                // Use range write for partial writes, full write otherwise
+                match (start_addr, end_addr) {
+                    (Some(start), Some(end)) => {
+                        programmer.write_flash_range(firmware, start, end)?;
+                    }
+                    (Some(start), None) => {
+                        programmer.write_flash_range(firmware, start, firmware.len())?;
+                    }
+                    (None, Some(end)) => {
+                        programmer.write_flash_range(firmware, 0, end)?;
+                    }
+                    (None, None) => {
+                        programmer.write_flash(firmware)?;
+                    }
                 }
-                (None, Some(end)) => {
-                    programmer.write_flash_range(&firmware, 0, end)?;
-                }
-                (None, None) => {
-                    programmer.write_flash(&firmware)?;
-                }
+            }
+
+            if let Some(eeprom) = &eeprom {
+                programmer.write_eeprom(eeprom)?;
             }
 
             programmer.finish()?;
@@ -504,6 +525,9 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
 
             let part = PARTS.get(part_name).unwrap();
+            if sub_matches.get_flag("eeprom") && part.eeprom_size == 0 {
+                return Err(format!("{} has no data EEPROM", part_name).into());
+            }
 
             let port = sub_matches
                 .get_one::<String>("port")
