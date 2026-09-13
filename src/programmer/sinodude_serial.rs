@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
-// Expected firmware version (must match firmware); v6 = CMD_READ_FLASH_OCD (0x0F), the 3-wire OCD MOVC bypass (read --ocd).
-const EXPECTED_VERSION_MAJOR: u8 = 6;
+// Expected firmware version (must match firmware)
+const EXPECTED_VERSION_MAJOR: u8 = 3;
 
 // Serial protocol commands (must match firmware)
 mod cmd {
@@ -40,7 +40,6 @@ mod cmd {
     pub const CMD_WRITE_CUSTOM_REGION: u8 = 0x0D;
     pub const CMD_ERASE_EEPROM_PAGE: u8 = 0x0E;
     pub const CMD_SEND_KEY: u8 = 0x0F;
-    pub const CMD_READ_FLASH_OCD: u8 = 0x10; // OCD MOVC read-protect bypass (range read)
 
     // Response codes
     pub const RSP_OK: u8 = 0x00;
@@ -75,8 +74,6 @@ const CHUNK_SIZE: usize = 1024;
 const EEPROM_PAGE_SIZE: usize = 256;
 const BAUD_RATE: u32 = 115200;
 const TIMEOUT: Duration = Duration::from_secs(5);
-/// Timeout for the slow OCD MOVC read (one debug run per byte), well past the fast-ICP TIMEOUT.
-const OCD_READ_TIMEOUT: Duration = Duration::from_secs(300);
 
 #[derive(Debug, Error)]
 pub enum SinodudeSerialProgrammerError {
@@ -163,9 +160,6 @@ pub struct SinodudeSerialProgrammer {
     stored_customer_option: Option<Vec<u8>>,
     stored_security: Option<Vec<u8>>,
     stored_serial_number: Option<[u8; 4]>,
-    /// 8-byte unlock key (chip password) sent right after connect for protected parts
-    /// Read flash over the 3-wire OCD MOVC bypass instead of the fast ICP read
-    use_ocd_read: bool,
 }
 
 impl SinodudeSerialProgrammer {
@@ -207,18 +201,12 @@ impl SinodudeSerialProgrammer {
             stored_customer_option: None,
             stored_security: None,
             stored_serial_number: None,
-            use_ocd_read: false,
         })
     }
 
     /// Provide the 8-byte password sent right after connect() to unlock a protected part.
     pub fn set_unlock_key(&mut self, key: [u8; 8]) {
         self.unlock_key = Some(key);
-    }
-
-    /// Read flash over the 3-wire OCD MOVC bypass (recovers read-protected flash: the CPU code-fetch is ungated) instead of the fast ICP read.
-    pub fn set_ocd_read(&mut self, enabled: bool) {
-        self.use_ocd_read = enabled;
     }
 
     fn check_cancelled(&self) -> Result<(), SinodudeSerialProgrammerError> {
@@ -675,10 +663,6 @@ impl SinodudeSerialProgrammer {
         progress.set_message("Reading");
 
         let start = Instant::now();
-        // The OCD MOVC bypass reads one byte per debug run (~16 ms/byte); widen the timeout for the whole OCD read while the ICP path keeps the fast one.
-        if self.use_ocd_read {
-            let _ = self.port.set_timeout(OCD_READ_TIMEOUT);
-        }
         for addr in (0..flash_size).step_by(buffer_size as usize) {
             self.check_cancelled().inspect_err(|_| {
                 progress.abandon_with_message("Cancelled");
@@ -688,18 +672,6 @@ impl SinodudeSerialProgrammer {
             })?;
             contents.extend_from_slice(&result);
             progress.set_position(addr as u64 + buffer_size as u64);
-        }
-        if self.use_ocd_read {
-            let _ = self.port.set_timeout(TIMEOUT);
-            // Addresses 0..2 (reset vector) misdecode over the OCD MOVC path; patch them from a fast ICP read of the always-readable sector 0.
-            if contents.len() >= 3 {
-                self.use_ocd_read = false;
-                let patch = self.read_chunk(0, 3);
-                self.use_ocd_read = true;
-                if let Ok(p) = patch {
-                    contents[..3].copy_from_slice(&p[..3]);
-                }
-            }
         }
         let elapsed = start.elapsed();
 
@@ -713,12 +685,7 @@ impl SinodudeSerialProgrammer {
         length: u16,
     ) -> Result<Vec<u8>, SinodudeSerialProgrammerError> {
         debug!("Reading {} bytes at {:#x}", length, addr);
-        let read_cmd = if self.use_ocd_read {
-            cmd::CMD_READ_FLASH_OCD
-        } else {
-            cmd::CMD_READ_FLASH
-        };
-        self.send_command(read_cmd)?;
+        self.send_command(cmd::CMD_READ_FLASH)?;
 
         // Send address (4 bytes, little endian)
         let addr_bytes = addr.to_le_bytes();

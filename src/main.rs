@@ -105,10 +105,6 @@ fn cli() -> Command {
                 .arg(
                     arg!(--key <KEY> "Customer unlock key for a password-protected part (8 bytes hex)")
                         .required(false),
-                )
-                .arg(
-                    arg!(--ocd "Read flash over the 3-wire OCD MOVC read-protect bypass instead of the fast ICP read. Recovers read-protected flash (the chip's own CPU code-fetch is not gated); slower (~16 ms/byte).")
-                        .required(false),
                 ),
         )
         .subcommand(
@@ -267,9 +263,6 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                     .try_into()
                     .map_err(|_| "Unlock key must be exactly 8 bytes")?;
                 programmer.set_unlock_key(key);
-            }
-            if sub_matches.get_flag("ocd") {
-                programmer.set_ocd_read(true);
             }
             programmer.read_init()?;
             let flash = flash_file.map(|_| programmer.read_flash()).transpose()?;
