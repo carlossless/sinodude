@@ -25,7 +25,7 @@ pub const PART: Part = Part {
     serial_number: AddressField { address: 0x1ffc },
     compatible_voltages: &[Voltage::V5_0],
     options,
-    security_record_format: SecurityRecordFormat::None,
+    security_record_format: SecurityRecordFormat::Record19,
 };
 
 /// Get all code options metadata

@@ -408,9 +408,12 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
         part.chip_name
     ));
     if part.options.is_empty() {
-        output.push_str("use super::{AddressField, Options, Part, Voltage};\n");
+        output
+            .push_str("use super::{AddressField, Options, Part, SecurityRecordFormat, Voltage};\n");
     } else {
-        output.push_str("use super::{AddressField, OptionInfo, Options, Part, Voltage};\n");
+        output.push_str(
+            "use super::{AddressField, OptionInfo, Options, Part, SecurityRecordFormat, Voltage};\n",
+        );
     }
     output.push_str("use hex_literal::hex;\n");
     output.push_str("use indexmap::IndexMap;\n\n");
@@ -484,6 +487,18 @@ fn generate_rust_part_definition(part: &PartDefinition) -> String {
         voltages_str.join(", ")
     ));
     output.push_str("    options,\n");
+
+    // A zero security address means the GPT defines no security region; every part
+    // that has one uses the 0x19-byte Record19 layout.
+    let security_record_format = if part.security.address == 0 {
+        "SecurityRecordFormat::None"
+    } else {
+        "SecurityRecordFormat::Record19"
+    };
+    output.push_str(&format!(
+        "    security_record_format: {},\n",
+        security_record_format
+    ));
 
     output.push_str("};\n\n");
 
