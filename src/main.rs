@@ -252,6 +252,9 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
 
             let part = PARTS.get(part_name).unwrap();
+            if eeprom_file.is_some() && part.eeprom_size == 0 {
+                return Err(format!("{} has no data EEPROM", part_name).into());
+            }
 
             let port = sub_matches
                 .get_one::<String>("port")
@@ -267,9 +270,6 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
             }
             if sub_matches.get_flag("ocd") {
                 programmer.set_ocd_read(true);
-            }
-            if eeprom_file.is_some() && part.eeprom_size == 0 {
-                return Err(format!("{} has no data EEPROM", part_name).into());
             }
             programmer.read_init()?;
             let flash = flash_file.map(|_| programmer.read_flash()).transpose()?;
@@ -532,6 +532,9 @@ fn run(cancelled: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
 
             let part = PARTS.get(part_name).unwrap();
+            if sub_matches.get_flag("eeprom") && part.eeprom_size == 0 {
+                return Err(format!("{} has no data EEPROM", part_name).into());
+            }
 
             let port = sub_matches
                 .get_one::<String>("port")
