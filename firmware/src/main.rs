@@ -13,9 +13,14 @@ use atmega_hal::{
     usart::{Baudrate, Usart},
 };
 
-// ICP pins: TDO=D2 (in), TMS=D3, TDI=D4, TCK=D5, Power=D6 (out).
+// ICP Pin assignments (matching reference implementation)
+// TDO - D2 (input)
+// TMS - D3 (output)
+// TDI - D4 (output)
+// TCK - D5 (output)
+// Power - D6 (output)
 
-// v6: CMD_READ_FLASH is the fast ICP read; CMD_READ_FLASH_OCD (0x0F) is the 3-wire OCD MOVC read-protect bypass (read --ocd).
+// Firmware version
 const VERSION_MAJOR: u8 = 6;
 const VERSION_MINOR: u8 = 0;
 
