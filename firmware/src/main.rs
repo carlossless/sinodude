@@ -356,18 +356,6 @@ impl IcpController {
             self.jtag_send_data(23, 0x402000u32);
             self.jtag_send_data(23, 0x400000u32);
 
-            // most likely breakpoint init; SH68F881W works without it, maybe mandatory for other chips
-            {
-                self.jtag_send_data(23, 0x630000u32);
-                self.jtag_send_data(23, 0x670000u32);
-                self.jtag_send_data(23, 0x6B0000u32);
-                self.jtag_send_data(23, 0x6F0000u32);
-                self.jtag_send_data(23, 0x730000u32);
-                self.jtag_send_data(23, 0x770000u32);
-                self.jtag_send_data(23, 0x7B0000u32);
-                self.jtag_send_data(23, 0x7F0000u32);
-            }
-
             self.jtag_send_instruction(2);
             self.jtag_send_data(4, 1u8);
 
