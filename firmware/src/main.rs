@@ -958,6 +958,7 @@ fn main() -> ! {
                     let _ = nb::block!(tx.write(cmd::RSP_ERR));
                 }
             }
+
             cmd::CMD_SEND_KEY => {
                 let mut key = [0u8; 8];
                 for b in key.iter_mut() {
