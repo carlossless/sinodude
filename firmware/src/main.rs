@@ -989,6 +989,7 @@ fn main() -> ! {
             }
 
             cmd::CMD_ERASE_EEPROM_PAGE => {
+                // Read address (4 bytes)
                 let addr = {
                     let b0 = nb::block!(rx.read()).unwrap_or(0);
                     let b1 = nb::block!(rx.read()).unwrap_or(0);
@@ -1031,6 +1032,7 @@ fn main() -> ! {
             }
 
             cmd::CMD_WRITE_CUSTOM_REGION => {
+                // Read address (4 bytes)
                 let addr = {
                     let b0 = nb::block!(rx.read()).unwrap_or(0);
                     let b1 = nb::block!(rx.read()).unwrap_or(0);
@@ -1038,15 +1040,21 @@ fn main() -> ! {
                     let b3 = nb::block!(rx.read()).unwrap_or(0);
                     u32::from_le_bytes([b0, b1, b2, b3])
                 };
+                // Read length (2 bytes)
                 let len = {
                     let low = nb::block!(rx.read()).unwrap_or(0);
                     let high = nb::block!(rx.read()).unwrap_or(0);
                     u16::from_le_bytes([low, high]) as usize
                 };
+
+                // Clamp length to buffer size
                 let write_len = len.min(buffer.len());
+
+                // Read data to write
                 for byte in buffer[..write_len].iter_mut() {
                     *byte = nb::block!(rx.read()).unwrap_or(0);
                 }
+
                 if icp.icp_write_custom_region(addr, &buffer[..write_len]) {
                     let _ = nb::block!(tx.write(cmd::RSP_OK));
                 } else {
