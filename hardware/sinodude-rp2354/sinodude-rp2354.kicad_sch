@@ -21867,7 +21867,7 @@
 				)
 			)
 		)
-		(property "Value" "150R"
+		(property "Value" "470R"
 			(at 295.91 340.36 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -21910,7 +21910,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C22808"
+		(property "LCSC" "C23179"
 			(at 295.91 340.36 0)
 			(hide yes)
 			(show_name no)

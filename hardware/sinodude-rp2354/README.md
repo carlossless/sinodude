@@ -266,27 +266,34 @@ inputs.
 
 ## Indicators (D2, D3)
 
-Both run from `+3V3` through their resistor into the GPIO, so the pin sinks and both are
-active-low.
+Both run from `+3V3` through 470 Ω into the GPIO, so the pin sinks and both are active-low.
 
-The two resistors differ because the LEDs do. D2 is an emerald green 517 nm part
-(`C7496818`) with Vf 2.6–2.9 V, leaving only 0.4–0.7 V across the resistor on a 3.3 V rail;
-D3 is red (`C2286`) at Vf 1.8–2.4 V with roughly twice the headroom. Sizing both at the
-same value makes the green two to three times dimmer than the red.
+**Do not size these by current.** The two LEDs are binned at different test currents, and
+reading the LCSC catalogue line instead of the datasheet gets this backwards:
 
-| | Vf | R | current over the Vf band |
-|---|---|---|---|
-| D2 green | 2.6–2.9 V | 150 Ω | 2.0–4.0 mA |
-| D3 red | 1.8–2.4 V | 470 Ω | 1.7–3.0 mA |
+| | part | Iv (bin range) | Vf | at | efficacy |
+|---|---|---|---|---|---|
+| D2 green, 517 nm | `C7496818` | 160–230 mcd | 2.6–2.9 V | IF = 5 mA | 32–46 mcd/mA |
+| D3 red, 625 nm | `C2286` | 145–300 mcd | 1.8–2.4 V | IF = 20 mA | 7.3–15 mcd/mA |
 
-Currents assume VOL ≈ 0.1 V at the sinking GPIO. Both sit far below the parts' 30 mA and
-20 mA ratings, and both LEDs lit draw about 7 mA total.
+The green is three to four times more efficient per milliamp. Both are 120° parts, so the
+mcd figures compare directly for perceived brightness. Matching brightness therefore means
+running the green at roughly a quarter of the red's current, which is what equal 470 Ω
+resistors do, because the green's higher Vf leaves it less headroom on a 3.3 V rail:
 
-The wide per-LED range is headroom, not tolerance, and no resistor value removes it: on a
-3.3 V rail a 2.6–2.9 V green part inherently varies about 2:1 across its Vf bin. Moving
-the indicators to `+5V` would fix that but would leave them partly lit when a 3.3 V GPIO
-drives high, and would inject current into the pin clamp whenever that GPIO is an input.
-Matching currents on 3.3 V is the right trade for an indicator.
+| | current | Iv |
+|---|---|---|
+| D2 green | 0.6–1.3 mA | ~19–60 mcd |
+| D3 red | ~2.4–3.4 mA | ~17–51 mcd |
+
+Nominally about 37 mcd against 33 mcd. Sizing the green up to a few milliamps to "match"
+the red makes it roughly four times brighter.
+
+Two caveats on those numbers. Currents assume VOL ≈ 0.1 V at the sinking GPIO, and the red
+figure allows for its Vf being quoted at 20 mA and so sitting lower at 3 mA. Both Iv
+figures extrapolate linearly from the datasheet test point down to the operating current,
+which understates both slightly, since these parts get marginally more efficient as current
+falls. Neither caveat is worth more than a resistor step.
 
 ## GPIO map
 
