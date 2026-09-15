@@ -135,6 +135,11 @@ Both were built in FreeCAD to datasheet nominals — the QFN to RP2350 datasheet
 inductor to Abracon's 2.00 × 1.60 × 1.00 max. Verified bounding boxes are 7.000 × 7.000 ×
 0.850 and 2.000 × 1.600 × 1.000, origin centred, seating plane at z=0.
 
+Each is exported as separate solids so it can carry per-solid STEP colour, using the same
+three RGB values the stock KiCad models use (body `0.148/0.145/0.145`, leads and terminals
+`0.824/0.820/0.781`, pin-1 and polarity marking `0.691/0.664/0.598`). Without that a
+generated model renders flat grey next to every other part on the board.
+
 They are visual and mechanical-fit models, not vendor CAD: lead geometry is nominal and
 there is no internal detail. Good enough for enclosure fit and collision checks; if you need
 certified geometry, replace them with vendor STEP.
