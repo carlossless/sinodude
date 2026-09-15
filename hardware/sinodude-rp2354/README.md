@@ -104,11 +104,8 @@ physically fits the same holes but points the cable straight up off the board.
 guide uses — NCP1117 is not stocked at JLCPCB. Same SOT-223 land pattern, same pinout
 (1 GND, 2 VO, 3 VI).
 
-Two part-choice consequences worth knowing:
+One part-choice consequence worth knowing:
 
-- **R9 is too large for a green LED.** A green 0603 has Vf ≈ 2.6–2.9 V, so 470 Ω from 3.3 V
-  gives under 1 mA and a barely visible LED. Drop R9 to ~150 Ω. R10 is fine — the red LED's
-  Vf ≈ 2.0 V gives ~2.8 mA.
 - **C27 (10 µF on VTGT) slows supply switching.** The TPS211xA will not connect a supply
   until OUT has fallen within 100 mV of it, so on a 5 V → 3.3 V change VTGT must decay to
   ~3.4 V first. TI notes the fast input-to-input slew "reduces the output voltage hold-up
@@ -266,6 +263,30 @@ breakdown knee gets thin. **An external target above 5.5 V destroys U4–U6.**
 part, so it is rated for continuous assertion, but it is meant to be pulsed. R20 (100 k)
 holds the gate low so the FET stays off while the RP2354 is in reset and its GPIOs are
 inputs.
+
+## Indicators (D2, D3)
+
+Both run from `+3V3` through their resistor into the GPIO, so the pin sinks and both are
+active-low.
+
+The two resistors differ because the LEDs do. D2 is an emerald green 517 nm part
+(`C7496818`) with Vf 2.6–2.9 V, leaving only 0.4–0.7 V across the resistor on a 3.3 V rail;
+D3 is red (`C2286`) at Vf 1.8–2.4 V with roughly twice the headroom. Sizing both at the
+same value makes the green two to three times dimmer than the red.
+
+| | Vf | R | current over the Vf band |
+|---|---|---|---|
+| D2 green | 2.6–2.9 V | 150 Ω | 2.0–4.0 mA |
+| D3 red | 1.8–2.4 V | 470 Ω | 1.7–3.0 mA |
+
+Currents assume VOL ≈ 0.1 V at the sinking GPIO. Both sit far below the parts' 30 mA and
+20 mA ratings, and both LEDs lit draw about 7 mA total.
+
+The wide per-LED range is headroom, not tolerance, and no resistor value removes it: on a
+3.3 V rail a 2.6–2.9 V green part inherently varies about 2:1 across its Vf bin. Moving
+the indicators to `+5V` would fix that but would leave them partly lit when a 3.3 V GPIO
+drives high, and would inject current into the pin clamp whenever that GPIO is an input.
+Matching currents on 3.3 V is the right trade for an indicator.
 
 ## GPIO map
 
