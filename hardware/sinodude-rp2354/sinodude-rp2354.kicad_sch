@@ -25593,7 +25593,16 @@
 				)
 			)
 		)
-	)
+	
+		(property "LCSC" "C5156674"
+			(at 130.81 344.17 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		))
 	(symbol
 		(lib_id "Device:R")
 		(at 379.73 227.33 0)

@@ -15,7 +15,7 @@ and adapters work unchanged.
 | | |
 |---|---|
 | Schematic | complete — 93 components, ERC 0 errors / 8 warnings (see below) |
-| Sourcing | 89 of 93 parts carry an `LCSC` field; J4 open (see Sourcing) |
+| Sourcing | 88 of 93 parts carry an `LCSC` field; the 5 without are mounting holes and Tag-Connect pads |
 | PCB | not started — no outline, no placement, no routing |
 
 ## Sourcing
@@ -79,23 +79,26 @@ constant (250 vs 500), and r_DS(on) (120 mΩ vs 84 mΩ). Our 333 mA sits mid-ran
 ≥630 mA to the target, which breaks the 500 mA USB budget. R15's value is bound to the part
 choice, which is why its Value field reads `750R/1%/ILIM333mA`.
 
-Left without an LCSC:
+Left without an LCSC — neither is a part:
 
 | Ref | Why |
 |---|---|
-| H1–H4 | mounting holes, not parts |
-| J2 | Tag-Connect TC2030 is bare pads — nothing to fit |
-| J4 | footprint/part mismatch, see below |
+| H1–H4 | mounting holes, drilled features rather than components |
+| J2 | Tag-Connect TC2030 is bare pads — the pogo cable touches copper |
 
-**J4 needs a decision.** The footprint is `IDC-Header_2x05_P2.54mm_Horizontal`, a
-right-angle shrouded box header. LCSC's well-stocked 2x5 2.54 mm box header (`C5665`,
-136 k) is **vertical**. No right-angle 2.54 mm 2x5 *shrouded* box header appears in the
-JLCPCB catalogue — the "Bent" parts are plain pin headers, which would lose the keying that
-stops the cable going in backwards. Either switch the footprint to vertical and use
-`C5665`, or keep right-angle and source that connector outside JLCPCB.
+Every part that is physically placed on the board has an LCSC number. J1, J4, SW1 and SW2
+all resolved to exact matches for the footprints already drawn:
 
-J1, SW1 and SW2 resolved to exact matches for the footprints already drawn: HCTL
-HC-TYPE-C-16P-01A (`C2894897`) and C&K KMR221GLFS (`C72443`).
+| Ref | Part | LCSC | Note |
+|---|---|---|---|
+| J1 | HCTL HC-TYPE-C-16P-01A | `C2894897` | the part the KiCad footprint is named after |
+| J4 | ZHOURI DC3-2.54-10PAL | `C5156674` | right-angle shrouded box header |
+| SW1, SW2 | C&K KMR221GLFS | `C72443` | the part the KiCad footprint is named after |
+
+**Watch the DC3 suffix when reordering J4.** The family splits on one letter: `-10PAS` is
+`Plugin`, i.e. vertical, and `-10PAL` is `Push-Pull`, i.e. **Right Angle**. Only the PAL
+fits `IDC-Header_2x05_P2.54mm_Horizontal`. Ordering the PAS gives you a connector that
+physically fits the same holes but points the cable straight up off the board.
 
 **U2 is now an AMS1117-3.3** (`C6186`, Basic, ~1.4 M in stock), not the NCP1117 the RP2350
 guide uses — NCP1117 is not stocked at JLCPCB. Same SOT-223 land pattern, same pinout
