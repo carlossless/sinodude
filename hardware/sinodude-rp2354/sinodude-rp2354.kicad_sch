@@ -16985,7 +16985,7 @@
 				)
 			)
 		)
-		(property "Value" "MountingHole"
+		(property "Value" "MountingHole M3"
 			(at 375.92 321.945 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -16995,7 +16995,7 @@
 				)
 			)
 		)
-		(property "Footprint" "MountingHole:MountingHole_2.7mm_M2.5"
+		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3"
 			(at 375.92 325.12 0)
 			(hide yes)
 			(show_name no)
@@ -25486,7 +25486,7 @@
 				)
 			)
 		)
-		(property "Value" "MountingHole"
+		(property "Value" "MountingHole M3"
 			(at 444.5 321.945 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -25496,7 +25496,7 @@
 				)
 			)
 		)
-		(property "Footprint" "MountingHole:MountingHole_2.7mm_M2.5"
+		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3"
 			(at 444.5 325.12 0)
 			(hide yes)
 			(show_name no)
@@ -28789,7 +28789,7 @@
 				)
 			)
 		)
-		(property "Value" "MountingHole"
+		(property "Value" "MountingHole M3"
 			(at 421.64 321.945 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -28799,7 +28799,7 @@
 				)
 			)
 		)
-		(property "Footprint" "MountingHole:MountingHole_2.7mm_M2.5"
+		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3"
 			(at 421.64 325.12 0)
 			(hide yes)
 			(show_name no)
@@ -31731,7 +31731,7 @@
 				)
 			)
 		)
-		(property "Value" "MountingHole"
+		(property "Value" "MountingHole M3"
 			(at 398.78 321.945 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -31741,7 +31741,7 @@
 				)
 			)
 		)
-		(property "Footprint" "MountingHole:MountingHole_2.7mm_M2.5"
+		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3"
 			(at 398.78 325.12 0)
 			(hide yes)
 			(show_name no)
