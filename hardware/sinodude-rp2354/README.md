@@ -276,24 +276,31 @@ reading the LCSC catalogue line instead of the datasheet gets this backwards:
 | D2 green, 517 nm | `C7496818` | 160–230 mcd | 2.6–2.9 V | IF = 5 mA | 32–46 mcd/mA |
 | D3 red, 625 nm | `C2286` | 145–300 mcd | 1.8–2.4 V | IF = 20 mA | 7.3–15 mcd/mA |
 
-The green is three to four times more efficient per milliamp. Both are 120° parts, so the
-mcd figures compare directly for perceived brightness. Matching brightness therefore means
-running the green at roughly a quarter of the red's current, which is what equal 470 Ω
-resistors do, because the green's higher Vf leaves it less headroom on a 3.3 V rail:
+At their respective test points the green is three to four times more efficient per
+milliamp, and both are 120° parts, so the mcd figures compare directly for perceived
+brightness. That is why the green gets the same resistor as the red rather than a smaller
+one: on a 3.3 V rail its higher Vf holds it near 1 mA while the red sits near 3 mA, which
+is roughly the four-to-one current ratio the efficacy difference calls for. Fitting the
+green with, say, 150 Ω to "match currents" would make it several times brighter, not equal.
 
-| | current | Iv |
-|---|---|---|
-| D2 green | 0.6–1.3 mA | ~19–60 mcd |
-| D3 red | ~2.4–3.4 mA | ~17–51 mcd |
+**The match cannot be predicted more precisely than that, and the datasheets are the
+reason.** Anyone tempted to compute an exact figure should know:
 
-Nominally about 37 mcd against 33 mcd. Sizing the green up to a few milliamps to "match"
-the red makes it roughly four times brighter.
+- The green's characteristic curves both **start at 5 mA**. It runs here near 1 mA, five
+  times below any published point, and InGaN greens are least predictable at the bottom of
+  their range.
+- The green's table and its own curves **disagree at the one current they share**. At 5 mA
+  the table gives Iv 160–230 mcd and Vf 2.6–2.9 V; the curves read about 310 mcd and
+  2.48 V, the latter below the table's own minimum.
+- The red is strongly **super-linear at low current**: its relative-intensity curve reads
+  about 0.45 at 5 mA against 1.0 at 20 mA, where linear scaling would give 0.25. Any
+  straight-line extrapolation from the 20 mA test point understates it by nearly 2×.
+- **Neither part is ordered to a bin.** The red alone ships across four Iv bins spanning
+  145–300 mcd and six Vf bins spanning 1.8–2.4 V, so a 2:1 brightness spread exists before
+  the two parts are compared at all.
 
-Two caveats on those numbers. Currents assume VOL ≈ 0.1 V at the sinking GPIO, and the red
-figure allows for its Vf being quoted at 20 mA and so sitting lower at 3 mA. Both Iv
-figures extrapolate linearly from the datasheet test point down to the operating current,
-which understates both slightly, since these parts get marginally more efficient as current
-falls. Neither caveat is worth more than a resistor step.
+Treat both resistors as bring-up items. They are 0603, the ratio above is the right
+starting point, and the first assembled board settles it in a way no datasheet here can.
 
 ## GPIO map
 
