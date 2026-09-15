@@ -6,3 +6,8 @@
 *.kicad_pcb-bak
 *.kicad_sch-bak
 fp-info-cache
+# KiCad lock files (present while the editor has the project open)
+~*.lck
+# KiCad backups and autosaves
+*-backups/
+_autosave-*
