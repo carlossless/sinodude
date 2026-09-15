@@ -14,8 +14,8 @@ and adapters work unchanged.
 
 | | |
 |---|---|
-| Schematic | complete — 96 components, ERC 0 errors / 8 warnings (see below) |
-| Sourcing | 86 of 96 parts carry an `LCSC` field; 10 open (see Sourcing) |
+| Schematic | complete — 93 components, ERC 0 errors / 8 warnings (see below) |
+| Sourcing | 83 of 93 parts carry an `LCSC` field; 10 open (see Sourcing) |
 | PCB | not started — no outline, no placement, no routing |
 
 ## Sourcing
@@ -93,7 +93,7 @@ set the footprint to match rather than the other way round.
 
 **U2 is now an AMS1117-3.3** (`C6186`, Basic, ~1.4 M in stock), not the NCP1117 the RP2350
 guide uses — NCP1117 is not stocked at JLCPCB. Same SOT-223 land pattern, same pinout
-(1 GND, 2 VO, 3 VI), and it is what the rp2040-sinolink board already uses.
+(1 GND, 2 VO, 3 VI).
 
 Two part-choice consequences worth knowing:
 
@@ -150,7 +150,10 @@ Two part-choice consequences worth knowing:
 - **F1 needs a max-resistance check.** A 500 mA-hold PTC runs 0.4 Ω to 1.2 Ω depending on
   the part, which is 0.15 V to 0.5 V at full load, straight off the target rail. Pick from
   the low end.
-- **TPS2114A is a 2004-era part.** Check lifecycle before ordering.
+- **TPS2114A is old but not end-of-life.** TI lists both the TPS2114A and TPS2115A as
+  ACTIVE — in production and recommended for new designs. The problem is purely that JLCPCB
+  does not carry it, so it is a distributor question, not a lifecycle one: buy it from
+  Digi-Key or Mouser and the part is fine.
 
 ## Board sections
 
@@ -220,7 +223,7 @@ inputs.
 
 | GPIO | Net | Goes to | State at reset |
 |------|-----|---------|----------------|
-| 0 / 1 | SDA / SCL | J3 aux header, 4k7 pull-ups R11/R12 | — |
+| 0 / 1 | — | unused, no-connect. GPIO0 is `XIP_CS1n`, the chip select for a second QSPI memory, so keep it free | input, pulled down |
 | 2–5 | TCK TDI TMS nRST | U4 A1–A4 | Hi-Z via OE |
 | 6 | DATA | U5 A — PIO in/out base | input |
 | 7 | DATA_DIR | U5 DIR — PIO side-set | low (B→A) |
@@ -293,9 +296,3 @@ cable lands directly on the pads.
 nix develop -c kicad-cli sch erc --severity-error --format report -o /tmp/erc.rpt sinodude-rp2354.kicad_sch
 nix develop -c kicad-cli sch export netlist --format kicadsexpr -o /tmp/n.net sinodude-rp2354.kicad_sch
 ```
-
-## Prior art
-
-The target-facing circuitry follows [rp2040-sinolink](../../../hardware/rp2040-sinolink),
-an open replacement for the SinoLink V2.2 probe, which derived it from datasheets rather
-than from the original board.

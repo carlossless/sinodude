@@ -8691,12 +8691,6 @@
 		(uuid "61319db3-d8c2-43d7-bb18-09805dfb9908")
 	)
 	(junction
-		(at 325.12 364.49)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "7108434d-988d-4fe3-aa30-30940739868a")
-	)
-	(junction
 		(at 109.22 344.17)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -8719,12 +8713,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "b8d3bfb6-40bd-419d-a535-f568f76540d4")
-	)
-	(junction
-		(at 314.96 361.95)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "bf5d1639-cd39-4834-b9e0-6031d8ef7ed9")
 	)
 	(junction
 		(at 441.96 236.22)
@@ -8859,6 +8847,14 @@
 	(no_connect
 		(at 105.41 247.65)
 		(uuid "f9a4f4b7-8283-4b50-809a-86dcac2aad89")
+	)
+	(no_connect
+		(at 105.41 201.93)
+		(uuid "e5dab052-586b-4eab-9ef7-606781ea234c")
+	)
+	(no_connect
+		(at 105.41 204.47)
+		(uuid "d82d947e-34eb-46f2-9812-926b013df735")
 	)
 	(wire
 		(pts
@@ -9346,17 +9342,6 @@
 	)
 	(wire
 		(pts
-			(xy 334.01 359.41)
-			(xy 321.31 359.41)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "5604acd1-de2f-414d-9b16-2b0e55eaca7a")
-	)
-	(wire
-		(pts
 			(xy 276.86 250.19)
 			(xy 285.75 250.19)
 		)
@@ -9387,17 +9372,6 @@
 			(type default)
 		)
 		(uuid "576df567-8058-4cb5-a898-5973e21c1d01")
-	)
-	(wire
-		(pts
-			(xy 314.96 342.9)
-			(xy 314.96 361.95)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "5a4f2e82-4fd1-4423-b53f-a585425e935f")
 	)
 	(wire
 		(pts
@@ -9445,17 +9419,6 @@
 	)
 	(wire
 		(pts
-			(xy 325.12 364.49)
-			(xy 334.01 364.49)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "62cc132c-e39a-4081-9d43-1aee7f0a4e8d")
-	)
-	(wire
-		(pts
 			(xy 325.12 71.12)
 			(xy 332.74 71.12)
 		)
@@ -9486,17 +9449,6 @@
 			(type default)
 		)
 		(uuid "6754bf15-2d64-4345-bee5-8dc91c13a2ba")
-	)
-	(wire
-		(pts
-			(xy 306.07 364.49)
-			(xy 325.12 364.49)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "68677c7e-7363-4fbc-b5e2-8d1f623b8272")
 	)
 	(wire
 		(pts
@@ -9599,17 +9551,6 @@
 	)
 	(wire
 		(pts
-			(xy 334.01 356.87)
-			(xy 326.39 356.87)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "88f3276f-f460-4af4-b407-1e2917e082bc")
-	)
-	(wire
-		(pts
 			(xy 57.15 116.84)
 			(xy 93.98 116.84)
 		)
@@ -9709,17 +9650,6 @@
 	)
 	(wire
 		(pts
-			(xy 325.12 342.9)
-			(xy 325.12 364.49)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "9f0ed3a0-cccb-4eb4-92e2-e85f272f9260")
-	)
-	(wire
-		(pts
 			(xy 269.24 250.19)
 			(xy 276.86 250.19)
 		)
@@ -9772,17 +9702,6 @@
 			(type default)
 		)
 		(uuid "a53d3f4c-0b92-46cc-a61d-8a08aecd3265")
-	)
-	(wire
-		(pts
-			(xy 314.96 361.95)
-			(xy 334.01 361.95)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "a59f8f7b-c990-4435-a0e6-7f2c31659d50")
 	)
 	(wire
 		(pts
@@ -10270,17 +10189,6 @@
 	)
 	(wire
 		(pts
-			(xy 306.07 361.95)
-			(xy 314.96 361.95)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "f5c62886-1f21-49e8-8be4-b9301a85fc0a")
-	)
-	(wire
-		(pts
 			(xy 254 205.74)
 			(xy 265.43 205.74)
 		)
@@ -10495,7 +10403,7 @@
 		)
 		(uuid "dd0e6d04-541f-4496-8de9-0ab9897b90ea")
 	)
-	(text "STATUS / I2C"
+	(text "STATUS LEDS"
 		(at 254 316.23 0)
 		(effects
 			(font
@@ -10507,6 +10415,39 @@
 			(justify left bottom)
 		)
 		(uuid "e0ecea15-cf39-4f12-ac6d-840c6c139561")
+	)
+	(text "U4 A5-A8 and B5-B8 tied to GND: the input receiver stays active on both"
+		(at 414.02 248.92 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+				(italic yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "5ab164eb-e5f6-4281-a082-bb5d99d71336")
+	)
+	(text "ports, so a floating pin draws excess ICC. Safe only because DIR is"
+		(at 414.02 252.73 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+				(italic yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "93120201-8457-4388-a51d-34aa8ecb1d99")
+	)
+	(text "strapped to VCCA. If DIR ever becomes driven, these need series resistors."
+		(at 414.02 256.54 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+				(italic yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "7fed5a82-9ebd-4974-8254-d7fc10742d1a")
 	)
 	(global_label "DATA_3V3"
 		(shape input)
@@ -10630,28 +10571,6 @@
 		(uuid "1dabadb3-2392-4696-a9c1-cbdbdd96c78a")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 54.61 234.95 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-	)
-	(global_label "SCL"
-		(shape input)
-		(at 105.41 204.47 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "23fb8bdb-e141-4cfc-a467-983a9c6b4f67")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 105.41 204.47 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -10794,28 +10713,6 @@
 			)
 		)
 	)
-	(global_label "SCL"
-		(shape input)
-		(at 306.07 364.49 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "34dbe652-ebc2-49e9-8101-c220b65042e0")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 306.07 364.49 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-	)
 	(global_label "LED_ERR"
 		(shape input)
 		(at 287.02 358.14 270)
@@ -10850,28 +10747,6 @@
 		(uuid "37abce72-0cf0-4cbc-b31c-cc2edf012273")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 485.14 203.2 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-	)
-	(global_label "SDA"
-		(shape input)
-		(at 306.07 361.95 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "3a7a2b4e-e944-46b6-bfa7-a3a4064b4ad9")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 306.07 361.95 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -11246,28 +11121,6 @@
 		(uuid "6e8a15e6-99ac-42dd-b01d-79434b6b8ec4")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 105.41 224.79 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-	)
-	(global_label "SDA"
-		(shape input)
-		(at 105.41 201.93 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "751c400a-bc55-488b-831e-f97af9bb56e6")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 105.41 201.93 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -12004,21 +11857,6 @@
 			)
 		)
 	)
-  (text "U4 A5-A8 and B5-B8 tied to GND: the input receiver stays active on both"
-    (at 414.02 248.92 0)
-    (effects (font (size 1.8 1.8) (italic yes)) (justify left bottom))
-    (uuid "5ab164eb-e5f6-4281-a082-bb5d99d71336")
-  )
-  (text "ports, so a floating pin draws excess ICC. Safe only because DIR is"
-    (at 414.02 252.73 0)
-    (effects (font (size 1.8 1.8) (italic yes)) (justify left bottom))
-    (uuid "93120201-8457-4388-a51d-34aa8ecb1d99")
-  )
-  (text "strapped to VCCA. If DIR ever becomes driven, these need series resistors."
-    (at 414.02 256.54 0)
-    (effects (font (size 1.8 1.8) (italic yes)) (justify left bottom))
-    (uuid "7fed5a82-9ebd-4974-8254-d7fc10742d1a")
-  )
 	(symbol
 		(lib_id "Device:C")
 		(at 182.88 269.24 0)
@@ -15498,83 +15336,6 @@
 		)
 	)
 	(symbol
-		(lib_id "power:GND")
-		(at 321.31 359.41 270)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "239e3a0e-c996-42b9-9d76-2d83a2baa532")
-		(property "Reference" "#PWR138"
-			(at 314.96 359.41 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "GND"
-			(at 317.5 359.41 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 321.31 359.41 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 321.31 359.41 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 321.31 359.41 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(body_style 1)
-		(in_pos_files yes)
-		(pin "1"
-			(uuid "b5b8b757-cf88-4657-a744-e08814619332")
-		)
-		(instances
-			(project "sinodude-rp2354"
-				(path "/a3e36d10-b615-4e51-a27d-75418708c944"
-					(reference "#PWR138")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "power:+3V3")
 		(at 299.72 73.66 90)
 		(unit 1)
@@ -17724,83 +17485,6 @@
 			(project "sinodude-rp2354"
 				(path "/a3e36d10-b615-4e51-a27d-75418708c944"
 					(reference "#PWR093")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "power:+3V3")
-		(at 314.96 335.28 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "48ad915d-030d-4594-b094-17736b7d47d2")
-		(property "Reference" "#PWR072"
-			(at 314.96 339.09 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "+3V3"
-			(at 314.96 331.724 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 314.96 335.28 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 314.96 335.28 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"+3V3\""
-			(at 314.96 335.28 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(body_style 1)
-		(in_pos_files yes)
-		(pin "1"
-			(uuid "a3aee2ca-6cc7-4bcf-83ce-a5ad4e60a798")
-		)
-		(instances
-			(project "sinodude-rp2354"
-				(path "/a3e36d10-b615-4e51-a27d-75418708c944"
-					(reference "#PWR072")
 					(unit 1)
 				)
 			)
@@ -23112,83 +22796,6 @@
 		)
 	)
 	(symbol
-		(lib_id "power:+3V3")
-		(at 325.12 335.28 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "8a46c314-1ae1-4ca1-9bb9-6be1bc8a6412")
-		(property "Reference" "#PWR073"
-			(at 325.12 339.09 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "+3V3"
-			(at 325.12 331.724 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 325.12 335.28 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 325.12 335.28 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"+3V3\""
-			(at 325.12 335.28 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(body_style 1)
-		(in_pos_files yes)
-		(pin "1"
-			(uuid "16d90128-376f-4c76-96ee-3cbed59ea5dc")
-		)
-		(instances
-			(project "sinodude-rp2354"
-				(path "/a3e36d10-b615-4e51-a27d-75418708c944"
-					(reference "#PWR073")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "power:VCC")
 		(at 332.74 63.5 0)
 		(unit 1)
@@ -23737,102 +23344,6 @@
 			(project "sinodude-rp2354"
 				(path "/a3e36d10-b615-4e51-a27d-75418708c944"
 					(reference "#PWR149")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Connector_Generic:Conn_01x04")
-		(at 339.09 359.41 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "943e5984-c7c1-4fe6-b9a2-4798b0aab9ce")
-		(property "Reference" "J3"
-			(at 339.09 354.33 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "I2C"
-			(at 339.09 367.03 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"
-			(at 339.09 359.41 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 339.09 359.41 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
-			(at 339.09 359.41 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C2691448"
-			(at 339.09 359.41 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(body_style 1)
-		(in_pos_files yes)
-		(pin "1"
-			(uuid "f419e11e-bae9-48cd-a652-caf47593b8cd")
-		)
-		(pin "2"
-			(uuid "7eee6681-0426-4fc5-b150-54e255f0e759")
-		)
-		(pin "3"
-			(uuid "134c9b91-33c0-45e0-a631-dfa1b382d2d0")
-		)
-		(pin "4"
-			(uuid "27892bb9-92bc-4c80-8681-8ab243ab1257")
-		)
-		(instances
-			(project "sinodude-rp2354"
-				(path "/a3e36d10-b615-4e51-a27d-75418708c944"
-					(reference "J3")
 					(unit 1)
 				)
 			)
@@ -25058,173 +24569,6 @@
 			(project "sinodude-rp2354"
 				(path "/a3e36d10-b615-4e51-a27d-75418708c944"
 					(reference "#PWR036")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 314.96 339.09 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "a29dd934-c658-4947-b427-8fc64dda17f1")
-		(property "Reference" "R11"
-			(at 316.992 339.09 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "4k7"
-			(at 314.96 339.09 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 314.96 339.09 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 314.96 339.09 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Resistor"
-			(at 314.96 339.09 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C23162"
-			(at 314.96 339.09 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(body_style 1)
-		(in_pos_files yes)
-		(pin "1"
-			(uuid "eb11b7dc-b4ef-4a96-b3df-d77928ccfc0f")
-		)
-		(pin "2"
-			(uuid "c4bc4bbd-d456-4e72-a6af-38371dfc3a80")
-		)
-		(instances
-			(project "sinodude-rp2354"
-				(path "/a3e36d10-b615-4e51-a27d-75418708c944"
-					(reference "R11")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "power:+3V3")
-		(at 326.39 356.87 90)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "a7b6bf02-faf3-4ac0-beb8-7e122f82e4ef")
-		(property "Reference" "#PWR137"
-			(at 330.2 356.87 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "+3V3"
-			(at 322.834 356.87 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 326.39 356.87 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 326.39 356.87 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"+3V3\""
-			(at 326.39 356.87 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(body_style 1)
-		(in_pos_files yes)
-		(pin "1"
-			(uuid "5edd93cb-ee9e-4903-a116-c5ea74168b67")
-		)
-		(instances
-			(project "sinodude-rp2354"
-				(path "/a3e36d10-b615-4e51-a27d-75418708c944"
-					(reference "#PWR137")
 					(unit 1)
 				)
 			)
@@ -29629,96 +28973,6 @@
 			(project "sinodude-rp2354"
 				(path "/a3e36d10-b615-4e51-a27d-75418708c944"
 					(reference "#FLG03")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 325.12 339.09 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "dd706825-4f73-4033-8d10-df7c15af66e8")
-		(property "Reference" "R12"
-			(at 327.152 339.09 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "4k7"
-			(at 325.12 339.09 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 325.12 339.09 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 325.12 339.09 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Resistor"
-			(at 325.12 339.09 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C23162"
-			(at 325.12 339.09 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(body_style 1)
-		(in_pos_files yes)
-		(pin "1"
-			(uuid "6be1f4b6-2c85-4c11-a1db-f1466133fcde")
-		)
-		(pin "2"
-			(uuid "48660eb3-4010-4743-9fb7-6222c4daf0d7")
-		)
-		(instances
-			(project "sinodude-rp2354"
-				(path "/a3e36d10-b615-4e51-a27d-75418708c944"
-					(reference "R12")
 					(unit 1)
 				)
 			)
