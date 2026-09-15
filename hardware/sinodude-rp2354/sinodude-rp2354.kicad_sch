@@ -13896,7 +13896,16 @@
 				)
 			)
 		)
-	)
+	
+		(property "LCSC" "C72443"
+			(at 340.36 256.54 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		))
 	(symbol
 		(lib_id "power:+3V3")
 		(at 497.84 171.45 0)
@@ -19329,7 +19338,16 @@
 				)
 			)
 		)
-	)
+	
+		(property "LCSC" "C2894897"
+			(at 34.29 76.2 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		))
 	(symbol
 		(lib_id "power:+3.3VA")
 		(at 398.78 373.38 0)
@@ -24730,7 +24748,16 @@
 				)
 			)
 		)
-	)
+	
+		(property "LCSC" "C72443"
+			(at 379.73 256.54 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		))
 	(symbol
 		(lib_id "power:GND")
 		(at 375.92 356.87 0)
@@ -24981,7 +25008,16 @@
 				)
 			)
 		)
-	)
+	
+		(property "LCSC" "C118265"
+			(at 312.42 76.2 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		))
 	(symbol
 		(lib_id "Device:C")
 		(at 228.6 53.34 0)

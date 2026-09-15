@@ -15,7 +15,7 @@ and adapters work unchanged.
 | | |
 |---|---|
 | Schematic | complete — 93 components, ERC 0 errors / 8 warnings (see below) |
-| Sourcing | 83 of 93 parts carry an `LCSC` field; 10 open (see Sourcing) |
+| Sourcing | 89 of 93 parts carry an `LCSC` field; J4 open (see Sourcing) |
 | PCB | not started — no outline, no placement, no routing |
 
 ## Sourcing
@@ -65,31 +65,37 @@ on-chip regulator and tying VREG_FB to ground — which costs a whole extra regu
 not worth it here. VREG_AVDD and VREG_VIN still need power in that case regardless, as they
 run the power-on reset and brown-out detector.
 
-**U3 (TPS2114A) cannot be bought from JLCPCB — it is not in their catalogue at all.** The
-only TSSOP-8 family members stocked are TPS2111A, TPS2113 and TPS2115A (the '2115A at
-~200 pieces). This needs resolving before any assembled order:
+**U3 (TPS2114A) is `C118265`, listed but currently at zero stock.** It is orderable rather
+than absent, and at $1.92 it is the cheapest of its family. TI lists the part ACTIVE. The
+only consequence is scheduling: a zero-stock part cannot come off JLCPCB's shelf for
+assembly, so it has to be ordered against LCSC lead time or consigned.
 
-- **TPS2115APWR** is pin-identical, but its ILIM constant is 500 (not 250), so R15 would
-  become 1.5 kΩ for 333 mA — and the datasheet only specifies ILIM accuracy from 0.63 A to
-  1.25 A, so 333 mA is below the characterised range.
-- Raising the limit into the '2115A's specified range means ≥630 mA to the target, which
-  breaks the 500 mA USB budget.
-- **TPS2116** is well stocked but is a different device in SOT-583 — a schematic and
-  footprint change.
+**Do not substitute the TPS2115A for it.** The two share a datasheet and a pinout, and
+differ in exactly three ways: current-limit range (0.31–0.75 A vs 0.63–2 A), the ILIM
+constant (250 vs 500), and r_DS(on) (120 mΩ vs 84 mΩ). Our 333 mA sits mid-range for the
+'2114A and *below the bottom* of the '2115A's, where the datasheet notes the minimum is set
+"based on accuracy considerations" — i.e. the limit is not characterised there. Getting
+333 mA from a '2115A needs R15 = 1.5 kΩ, outside its range; staying inside its range means
+≥630 mA to the target, which breaks the 500 mA USB budget. R15's value is bound to the part
+choice, which is why its Value field reads `750R/1%/ILIM333mA`.
 
-Left without an LCSC, each for a reason:
+Left without an LCSC:
 
 | Ref | Why |
 |---|---|
 | H1–H4 | mounting holes, not parts |
 | J2 | Tag-Connect TC2030 is bare pads — nothing to fit |
-| U3 | not stocked, see above |
-| J1, J4, SW1, SW2 | the land pattern has to be matched to a specific part first |
+| J4 | footprint/part mismatch, see below |
 
-J1 uses the HCTL 16-pin USB-C land pattern, J4 a 2×5 shrouded IDC header, and SW1/SW2 the
-C&K KMR2 pattern. JLCPCB stocks equivalents for all three, but none of the obvious
-candidates is a guaranteed drop-in for those exact footprints, so pick the part first and
-set the footprint to match rather than the other way round.
+**J4 needs a decision.** The footprint is `IDC-Header_2x05_P2.54mm_Horizontal`, a
+right-angle shrouded box header. LCSC's well-stocked 2x5 2.54 mm box header (`C5665`,
+136 k) is **vertical**. No right-angle 2.54 mm 2x5 *shrouded* box header appears in the
+JLCPCB catalogue — the "Bent" parts are plain pin headers, which would lose the keying that
+stops the cable going in backwards. Either switch the footprint to vertical and use
+`C5665`, or keep right-angle and source that connector outside JLCPCB.
+
+J1, SW1 and SW2 resolved to exact matches for the footprints already drawn: HCTL
+HC-TYPE-C-16P-01A (`C2894897`) and C&K KMR221GLFS (`C72443`).
 
 **U2 is now an AMS1117-3.3** (`C6186`, Basic, ~1.4 M in stock), not the NCP1117 the RP2350
 guide uses — NCP1117 is not stocked at JLCPCB. Same SOT-223 land pattern, same pinout
