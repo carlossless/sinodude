@@ -367,23 +367,47 @@ cable lands directly on the pads.
 
 ## PCB
 
-75 × 40 mm, **two layers**, 2 mm corner radius, four M2.5 holes. Parts on both sides: 44 on
-top, 49 on bottom.
+68 x 36 mm, **two layers**, 2 mm corner radius, four M3 holes. Parts on both sides.
 
 J1 (USB-C), U1 and J4 (DUT header) share the y = 120 centreline, and the signal flow runs
-left to right along it: USB-C, ESD, MCU, level shifters, DUT header.
+left to right along it: USB-C, ESD, MCU, level shifters, DUT header. The board is laid out
+in blocks: USB and the 3V3 regulator west, SWD connector and clock north, target supply and
+level shifters east, target discharge south-east, the two buttons together under U4.
 
-**U1 is rotated 180°.** Its pins 4–14 are the nine level-shifter signals, the widest bundle
-on the board. Unrotated they face left, away from U4; at 180° they face U4 directly and USB
-DM/DP leave the bottom-left toward J1. That one rotation removes a nine-trace wrap-around.
+**U1 is rotated 180 degrees**, which puts its east column against U4 and brings USB DM/DP
+out of the south row toward J1.
+
+**U1's GPIO assignment is chosen for the layout.** The east column presents the JTAG group
+as TCK, TDI, TMS, NRST going south, matching U4's A-side and the DUT header pin order, and
+DATA sits north of KEY to match U5 and U6. Assigned the other way round these two groups
+have to cross inside the 0.4 mm pad ring, where there is no room; the nets are plain GPIOs,
+so the crossing is designed out rather than routed around.
 
 **Decoupling and pull-ups live on the bottom**, directly under the IC they serve. On two
 layers this is what buys the design its routing room: the top side stays clear for signals,
 and each decoupling cap reaches its power pin through a via rather than around the package.
-Series resistors in a signal path (R3/R4 on USB, R25–R30 and R32 to the DUT) stay on top
+Series resistors in a signal path (R3/R4 on USB, R25-R30 and R32 to the DUT) stay on top
 where the trace already runs.
 
-GND pours on both layers, thermal relief, 0.25 mm clearance.
+GND pours on both layers with solid pad connections (thermal spokes starve on two layers)
+and roughly 190 stitching vias. Isolated pour islands are dropped rather than left floating.
+
+**The Tag-Connect (J2) is routed by hand.** Its five leg holes are exported as keepout
+circles that box in each pad, leaving exactly one single-track channel per pad, and which
+channel a pad may use is forced by geometry. No autorouter finds these. The same applies to
+the USB pair, and to the VBUS bridge between J1's two power pad pairs, which crosses on the
+back so the CC and D+/D- pads keep the front-side corridor beside the connector.
+
+### Unfinished
+
+Two connections are still open. Both are in the congested pocket east of U1 and need either
+a hand-drawn track in KiCad or a small placement change:
+
+- `KEY_DIR`, U1 pin 10 to U6 pin 5.
+- `GND`, U1 pin 47 to the pour. The exposed pad (pin 61) is connected, so the part is
+  grounded; this is one of the package's peripheral ground pins.
+
+Everything else is routed and DRC is clean.
 
 ### Design rules
 
@@ -392,9 +416,12 @@ board does not attract fine-pitch pricing.
 
 | Class | Track | Clearance | Via |
 |---|---|---|---|
-| Default | 0.20 mm | 0.20 mm | 0.6 / 0.3 mm |
-| Power | 0.50 mm | 0.20 mm | 0.8 / 0.4 mm |
-| Fine (QFN escapes) | 0.15 mm | 0.15 mm | 0.6 / 0.3 mm |
+| Default | 0.15 mm | 0.15 mm | 0.6 / 0.3 mm |
+| Power | 0.30 mm | 0.15 mm | 0.6 / 0.3 mm |
+
+Board minimums are set to JLCPCB's two-layer capability: 0.127 mm track and clearance,
+0.3 mm drill, 0.45 mm via, 0.13 mm annular ring, 0.5 mm hole-to-hole, 0.3 mm copper-to-edge,
+0.8 mm silkscreen text at 0.15 mm line width.
 
 RP2350's USB is full-speed only, so there is no impedance-controlled pair to hold and two
 layers cost nothing here.
