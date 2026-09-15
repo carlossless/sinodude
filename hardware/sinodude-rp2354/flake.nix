@@ -17,6 +17,7 @@
 
           KICAD10_SYMBOL_DIR = "${pkgs.kicad.libraries.symbols}/share/kicad/symbols";
           KICAD10_FOOTPRINT_DIR = "${pkgs.kicad.libraries.footprints}/share/kicad/footprints";
+          KICAD10_3DMODEL_DIR = "${pkgs.kicad.libraries.packages3d}/share/kicad/3dmodels";
         };
       });
 }

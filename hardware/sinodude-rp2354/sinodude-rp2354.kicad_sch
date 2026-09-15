@@ -16412,7 +16412,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm_ThermalVias"
+		(property "Footprint" "sinodude:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm_ThermalVias"
 			(at 80.01 240.03 0)
 			(hide yes)
 			(show_name no)
@@ -19244,7 +19244,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Connector_USB:USB_C_Receptacle_HCTL_HC-TYPE-C-16P-01A"
+		(property "Footprint" "Connector_USB:USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal"
 			(at 34.29 76.2 0)
 			(hide yes)
 			(show_name no)
@@ -19339,7 +19339,7 @@
 			)
 		)
 	
-		(property "LCSC" "C2894897"
+		(property "LCSC" "C5184243"
 			(at 34.29 76.2 0)
 			(hide yes)
 			(effects

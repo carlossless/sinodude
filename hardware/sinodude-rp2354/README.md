@@ -115,6 +115,40 @@ Two part-choice consequences worth knowing:
   capacitance requirement". Q1 is therefore not optional for voltage changes, not just for
   ICP power cycling — or drop C27 to 1–4.7 µF.
 
+### 3D models
+
+Every footprint representing a physical part resolves a 3D model. Two do not, correctly: the
+Tag-Connect pad pattern and the mounting holes, neither of which is a component.
+
+`flake.nix` exports `KICAD10_3DMODEL_DIR` — without it none of the stock models resolve at
+all, since every footprint references that variable.
+
+Two models are generated locally into `3dmodels/`, because the KiCad library ships neither:
+
+| Model | Why |
+|---|---|
+| `QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm.step` | the KiCad 3D library has QFN-52 and QFN-56 in 7×7 but **no QFN-60**, so the RP2354A had no body at all |
+| `L_Abracon_AOTA-B201610S_0806_2016Metric.step` | matches the custom inductor footprint |
+
+Both were built in FreeCAD to datasheet nominals — the QFN to RP2350 datasheet Figure 143
+(D/E 7 BSC, A 0.85, A1 0.02, A3 0.203 REF, D2/E2 3.40, b 0.18, e 0.400 BSC, L 0.40) and the
+inductor to Abracon's 2.00 × 1.60 × 1.00 max. Verified bounding boxes are 7.000 × 7.000 ×
+0.850 and 2.000 × 1.600 × 1.000, origin centred, seating plane at z=0.
+
+They are visual and mechanical-fit models, not vendor CAD: lead geometry is nominal and
+there is no internal detail. Good enough for enclosure fit and collision checks; if you need
+certified geometry, replace them with vendor STEP.
+
+Because a 3D model is attached to a footprint, `QFN-60-…_ThermalVias` is **copied** into
+`footprints/sinodude.pretty` with its model path retargeted. It is otherwise byte-identical
+to the stock footprint, and will not pick up upstream library fixes.
+
+**J1 moved to the GCT USB4105** (`C5184243`, USB4105-GF-A-**120**, 16P, 4143 in stock). The
+HCTL footprint referenced a model the library does not ship. GCT has an identical pad set
+(A1 A4–A9 A12, B1 B4–B9 B12, SH), so this was a footprint swap with no schematic change, and
+it does have a model. Note the `-120` suffix: the plain `USB4105-GF-A` and `-060` are 12-pin
+parts and will not fit.
+
 ### Known items
 
 - **8 ERC warnings**, all the same: U4's unused pins (7–10 = A5–A8, 14–17 = B5–B8) are tied
