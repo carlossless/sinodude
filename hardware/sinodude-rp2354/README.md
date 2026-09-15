@@ -14,7 +14,7 @@ and adapters work unchanged.
 
 | | |
 |---|---|
-| Schematic | complete — 96 components, ERC 0 errors / 4 warnings (see below) |
+| Schematic | complete — 96 components, ERC 0 errors / 8 warnings (see below) |
 | Sourcing | 86 of 96 parts carry an `LCSC` field; 10 open (see Sourcing) |
 | PCB | not started — no outline, no placement, no routing |
 
@@ -108,10 +108,24 @@ Two part-choice consequences worth knowing:
 
 ### Known items
 
-- **4 ERC warnings**, all the same: U4 pins 7–10 (unused A5–A8 inputs) are tied to GND, and
-  GND carries a PWR_FLAG, so KiCad flags "bidirectional pin connected to power output".
-  Grounding the unused inputs of a fixed-direction transceiver is correct, and floating them
-  would cause excess I_CC. Exclude the warnings, don't rewire.
+- **8 ERC warnings**, all the same: U4's unused pins (7–10 = A5–A8, 14–17 = B5–B8) are tied
+  to GND, and GND carries a PWR_FLAG, so KiCad flags "bidirectional pin connected to power
+  output". This is correct — exclude the warnings, don't rewire. KiCad only sees the pin
+  *type*; it cannot know DIR is strapped.
+
+  **Why both ports are grounded, not just the A side.** The SN74LVC8T245 datasheet §8.1 says
+  *"It is recommended to tie all unused I/Os to GND. The device should not have any floating
+  I/Os when changing translation direction"*, and the overview is blunter: *"The input
+  circuitry on both A and B ports is always active and must have a logic HIGH or LOW level
+  applied to prevent excess ICC and ICCZ."* The input receiver stays powered on a pin even
+  while that pin is driven as an output, so a floating B pin still presents a floating CMOS
+  input internally and still burns ICC. Every A and B pin is typed `I/O` in the pin table,
+  not "output".
+
+  Grounding an output is only safe because **DIR is hardwired to VCCA**, so the A→B direction
+  never changes and B5–B8 sit driving low into GND — no contention, no current. If DIR ever
+  became firmware-driven, both sides would need series resistors instead of hard ties. There
+  is a note on the sheet saying so.
 - **Schematic style follows Olimex.** Ten titled blocks, each boxed with dashed graphic lines
   (`polyline` notes lines, the same construct Olimex uses). Related parts sit next to each
   other and are joined with real wires; KiCad power symbols carry every rail; global labels
