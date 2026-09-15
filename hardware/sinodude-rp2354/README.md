@@ -365,6 +365,54 @@ cable lands directly on the pads.
  6 SWO     (not connected)
 ```
 
+## PCB
+
+75 × 40 mm, **two layers**, 2 mm corner radius, four M2.5 holes. Parts on both sides: 44 on
+top, 49 on bottom.
+
+J1 (USB-C), U1 and J4 (DUT header) share the y = 120 centreline, and the signal flow runs
+left to right along it: USB-C, ESD, MCU, level shifters, DUT header.
+
+**U1 is rotated 180°.** Its pins 4–14 are the nine level-shifter signals, the widest bundle
+on the board. Unrotated they face left, away from U4; at 180° they face U4 directly and USB
+DM/DP leave the bottom-left toward J1. That one rotation removes a nine-trace wrap-around.
+
+**Decoupling and pull-ups live on the bottom**, directly under the IC they serve. On two
+layers this is what buys the design its routing room: the top side stays clear for signals,
+and each decoupling cap reaches its power pin through a via rather than around the package.
+Series resistors in a signal path (R3/R4 on USB, R25–R30 and R32 to the DUT) stay on top
+where the trace already runs.
+
+GND pours on both layers, thermal relief, 0.25 mm clearance.
+
+### Design rules
+
+Derived from Glasgow revC3, scaled for two layers. These are JLCPCB's standard tier, so the
+board does not attract fine-pitch pricing.
+
+| Class | Track | Clearance | Via |
+|---|---|---|---|
+| Default | 0.20 mm | 0.20 mm | 0.6 / 0.3 mm |
+| Power | 0.50 mm | 0.20 mm | 0.8 / 0.4 mm |
+| Fine (QFN escapes) | 0.15 mm | 0.15 mm | 0.6 / 0.3 mm |
+
+RP2350's USB is full-speed only, so there is no impedance-controlled pair to hold and two
+layers cost nothing here.
+
+### Passive sizes
+
+Resistors and capacitors are **0603** throughout, with three deliberate exceptions where the
+package is doing electrical work:
+
+| Part | Size | Why not 0603 |
+|---|---|---|
+| R21 | 1206 | dissipates ~167 mW discharging VTGT from 5 V; 0603 is rated 100 mW |
+| C5 | 1206 | 22 µF bulk; DC-bias loss in a smaller case would eat the capacitance |
+| C4, C27 | 0805 | 10 µF bulk, same reason |
+
+J2 is the **latching** Tag-Connect (TC2030-IDC-FP): the cable's legs clip through four
+2.37 mm holes, so it stays put unattended. The no-legs variant has to be held by hand.
+
 ## Libraries
 
 `sym-lib-table` and `fp-lib-table` are project-local and reference `${KICAD10_SYMBOL_DIR}` /
