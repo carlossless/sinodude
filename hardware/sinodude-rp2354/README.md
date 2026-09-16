@@ -58,11 +58,13 @@ these guidelines must be strictly followed"*, and gives hard numbers. What is fi
 | L: shielded, 3.3 µH ±20%, DCR ≤ 250 mΩ, I_sat ≥ 1.5 A, polarity-marked | AOTA-B201610S3R3-101-T (`C42411119`) | DCR 140 mΩ max, I_sat 2.4 A min ✓ |
 | C_OUT: 4.7 µF ±20%, ESR ≤ 250 mΩ, ESL ≤ 6 nH | C21, 0603 4.7 µF 16 V X5R ±10% (`C19666`) | on 1.1 V, so negligible DC-bias loss |
 | C_IN: ≥ 4.7 µF, ESR ≤ 50 mΩ | C19, 0603 **10 µF** 10 V X5R (`C19702`) | 10 µF chosen because a 4.7 µF part derates below the floor at 3.3 V bias |
-| Second 4.7 µF on V_OUT near DVDD pin 23 (QFN-60) | C37 (`C19666`) | recommended, not mandatory |
+| Second 4.7 µF on V_OUT at a DVDD pin, away from L1/C21 | C37 (`C19666`) | recommended, not mandatory |
 
-**C37 must be placed at the bottom edge of U1 near DVDD pin 23 and away from L1/C21** — the
-datasheet is explicit that it should not sit near the LX/C_OUT loop. There is a note on the
-sheet to that effect.
+**C37 must not sit beside C21.** Parallel to C_OUT it simply doubles the 4.7 µF the
+regulator is compensated for, and it picks up the LX node's switching edges. The datasheet
+names DVDD pin 23 (QFN-60) as the place for it, but the escapes fanning north out of pins
+21-27 leave no corridor there. C37 therefore sits west of U1 on DVDD pin 39, the same
+supply: 4.0 mm from the pin and 12.5 mm of copper away from C21.
 
 The inductor's polarity marking is functional, not cosmetic: the datasheet says leakage field
 couples into the LX→L→C_OUT loop and affects the control loop and output voltage, which is
@@ -386,16 +388,57 @@ external parts and the layout is not optional:
   which way the coil is wound — a "wrong way round" inductor couples into C21 and upsets the
   control loop. Pad 1 of the footprint is the dot; current must enter there, so pad 1 goes
   to `VREG_LX`.
-- C19 (VREG_VIN), C21 (output) and C20 (VREG_AVDD) are 4.7 µF each.
-- R5 (33 Ω) with C20 filters `VREG_AVDD`, which draws ~200 µA and is noise-sensitive.
-- `VREG_PGND` carries the switching return current. It must reach GND without routing that
-  current through the rest of the ground pour.
+- C19 (VREG_VIN) is 10 µF; C21 (output) and C20 (VREG_AVDD) are 4.7 µF each.
+- R5 (33 Ω) with C20 filters `VREG_AVDD`, which draws ~200 µA and is noise-sensitive. What
+  matters is C20's distance to the pin, not R5's — the resistor is in series either way.
+- The QFN-60 has no separate `VREG_PGND` ball. Pin 47 is plain `GND` and carries the
+  switching return, so it drops straight into the pour through its own via rather than
+  sharing a track with anything else.
 
 Follow the layout in the RP2350 hardware design guide for this block rather than improvising.
+
+### Measured regulator geometry
+
+The USB pair runs west along the south edge of U1 at y = 110.0/110.4 and cannot move without
+pushing the differential pair through this block, so `VREG_LX` crosses under it on B.Cu for
+1.5 mm. Everything else in the switching loop stays on F.Cu.
+
+| Path | Length | Vias |
+|---|---|---|
+| U1.48 `VREG_LX` → L1.1 | 3.5 mm | 2 (one hop under the USB pair) |
+| L1.2 → C21.1 (C_OUT) | 1.6 mm | 0, single layer |
+| U1.46 `VREG_AVDD` → C20.1 | 3.8 mm | 2 |
+| C19 (C_IN) → U1.49 `VREG_VIN` | 5.2 mm | pin 49 is fed from the corridor inside the pad ring |
+
+`VREG_LX` and `VREG_AVDD` leave the pad ring at 0.25 mm rather than the Power class's
+0.30 mm: pin 48 threads the 0.60 mm gap between the pin 47 and pin 49 pads, and 0.25 mm is
+what keeps 0.175 mm clearance on both sides. Both widen to 0.30 mm once clear of the ring.
 
 **Y1 must be an Abracon ABM8-272-T3** (12 MHz, CL 10 pF, ESR ≤ 50 Ω). The 1 kΩ series
 resistor R6 and the 15 pF load caps are only validated for that crystal; substituting one
 requires temperature testing.
+
+The crystal is a 4-pad part whose two terminals sit on opposite corners, so one of them is
+always the far side from U1. Y1 is oriented to put `XIN` on the near corner: `XIN` is the
+oscillator's sense input and runs 8.5 mm on F.Cu with no vias. The driven side is the one
+that takes the long way round — U1.22 through R6 and back to the crystal, 20 mm with four
+vias — which is tolerable because R6's 1 kΩ damps it. R6 cannot come closer: the band
+between Y1 and U1 is filled by the escapes of pins 16-27.
+
+### USB series termination
+
+R3 and R4 (27 Ω) sit about 10 mm of track from U1.51/52, not the "close to the chip" the
+RP2350 guide asks for. The alternative is worse: the only way to shorten them is to route
+the differential pair through the regulator block, and at full speed a 10 mm stub is ~65 ps
+against a 4 ns edge. The pair itself keeps its 0.25 mm gap the whole way and runs over
+uninterrupted B.Cu ground.
+
+### U2 thermal
+
+AMS1117-3.3 in SOT-223, θ_JA ≈ 92 °C/W on the recommended pad. Typical load is ~200 mA
+(MCU, level shifters, LEDs, target), so 0.34 W and a 31 °C rise. The worst case is the
+target drawing U3's full 333 mA limit: 0.70 W, 64 °C rise, junction ~89 °C at 25 °C
+ambient. No extra tab copper is needed.
 
 ## Debug
 
