@@ -205,11 +205,21 @@ parts and will not fit.
   capability; if you retarget to a fab with a finer drill there is nothing to change.
 - **GPIO17–25 and 27–29 are unused** and carry no-connect flags. They are free if a later
   revision wants a header or a second target interface.
-- **J1 USB-C edge position needs checking** against the receptacle actually bought — the
-  mating face should overhang the board edge, possibly with an Edge.Cuts notch.
-- **F1 needs a max-resistance check.** A 500 mA-hold PTC runs 0.4 Ω to 1.2 Ω depending on
-  the part, which is 0.15 V to 0.5 V at full load, straight off the target rail. Pick from
-  the low end.
+- **J1's board edge is where the footprint asks for it.** The GCT footprint carries a
+  `PCB Edge` line on `Dwgs.User`, and with J1 at (103.675, 120) rotated −90° that line lands
+  on x = 100.0, which is the Edge.Cuts west edge. The receptacle body runs from the edge to
+  x = 107.35 and its courtyard reaches 0.5 mm past the edge; the mating opening is flush with
+  the edge, as the recommended land pattern intends. Nothing to change unless a specific
+  plug overmold or enclosure needs the shell to stand proud, which would be a local notch.
+- **F1's hold current is the tight one, not its resistance.** The fitted part
+  (`C720075`, Jinrui JK-nSMD050-30) is 150 mΩ typical and 300 mΩ max, so the Value field's
+  `Rmax300mR` is met and the drop is 0.06 V typical at full load. The margin problem is
+  elsewhere: worst case through F1 is the TPS2114A's 333 mA target limit plus the board's
+  own draw, call it 400–430 mA, against a 500 mA hold — and PPTC hold current derates with
+  ambient while U2 sits next to it burning ~0.7 W at that current. A 750 mA part in the same
+  1206 land (Littelfuse `1206L075/16WR`, `C371166`, 90 mΩ typical, trips at 1.5 A) gives
+  about 1.8× margin and lower resistance. F1 guards the host port against a board fault; the
+  target's own overcurrent limit is U3, so raising F1 does not weaken that.
 - **TPS2114A is old but not end-of-life.** TI lists both the TPS2114A and TPS2115A as
   ACTIVE — in production and recommended for new designs. The problem is purely that JLCPCB
   does not carry it, so it is a distributor question, not a lifecycle one: buy it from
