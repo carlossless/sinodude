@@ -414,8 +414,13 @@ cable lands directly on the pads.
 ## PCB
 
 64 x 36 mm, **two layers**, 2 mm corner radius, four M3 holes. Parts on both sides.
-Fully routed in 714 segments and 264 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
+Fully routed in 731 segments and 264 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
 report nothing at any severity, and every track runs at 0, 45 or 90 degrees.
+
+**No track turns a right angle.** Every corner is two 45 degree turns, chamfered as wide as
+the space allows. A 90 degree turn is not itself a defect, but on this board it was always
+the signature of something the router gave up on, so treating it as a defect is a cheap way
+to find them.
 
 **Power tracks are 0.30 mm wherever 0.30 mm fits.** 269 of the 331 segments on a Power-class
 net are at the full class width; the rest step down through 0.28, 0.26 and so on only where
