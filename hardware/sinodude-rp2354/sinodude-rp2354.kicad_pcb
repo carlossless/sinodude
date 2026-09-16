@@ -13321,7 +13321,7 @@
 				(justify mirror)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "1k"
 			(at 0 -1.43 180)
 			(unlocked yes)
 			(layer "B.SilkS")
@@ -13360,7 +13360,7 @@
 				(justify mirror)
 			)
 		)
-		(property "LCSC" "C25804"
+		(property "LCSC" "C21190"
 			(at 0 0 180)
 			(layer "B.Fab")
 			(hide yes)
@@ -15772,7 +15772,7 @@
 				(justify mirror)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "1k"
 			(at 0 -1.43 180)
 			(unlocked yes)
 			(layer "B.SilkS")
@@ -15811,7 +15811,7 @@
 				(justify mirror)
 			)
 		)
-		(property "LCSC" "C25804"
+		(property "LCSC" "C21190"
 			(at 0 0 180)
 			(layer "B.Fab")
 			(hide yes)

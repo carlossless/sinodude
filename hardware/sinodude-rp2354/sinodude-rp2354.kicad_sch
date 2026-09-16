@@ -14303,7 +14303,7 @@
 				)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "1k"
 			(at 125.73 379.73 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14346,7 +14346,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C25804"
+		(property "LCSC" "C21190"
 			(at 125.73 379.73 0)
 			(hide yes)
 			(show_name no)
@@ -18647,7 +18647,7 @@
 				)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "1k"
 			(at 171.45 375.92 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18690,7 +18690,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C25804"
+		(property "LCSC" "C21190"
 			(at 171.45 375.92 0)
 			(hide yes)
 			(show_name no)

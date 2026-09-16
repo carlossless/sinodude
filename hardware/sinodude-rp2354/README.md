@@ -238,8 +238,10 @@ parts and will not fit.
   reach through a case wall. The GCT footprint's `PCB Edge` line on `Dwgs.User` sits flush
   with the receptacle's mating face; the Edge.Cuts line is 1.4 mm inboard of it. J4 gets the
   same treatment at the other end. If you ever move J1 or J4, the edges move with them.
-- **F1 is a 750 mA part, not 500 mA.** Worst case through it is U3's 333 mA target limit
-  plus the board's own draw, call it 400–430 mA. Against a 500 mA hold that is under 20%
+- **F1 is a 750 mA part, not 500 mA.** Worst case through it is U3's target limit plus the
+  board's own draw. The limit is not the 333 mA typical: scaling the datasheet's 700 Ω row
+  (0.30 / 0.36 / 0.50 A) to R15 = 750 Ω gives **280 / 336 / 467 mA**, so worst case is
+  ~540 mA. Against a 500 mA hold that is under 20%
   margin before derating, and PPTC hold current falls with ambient while U2 sits beside it
   burning ~0.7 W at that current, so it would nuisance-trip. The fitted part is now
   Littelfuse `1206L075/16WR` (`C371166`): 750 mA hold, 1.5 A trip, 90 mΩ typical and 290 mΩ
@@ -287,6 +289,39 @@ signal bypasses a translator.
 Pin 7 serves Andes-core targets (`VDD TCK TDA GND`); pins 4, 6, 8 and 9 serve the 8051 path
 (`TDI TMS TDO nRST`). TCK and VTGT are common to both. The dongle's single-wire pulse-width
 transport for 8051 parts runs on **TDO, pin 8**, not on TDA.
+
+### Wire-protocol coverage
+
+SinoLink runs four wire protocols across these ten pins. Every one of them needs the same
+three things from the hardware: a driven clock, a line that can turn around, and a reset.
+
+| protocol | target | signals | path here |
+|---|---|---|---|
+| protoA, JTAG bit-bang | 8051 | nRESET TCK TDI TMS, TDO in | U4 drives the first four, U5 turns TDO around |
+| protoB, single-wire pulse-width | 8051 | TCK + one bidirectional data wire | U4 drives TCK, U5 turns pin 8 around |
+| CMSIS-DAP SWD | ARM | SWCLK(=TCK) SWDIO(=TDO) nRESET | same pins, U5 turns SWDIO around |
+| AICE | Andes | TCK + TDA | U4 drives TCK, U6 turns pin 7 around |
+
+The three lines that have to reverse (TDO, TDA, and nothing else) each sit on their own
+translator with a GPIO-controlled DIR. TCK, TDI, TMS and nRST never reverse in any of the
+four, so they share U4 with its DIR strapped `A->B`; `XLAT_OE` still tri-states all four so
+another probe can drive the header.
+
+**Pull-up strength is the one place SinoLink's topology forces a choice.** It translates its
+data wire with a PCA9306, a passive pass-FET that cannot drive high at all, so both sides
+need pull-ups and it fits 1 kOhm on the MCU side plus a transistor-switched 330 Ohm on the
+target side. Those resistors are its high-side driver, not a bus bias. The SN74LVC1T45 used
+here is push-pull and drives high itself, so no switched pull-up is needed; what remains is
+the released-line case, where the target drives open-drain and the pull-up alone sets the
+rising edge. R31 and R33 are therefore **1 kOhm**, matching SinoLink's static value, for a
+~30 ns edge into the ~30 pF a short ribbon presents rather than the ~300 ns a 10 kOhm would
+give. R29 on nRST stays 10 kOhm: a reset line is not clocked and should not fight a target
+that drives it.
+
+**Target-referenced I/O** (SinoLink's third VREF setting, after 5 V and 3.3 V) needs no
+extra parts: leave U3 in its reset state (`D1 = D0 = 1`, OUT Hi-Z), let the target feed pin
+1, and `VTGT` — which *is* pin 1 — becomes the target's own rail. That is what the
+translators take as VCCB, and `VTGT_SENSE` reads it back on ADC0.
 
 ## Target supply (U3, TPS2114A)
 
