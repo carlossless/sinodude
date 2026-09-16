@@ -30,9 +30,9 @@ style, so the requirement travels with the symbol instead of living only in this
 
 ```
 L1   3.3uH/20%/Isat2.4A/DCR140m/POL      C22,C23  15pF/50V/5%/C0G/C0603
-C19  10uF/6.3V/20%/X5R/C0402             R15      750R/1%/ILIM333mA
-C20,C21,C37  4.7uF/10V/20%/X5R/C0402     R21      150R/1%/250mW/R1206
-R5   33R/1%/R0402                        F1       750mA/Rmax290mR/F1206
+C19  10uF/10V/10%/X5R/C0603              R15      750R/1%/ILIM333mA
+C20,C21,C37  4.7uF/16V/10%/X5R/C0603     R21      150R/1%/250mW/R1206
+R5   33R/1%/R0603                        F1       750mA/Rmax290mR/F1206
 Y1   12MHz/CL10pF/ESR50R/ABM8-272-T3      D4-D8    H5VSD3B/VRWM5V/SOD-323
 ```
 
@@ -47,9 +47,9 @@ these guidelines must be strictly followed"*, and gives hard numbers. What is fi
 | Requirement | Part | Margin |
 |---|---|---|
 | L: shielded, 3.3 µH ±20%, DCR ≤ 250 mΩ, I_sat ≥ 1.5 A, polarity-marked | AOTA-B201610S3R3-101-T (`C42411119`) | DCR 140 mΩ max, I_sat 2.4 A min ✓ |
-| C_OUT: 4.7 µF ±20%, ESR ≤ 250 mΩ, ESL ≤ 6 nH | C21, 0402 4.7 µF 10 V X5R ±20% (`C23733`) | on 1.1 V, so negligible DC-bias loss |
-| C_IN: ≥ 4.7 µF, ESR ≤ 50 mΩ | C19, 0402 **10 µF** 6.3 V X5R (`C15525`) | 10 µF chosen because a 4.7 µF part derates below the floor at 3.3 V bias |
-| Second 4.7 µF on V_OUT near DVDD pin 23 (QFN-60) | C37 (`C23733`) | recommended, not mandatory |
+| C_OUT: 4.7 µF ±20%, ESR ≤ 250 mΩ, ESL ≤ 6 nH | C21, 0603 4.7 µF 16 V X5R ±10% (`C19666`) | on 1.1 V, so negligible DC-bias loss |
+| C_IN: ≥ 4.7 µF, ESR ≤ 50 mΩ | C19, 0603 **10 µF** 10 V X5R (`C19702`) | 10 µF chosen because a 4.7 µF part derates below the floor at 3.3 V bias |
+| Second 4.7 µF on V_OUT near DVDD pin 23 (QFN-60) | C37 (`C19666`) | recommended, not mandatory |
 
 **C37 must be placed at the bottom edge of U1 near DVDD pin 23 and away from L1/C21** — the
 datasheet is explicit that it should not sit near the LX/C_OUT loop. There is a note on the
