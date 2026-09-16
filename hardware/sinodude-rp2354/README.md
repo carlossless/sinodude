@@ -414,8 +414,16 @@ cable lands directly on the pads.
 ## PCB
 
 64 x 36 mm, **two layers**, 2 mm corner radius, four M3 holes. Parts on both sides.
-Fully routed in 823 segments and 264 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
+Fully routed in 714 segments and 264 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
 report nothing at any severity, and every track runs at 0, 45 or 90 degrees.
+
+**Power tracks are 0.30 mm wherever 0.30 mm fits.** 269 of the 331 segments on a Power-class
+net are at the full class width; the rest step down through 0.28, 0.26 and so on only where
+a neighbour is genuinely in the way, and only four segments are left at the 0.15 mm default.
+That is 18% of power-net track length below class, all of it short and in congested pockets
+— the longest is a 10 mm VTGT run at 0.15 mm, which is 35 mΩ and 12 mV at the 333 mA target
+limit. Anything that reads as a randomly thin power trace is a bug, not a decision: check it
+against the netclass before assuming it was deliberate.
 
 **Every track lands in the middle of its pad, not on the edge.** A grid router will happily
 stop a track where its centreline just touches the pad boundary, or clips a corner, and DRC
