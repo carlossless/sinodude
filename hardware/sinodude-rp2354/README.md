@@ -42,7 +42,7 @@ L1   3.3uH/20%/Isat2.4A/DCR140m/POL      C22,C23  15pF/50V/5%/C0G/C0603
 C19  10uF/10V/10%/X5R/C0603              R15      750R/1%/ILIM333mA
 C20,C21,C37  4.7uF/16V/10%/X5R/C0603     R21      150R/1%/250mW/R1206
 R5   33R/1%/R0603                        F1       750mA/Rmax290mR/F1206
-Y1   12MHz/CL10pF/ESR50R/ABM8-272-T3      D4-D8    H5VSD3B/VRWM5V/SOD-323
+Y1   12MHz/CL10pF/ESR50R/ABM8-272-T3      D4-D9    H5VSD3B/VRWM5V/SOD-323
 ```
 
 Generic 10 k / 100 nF parts keep plain values — stamping specs on those only fragments the
@@ -219,7 +219,16 @@ parts and will not fit.
   (`VDD SWCLK SWDIO GND`), Andes gets AICE (`VDD TCK TDA GND`), and the 8051 parts get
   `VDD TCK TDI TDO GND`. The 2x5 header carries both styles at once, so TDA shares TCK with
   the 8051 path and is otherwise unused until an Andes-core target is supported. It gets its
-  own translator with a live DIR so firmware can drive it either way.
+  own translator with a live DIR so firmware can drive it either way, and its passives now
+  match the other target lines exactly: D9 clamp, 22 R series (R32), 10 k pull-up to `VTGT`
+  (R33).
+
+  An earlier revision gave pin 7 a 330 R series resistor and a fitted 100 nF, copied from
+  what was taken to be SinoLink's equivalent net. Neither is on SinoLink's TDA: its cap
+  position (C28) carries the value `DNI` and is not fitted, and the only 330 R on that sheet
+  is a transistor-switched pull-up on **TDO**, a different pin. Together they made a 33 us
+  low-pass on a wire whose whole protocol is edge timing. The cap is gone and D9 sits on its
+  footprint, which also closes the gap where pin 7 was the only target signal with no clamp.
 - **U1 uses the ThermalVias QFN footprint** (vias under the exposed pad). The project copy
   drills them at 0.3 mm rather than the stock 0.2 mm, so they are inside JLCPCB's standard
   capability; if you retarget to a fab with a finer drill there is nothing to change.
@@ -308,7 +317,7 @@ nominal under load: the polyfuse F1 contributes 0.1 V to 0.4 V depending on the 
 the mux another ~40 mV at 333 mA.
 
 `VTGT` is capped at **5.25 V**, USB 5 V at +5 %. The translators' VCCB abs-max is 5.5 V, but
-the binding limit is the ESD suppressors D4–D8: the H5VSD3B is specified to VRWM = 5 V with
+the binding limit is the ESD suppressors D4–D9: the H5VSD3B is specified to VRWM = 5 V with
 VBR(min) = 6.2 V, so above ~5.25 V its leakage is unspecified and the margin to the
 breakdown knee gets thin. **An external target above 5.5 V destroys U4–U6.**
 

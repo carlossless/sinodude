@@ -17170,98 +17170,6 @@
 		)
 	)
 	(symbol
-		(lib_id "Device:C")
-		(at 132.08 379.73 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "46569d75-adab-46ff-ba14-5ab33dd08aa9")
-		(property "Reference" "C36"
-			(at 132.715 377.19 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "100nF"
-			(at 132.715 382.27 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
-			(at 132.08 379.73 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 132.08 379.73 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Unpolarized capacitor"
-			(at 132.08 379.73 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C14663"
-			(at 132.08 379.73 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(body_style 1)
-		(in_pos_files yes)
-		(pin "1"
-			(uuid "7b2d5556-3a63-4d41-b25f-7914c380f6e9")
-		)
-		(pin "2"
-			(uuid "a93c94d1-3412-4dff-a7f4-6693d668b35a")
-		)
-		(instances
-			(project "sinodude-rp2354"
-				(path "/a3e36d10-b615-4e51-a27d-75418708c944"
-					(reference "C36")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "power:VCC")
 		(at 171.45 379.73 180)
 		(unit 1)
@@ -23209,8 +23117,8 @@
 		)
 	)
 	(symbol
-		(lib_id "power:GND")
-		(at 125.73 383.54 0)
+		(lib_id "power:VCC")
+		(at 125.73 383.54 180)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -23228,7 +23136,7 @@
 				)
 			)
 		)
-		(property "Value" "GND"
+		(property "Value" "VTGT"
 			(at 125.73 387.35 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -23260,7 +23168,7 @@
 				)
 			)
 		)
-		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+		(property "Description" "Power symbol creates a global label with name \"VCC\""
 			(at 125.73 383.54 0)
 			(hide yes)
 			(show_name no)
@@ -23381,7 +23289,7 @@
 				)
 			)
 		)
-		(property "Value" "330R"
+		(property "Value" "22R"
 			(at 96.52 368.3 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -23424,7 +23332,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C23138"
+		(property "LCSC" "C23345"
 			(at 96.52 368.3 90)
 			(hide yes)
 			(show_name no)
@@ -32161,6 +32069,75 @@
 			)
 		)
 	)
+	(symbol
+		(lib_id "Device:D_TVS")
+		(at 132.08 379.73 270)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "570f1544-5fd2-4893-ac2d-610e09d2b3de")
+		(property "Reference" "D9"
+			(at 134.62 379.73 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "H5VSD3B/VRWM5V/SOD-323"
+			(at 129.54 379.73 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Diode_SMD:D_SOD-323"
+			(at 132.08 379.73 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 132.08 379.73 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Bidirectional transient-voltage-suppression diode"
+			(at 132.08 379.73 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "sinodude-rp2354"
+				(path "/a3e36d10-b615-4e51-a27d-75418708c944"
+					(reference "D9")
+					(unit 1)
+				)
+			)
+		)
+	
+		(property "LCSC" "C20615806"
+			(at 132.08 379.73 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		))
 	(polyline
 		(pts
 			(xy 464.82 309.88)
