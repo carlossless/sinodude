@@ -223,6 +223,15 @@ parts and will not fit.
   after a trip, in the same 1206 land. Note the stock — about 6 k against 300 k for the
   500 mA Jinrui part it replaced. F1 guards the host port against a board fault; the
   target's own overcurrent limit is U3, so raising F1 does not weaken that.
+
+  A **TI TPD3S014** (`C87384`, SOT-23-6) was weighed and turned down. It would replace both
+  F1 and D1 with one part, limit electronically at a guaranteed 0.67 A rather than tripping
+  thermally, and drop 42–56 mV instead of up to 125 mV — but it costs about a dollar more
+  per board against two commodity parts, it is an Extended part at JLCPCB, and its 0.5 A
+  continuous rating leaves only 14% over our worst case. Glasgow revC3 does use one, with no
+  polyfuse at all. Do not reach for the TPD3S**044** if you revisit this: its limit is
+  guaranteed only above 1.60 A, so a fault would pull more than a 500 mA host allows before
+  it acted.
 - **TPS2114A is old but not end-of-life.** TI lists both the TPS2114A and TPS2115A as
   ACTIVE — in production and recommended for new designs. The problem is purely that JLCPCB
   does not carry it, so it is a distributor question, not a lifecycle one: buy it from
