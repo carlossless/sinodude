@@ -214,9 +214,12 @@ parts and will not fit.
   D+/D- enter one side of the USBLC6 and leave the other, so the signal runs through the
   diode pads rather than past them on a stub. That is ST's application circuit and gives the
   clamp a proper current path — but it does mean **D1 cannot be left unpopulated**.
-- **`KEY` (header pin 7) function is unknown.** On SinoLink it is an RC-filtered sense line
-  that was never traced to the MCU. It gets its own translator with a live DIR plus the same
-  RC (R32/C36) so firmware can treat it as input or output later.
+- **`TDA` (header pin 7) is the Andes AICE data wire**, not an 8051 signal. SinoWealth's
+  tool-selection note tabulates the adapter signals per target core: ARM gets SWD
+  (`VDD SWCLK SWDIO GND`), Andes gets AICE (`VDD TCK TDA GND`), and the 8051 parts get
+  `VDD TCK TDI TDO GND`. The 2x5 header carries both styles at once, so TDA shares TCK with
+  the 8051 path and is otherwise unused until an Andes-core target is supported. It gets its
+  own translator with a live DIR so firmware can drive it either way.
 - **U1 uses the ThermalVias QFN footprint** (vias under the exposed pad). The project copy
   drills them at 0.3 mm rather than the stock 0.2 mm, so they are inside JLCPCB's standard
   capability; if you retarget to a fab with a finer drill there is nothing to change.
@@ -268,9 +271,13 @@ signal bypasses a translator.
  1 VTGT    2 TCK
  3 GND     4 TDI
  5 GND     6 TMS
- 7 KEY     8 TDO / DATA
+ 7 TDA     8 TDO / DATA
  9 nRST   10 GND
 ```
+
+Pin 7 serves Andes-core targets (`VDD TCK TDA GND`); pins 4, 6, 8 and 9 serve the 8051 path
+(`TDI TMS TDO nRST`). TCK and VTGT are common to both. The dongle's single-wire pulse-width
+transport for 8051 parts runs on **TDO, pin 8**, not on TDA.
 
 ## Target supply (U3, TPS2114A)
 
@@ -355,10 +362,14 @@ starting point, and the first assembled board settles it in a way no datasheet h
 | GPIO | Net | Goes to | State at reset |
 |------|-----|---------|----------------|
 | 0 / 1 | — | unused, no-connect. GPIO0 is `XIP_CS1n`, the chip select for a second QSPI memory, so keep it free | input, pulled down |
-| 2–5 | TCK TDI TMS nRST | U4 A1–A4 | Hi-Z via OE |
-| 6 | DATA | U5 A — PIO in/out base | input |
-| 7 | DATA_DIR | U5 DIR — PIO side-set | low (B→A) |
-| 8 / 9 | KEY / KEY_DIR | U6 A / DIR | low (B→A) |
+| 2 | NRST_3V3 | U4 A4 (pin 6) | Hi-Z via OE |
+| 3 | TMS_3V3 | U4 A3 (pin 5) | Hi-Z via OE |
+| 4 | TDI_3V3 | U4 A2 (pin 4) | Hi-Z via OE |
+| 5 | TCK_3V3 | U4 A1 (pin 3) | Hi-Z via OE |
+| 6 | TDA_3V3 | U6 A | input |
+| 7 | TDA_DIR | U6 DIR | low (B→A) |
+| 8 | DATA_3V3 | U5 A | input |
+| 9 | DATA_DIR | U5 DIR | low (B→A) |
 | 10 | XLAT_OE | U4 pin 22 | high = disabled |
 | 11 / 12 | VTGT_D0 / D1 | U3 pins 2, 3 | high, high = off |
 | 13 | VTGT_DISCH | Q1 gate | low = off |
@@ -367,8 +378,10 @@ starting point, and the first assembled board settles it in a way no datasheet h
 | 26 | VTGT_SENSE | ADC0, VTGT ÷ 2 | input |
 | 17–25, 27–29 | — | unused, not brought out | input, pulled down |
 
-GPIO 2–7 are contiguous on purpose: PIO wants TCK on side-set, TDI on out, TMS on set and
-TDO on in, each with its own base register.
+Note the order inside GPIO 2-5: the GPIO number counts up as the DUT header counts down, so
+GPIO2 is nRST and GPIO5 is TCK. That falls out of U4's A-side pin order, which the layout
+follows. PIO base registers are independent, so the four JTAG lines do not have to be
+contiguous or in any particular order.
 
 Every control line has its own pull resistor because RP2354 GPIOs are inputs out of reset.
 Without them the target rail and the translators would come up in an undefined state.
@@ -513,7 +526,7 @@ out of the south row toward J1.
 
 **U1's GPIO assignment is chosen for the layout.** The east column presents the JTAG group
 as TCK, TDI, TMS, NRST going south, matching U4's A-side and the DUT header pin order, and
-DATA sits north of KEY to match U5 and U6. Assigned the other way round these two groups
+DATA sits north of TDA to match U5 and U6. Assigned the other way round these two groups
 have to cross inside the 0.4 mm pad ring, where there is no room; the nets are plain GPIOs,
 so the crossing is designed out rather than routed around.
 

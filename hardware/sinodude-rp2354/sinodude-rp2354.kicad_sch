@@ -11045,7 +11045,7 @@
 			)
 		)
 	)
-	(global_label "KEY_3V3"
+	(global_label "TDA_3V3"
 		(shape input)
 		(at 513.08 269.24 180)
 		(effects
@@ -11133,7 +11133,7 @@
 			)
 		)
 	)
-	(global_label "KEY_B"
+	(global_label "TDA_B"
 		(shape input)
 		(at 533.4 269.24 0)
 		(effects
@@ -11507,7 +11507,7 @@
 			)
 		)
 	)
-	(global_label "KEY_B"
+	(global_label "TDA_B"
 		(shape input)
 		(at 85.09 368.3 180)
 		(effects
@@ -11529,7 +11529,7 @@
 			)
 		)
 	)
-	(global_label "KEY_DIR"
+	(global_label "TDA_DIR"
 		(shape input)
 		(at 502.92 274.32 180)
 		(effects
@@ -11727,7 +11727,7 @@
 		)
 		(uuid "9238c081-26eb-43a7-8fa6-5e24f65142c5")
 	)
-	(global_label "KEY_3V3"
+	(global_label "TDA_3V3"
 		(shape input)
 		(at 105.41 217.17 0)
 		(effects
@@ -11738,7 +11738,7 @@
 		)
 		(uuid "2e1f9959-0a39-4842-898a-802da0a5ac16")
 	)
-	(global_label "KEY_DIR"
+	(global_label "TDA_DIR"
 		(shape input)
 		(at 105.41 219.71 0)
 		(effects
