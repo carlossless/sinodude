@@ -414,8 +414,15 @@ cable lands directly on the pads.
 ## PCB
 
 64 x 36 mm, **two layers**, 2 mm corner radius, four M3 holes. Parts on both sides.
-Fully routed in 792 segments and 264 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
+Fully routed in 823 segments and 264 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
 report nothing at any severity, and every track runs at 0, 45 or 90 degrees.
+
+**Every track lands in the middle of its pad, not on the edge.** A grid router will happily
+stop a track where its centreline just touches the pad boundary, or clips a corner, and DRC
+calls that connected because the copper overlaps by a hair. It is a real joint on the
+gerbers and a coin toss on the bench. The rule here is that a terminating track ends at the
+pad centre, so the full track width sits on pad copper; the check is per pad, not per track,
+because a pad can be left hanging by a chain whose last link looks fine on its own.
 
 **Both connectors overhang the board, for a case.** The west edge is cut back so J1's shell
 stands 1.4 mm proud, and the east edge so J4's shroud stands 1.6 to 2.1 mm proud.
