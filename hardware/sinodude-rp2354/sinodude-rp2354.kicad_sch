@@ -19158,7 +19158,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Connector_USB:USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal"
+		(property "Footprint" "sinodude:USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal"
 			(at 34.29 76.2 0)
 			(hide yes)
 			(show_name no)
@@ -25671,7 +25671,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Connector_IDC:IDC-Header_2x05_P2.54mm_Horizontal"
+		(property "Footprint" "sinodude:IDC-Header_2x05_P2.54mm_Horizontal"
 			(at 130.81 344.17 0)
 			(hide yes)
 			(show_name no)

@@ -142,8 +142,20 @@ there is no internal detail. Good enough for enclosure fit and collision checks;
 certified geometry, replace them with vendor STEP.
 
 Because a 3D model is attached to a footprint, `QFN-60-…_ThermalVias` is **copied** into
-`footprints/sinodude.pretty` with its model path retargeted. It is otherwise byte-identical
-to the stock footprint, and will not pick up upstream library fixes.
+`footprints/sinodude.pretty` with its model path retargeted. Its nine thermal vias are also
+widened from 0.5/0.2 mm to 0.6/0.3 mm, which is JLCPCB's minimum drill.
+
+`footprints/sinodude.pretty` holds two more project copies, each because the stock footprint
+does not fit this board:
+
+| Footprint | Change |
+|---|---|
+| `USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal` | the four corner ground pads are 1.00 mm tall instead of 1.15 mm, so they clear the receptacle's own shell holes at a 0.25 mm hole-to-copper rule |
+| `IDC-Header_2x05_P2.54mm_Horizontal` | the pin 1 arrow is shortened so it does not sit on R26's pad |
+
+Copies do not pick up upstream library fixes. The trade is deliberate: with them, every
+footprint on the board matches its library and DRC's library check is silent, so a real
+drift will show up.
 
 **J1 moved to the GCT USB4105** (`C5184243`, USB4105-GF-A-**120**, 16P, 4143 in stock). The
 HCTL footprint referenced a model the library does not ship. GCT has an identical pad set
@@ -153,10 +165,13 @@ parts and will not fit.
 
 ### Known items
 
-- **8 ERC warnings**, all the same: U4's unused pins (7–10 = A5–A8, 14–17 = B5–B8) are tied
-  to GND, and GND carries a PWR_FLAG, so KiCad flags "bidirectional pin connected to power
-  output". This is correct — exclude the warnings, don't rewire. KiCad only sees the pin
-  *type*; it cannot know DIR is strapped.
+- **The ERC pin matrix allows a bidirectional pin on a power-output net.** U4's unused pins
+  (7–10 = A5–A8, 14–17 = B5–B8) are tied to GND, and GND carries a PWR_FLAG, so the stock
+  matrix flags "bidirectional pin connected to power output" eight times. The wiring is
+  right and KiCad only sees the pin *type*; it cannot know DIR is strapped. Rather than
+  carry eight standing warnings, the Bidirectional × Power-output cell is set to "no
+  warning" in the project's ERC matrix. ERC is clean; if you add a real bidirectional pin
+  to a driven rail, that pair will no longer be caught for you.
 
   **Why both ports are grounded, not just the A side.** The SN74LVC8T245 datasheet §8.1 says
   *"It is recommended to tie all unused I/Os to GND. The device should not have any floating
@@ -185,9 +200,9 @@ parts and will not fit.
 - **`KEY` (header pin 7) function is unknown.** On SinoLink it is an RC-filtered sense line
   that was never traced to the MCU. It gets its own translator with a live DIR plus the same
   RC (R32/C36) so firmware can treat it as input or output later.
-- **U1 uses the ThermalVias QFN footprint** (vias under the exposed pad), so board setup min
-  hole must allow them. If your fab wants 0.3 mm, switch to
-  `QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm` and add stitching vias by hand.
+- **U1 uses the ThermalVias QFN footprint** (vias under the exposed pad). The project copy
+  drills them at 0.3 mm rather than the stock 0.2 mm, so they are inside JLCPCB's standard
+  capability; if you retarget to a fab with a finer drill there is nothing to change.
 - **GPIO17–25 and 27–29 are unused** and carry no-connect flags. They are free if a later
   revision wants a header or a second target interface.
 - **J1 USB-C edge position needs checking** against the receptacle actually bought — the
@@ -368,6 +383,8 @@ cable lands directly on the pads.
 ## PCB
 
 68 x 36 mm, **two layers**, 2 mm corner radius, four M3 holes. Parts on both sides.
+Fully routed in 914 segments and 271 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
+report nothing at any severity, and every track runs at 0, 45 or 90 degrees.
 
 J1 (USB-C), U1 and J4 (DUT header) share the y = 120 centreline, and the signal flow runs
 left to right along it: USB-C, ESD, MCU, level shifters, DUT header. The board is laid out
@@ -391,8 +408,20 @@ Series resistors in a signal path (R3/R4 on USB, R25-R30 and R32 to the DUT) sta
 where the trace already runs.
 
 GND pours on both layers with solid pad connections (thermal spokes starve on two layers)
-and roughly 170 vias into them, including the nine under U1's exposed pad. Isolated pour
+and roughly 175 vias into them, including the nine under U1's exposed pad. Isolated pour
 islands are dropped rather than left floating.
+
+**The ground net is one piece of copper, and that took work.** On two layers a dense signal
+field cuts the pour into pockets, and a pocket that holds a ground pad but reaches nothing
+else leaves that pad floating while DRC still shows the net as routed: the ratsnest line
+runs zone-to-zone, which is easy to wave away. Every pocket here is stitched back, and three
+needed a local change rather than a via — C32 and U5's ground pin came free once `DATA_DIR`
+was rerouted, and C12's ground pad only opened up after the `+3V3` climb between C6 and C12
+moved out of the way and the two caps' ground pads were tied to each other directly.
+
+No via lands on a Tag-Connect pad, and J2 now carries the stock footprint's keepout zone
+(no vias, no pour) over its six pads, so the rule is enforced by the footprint rather than
+by remembering it.
 
 **The Tag-Connect (J2) is routed by hand.** Its five leg holes are exported as keepout
 circles that box in each pad, leaving exactly one single-track channel per pad, and which
@@ -400,8 +429,8 @@ channel a pad may use is forced by geometry. No autorouter finds these. The same
 the VBUS bridge between J1's two power pad pairs, which crosses on the back so the CC and
 D+/D- pads keep the front-side corridor beside the connector.
 
-No via sits on a J2 pad. A pogo pin has to land on bare, flat copper, and a via in the pad
-wicks paste and leaves a dimple even when it carries the same net, so DRC will not catch it.
+A pogo pin has to land on bare, flat copper, and a via in the pad wicks paste and leaves a
+dimple even when it carries the same net, which no clearance rule catches.
 
 `USB_DM`/`USB_DP` run as a coupled pair from J1 through R3/R4 to U1, 0.15 mm wide on a
 0.25 mm gap, on the front layer with no via between connector and MCU. Full-speed USB does
@@ -425,6 +454,18 @@ Board minimums are set to JLCPCB's two-layer capability: 0.127 mm track and clea
 
 RP2350's USB is full-speed only, so the USB class holds a pair geometry but no target
 impedance, and two layers cost nothing here.
+
+One 4.2 mm stretch of the `+3V3` run east of U4 is 0.20 mm rather than the class's 0.30 mm.
+It is the rail into U5/U6's A-side supply, a few milliamps, and the 0.10 mm it gives up is
+the slot U5's ground pin escapes through.
+
+### Silkscreen
+
+Every reference designator is clear of pads and of other silkscreen, and reads upright from
+its own side of the board — the back is upright when you flip the board over, so it reads
+correctly in a mirrored plot. Designators sit next to their part rather than in a fixed
+position, so a few are on the far side of the part from where the footprint puts them by
+default. Values are hidden; the schematic and BOM carry them.
 
 ### Passive sizes
 
