@@ -14,9 +14,9 @@ and adapters work unchanged.
 
 | | |
 |---|---|
-| Schematic | complete — 93 components, ERC 0 errors / 8 warnings (see below) |
+| Schematic | complete — 93 components, ERC clean |
 | Sourcing | 88 of 93 parts carry an `LCSC` field; the 5 without are mounting holes and Tag-Connect pads |
-| PCB | not started — no outline, no placement, no routing |
+| PCB | complete — 68 × 36 mm, two layers, fully routed, DRC clean |
 
 ## Sourcing
 
@@ -383,7 +383,7 @@ cable lands directly on the pads.
 ## PCB
 
 68 x 36 mm, **two layers**, 2 mm corner radius, four M3 holes. Parts on both sides.
-Fully routed in 914 segments and 271 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
+Fully routed in 919 segments and 293 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
 report nothing at any severity, and every track runs at 0, 45 or 90 degrees.
 
 J1 (USB-C), U1 and J4 (DUT header) share the y = 120 centreline, and the signal flow runs
@@ -391,6 +391,10 @@ left to right along it: USB-C, ESD, MCU, level shifters, DUT header. The board i
 in blocks: USB and the 3V3 regulator west, SWD connector and clock north, target supply and
 level shifters east, the target discharge switch tucked under U6 beside the VTGT network it
 switches, the two buttons together along the south edge below U4.
+
+No part sits out on its own against an edge. The four that did have been brought in next to
+what they serve: C26 under U2's 3V3 output, R8 onto the `+3V3` run it pulls `RUN` up to,
+R15 beside U3's ILIM pin, and C29 next to the VTGT sense divider.
 
 **U1 is rotated 180 degrees**, which puts its east column against U4 and brings USB DM/DP
 out of the south row toward J1.
@@ -408,7 +412,7 @@ Series resistors in a signal path (R3/R4 on USB, R25-R30 and R32 to the DUT) sta
 where the trace already runs.
 
 GND pours on both layers with solid pad connections (thermal spokes starve on two layers)
-and roughly 175 vias into them, including the nine under U1's exposed pad. Isolated pour
+and roughly 200 vias into them, on a 2.5 mm lattice wherever both pours are free, including the nine under U1's exposed pad. Isolated pour
 islands are dropped rather than left floating.
 
 **The ground net is one piece of copper, and that took work.** On two layers a dense signal
@@ -465,7 +469,11 @@ Every reference designator is clear of pads and of other silkscreen, and reads u
 its own side of the board — the back is upright when you flip the board over, so it reads
 correctly in a mirrored plot. Designators sit next to their part rather than in a fixed
 position, so a few are on the far side of the part from where the footprint puts them by
-default. Values are hidden; the schematic and BOM carry them.
+default.
+
+Values are hidden except on the two buttons, where SW1 and SW2 carry `BOOTSEL` and `RESET`
+below them — the Value field, not a free-standing legend, so the silk cannot drift from the
+schematic. The mounting holes are labelled H1–H4 on the inboard side of each hole.
 
 ### Passive sizes
 
