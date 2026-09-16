@@ -799,7 +799,14 @@
 	)
 	(embedded_fonts no)
 	(model "${KIPRJMOD}/3dmodels/QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm.step"
-    (offset (xyz 0 0 0))
-    (scale (xyz 1 1 1))
-    (rotate (xyz 0 0 0)))
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
 )

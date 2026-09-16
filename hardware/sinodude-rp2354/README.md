@@ -114,8 +114,14 @@ One part-choice consequence worth knowing:
 
 ### 3D models
 
-Every footprint representing a physical part resolves a 3D model. Two do not, correctly: the
-Tag-Connect pad pattern and the mounting holes, neither of which is a component.
+Every footprint representing a physical part resolves a 3D model — 88 of the 93. The five
+without are the Tag-Connect pad pattern and the four mounting holes, none of which is a
+component.
+
+Check it with `kicad-cli pcb export step`, not by eye. A footprint can carry a model in the
+library and still have none on the board, because the board keeps its own copy of the
+footprint; U1 sat like that for a while, model file present, library entry present, board
+instance empty.
 
 `flake.nix` exports `KICAD10_3DMODEL_DIR` — without it none of the stock models resolve at
 all, since every footprint references that variable.
