@@ -23,6 +23,15 @@ and adapters work unchanged.
 Every component has a footprint. LCSC part numbers are in an `LCSC` field on each symbol,
 picked from the JLCPCB catalogue, preferring Basic/Preferred parts where one exists.
 
+**The same field has to exist on the board's footprints, not only on the symbols.** The
+Fabrication Toolkit is a pcbnew plugin: it reads footprint fields and knows nothing about
+the schematic. With the field only on the symbols its BOM comes out with an empty
+`LCSC Part #` column, JLCPCB falls back to guessing from the comment and footprint, and the
+guesses are wrong in the expensive direction — it matched `RESET` to a reset switch and
+`USB-C` to a different receptacle, and gave up entirely on the diodes, ferrite, inductor and
+DUT header. All 88 footprints carry the field now. If you add a part, put `LCSC` on the
+symbol *and* make sure it reaches the board.
+
 ### Value fields carry the binding spec
 
 Parts whose datasheet imposes a real constraint spell it out in the Value field, Olimex
