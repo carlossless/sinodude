@@ -206,9 +206,9 @@ parts and will not fit.
 - **GPIO17–25 and 27–29 are unused** and carry no-connect flags. They are free if a later
   revision wants a header or a second target interface.
 - **Both board edges are cut back from where the footprints put them**, so the connectors
-  reach through a case wall. The GCT footprint's `PCB Edge` line on `Dwgs.User` lands on
-  x = 100.0, flush with the receptacle's mating face; the edge is at 101.4 instead. J4 gets
-  the same treatment at the other end. If you ever move J1 or J4, the edges move with them.
+  reach through a case wall. The GCT footprint's `PCB Edge` line on `Dwgs.User` sits flush
+  with the receptacle's mating face; the Edge.Cuts line is 1.4 mm inboard of it. J4 gets the
+  same treatment at the other end. If you ever move J1 or J4, the edges move with them.
 - **F1 is a 750 mA part, not 500 mA.** Worst case through it is U3's 333 mA target limit
   plus the board's own draw, call it 400–430 mA. Against a 500 mA hold that is under 20%
   margin before derating, and PPTC hold current falls with ambient while U2 sits beside it
@@ -393,12 +393,12 @@ cable lands directly on the pads.
 Fully routed in 919 segments and 264 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
 report nothing at any severity, and every track runs at 0, 45 or 90 degrees.
 
-**Both connectors overhang the board, for a case.** The west edge is cut back to x = 101.4
-so J1's shell stands 1.4 mm proud, and the east edge to x = 165.4 so J4's shroud stands
-2.1 mm proud. J1's 1.4 mm is the geometric maximum, not a choice: its own shield tabs are
-plated slots reaching to x = 101.7, and the board has to hold them with 0.3 mm of copper
-clearance. J4's overhang is free to grow — its pins end at x = 157.6, so the only limit is
-how much unsupported shroud you want.
+**Both connectors overhang the board, for a case.** The west edge is cut back so J1's shell
+stands 1.4 mm proud, and the east edge so J4's shroud stands 2.1 mm proud. J1's 1.4 mm is
+the geometric maximum, not a choice: its own shield tabs are plated slots 1.7 mm behind the
+mating face, and the board has to hold them with 0.3 mm of copper clearance. J4's overhang
+is free to grow — its pins stop 9.9 mm short of its front face, so the only limit is how
+much unsupported shroud you want.
 
 The four M3 holes sit 3.2 mm in from both edges they meet, so each is on the corner
 diagonal. That 3.2 mm is set by U2, whose courtyard is what H3 would run into first.

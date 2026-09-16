@@ -6,7 +6,9 @@
 	(paper "A2")
 	(title_block
 		(title "sinodude-rp2354")
+		(date "2026-09-16")
 		(rev "A")
+		(company "carlossless")
 		(comment 1 "USB ICP programmer for SinoWealth 8051 microcontrollers")
 		(comment 2 "DUT header pin-compatible with SinoLink V2.2")
 		(comment 3 "github.com/carlossless/sinodude")
