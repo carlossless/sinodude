@@ -409,11 +409,19 @@ Fully routed in 919 segments and 264 vias; `kicad-cli pcb drc` and `kicad-cli sc
 report nothing at any severity, and every track runs at 0, 45 or 90 degrees.
 
 **Both connectors overhang the board, for a case.** The west edge is cut back so J1's shell
-stands 1.4 mm proud, and the east edge so J4's shroud stands 2.1 mm proud. J1's 1.4 mm is
-the geometric maximum, not a choice: its own shield tabs are plated slots 1.7 mm behind the
-mating face, and the board has to hold them with 0.3 mm of copper clearance. J4's overhang
-is free to grow — its pins stop 9.9 mm short of its front face, so the only limit is how
-much unsupported shroud you want.
+stands 1.4 mm proud, and the east edge so J4's shroud stands 1.6 to 2.1 mm proud.
+
+J1's 1.4 mm is the geometric maximum, not a choice. GCT's recommended layout puts the board
+edge flush with the mating face; the shield tabs are plated slots whose pads end 1.70 mm
+short of that line, and the board has to hold them with 0.3 mm of copper clearance, which
+lands the edge exactly 1.4 mm inboard.
+
+J4's figure is a range because the footprint and the part disagree about the shroud. KiCad's
+`IDC-Header_2x05_P2.54mm_Horizontal` draws a DIN-nominal body 8.90 mm deep; the DC3-2.54-10PAL
+drawing says 8.4 ±0.15. The land pattern is unaffected and matches exactly, so the board is
+right either way, but up to 0.5 mm of what the fab layer shows as plastic is not there. If
+the case needs a hard number, measure a sample. The overhang is free to grow — J4's pins stop
+9.9 mm short of its front face — so the limit is how much unsupported shroud you want.
 
 The four M3 holes sit 3.2 mm in from both edges they meet, so each is on the corner
 diagonal. That 3.2 mm is set by U2, whose courtyard is what H3 would run into first.
