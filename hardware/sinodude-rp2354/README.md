@@ -16,7 +16,7 @@ and adapters work unchanged.
 |---|---|
 | Schematic | complete — 93 components, ERC clean |
 | Sourcing | 88 of 93 parts carry an `LCSC` field; the 5 without are mounting holes and Tag-Connect pads |
-| PCB | complete — 68 × 36 mm, two layers, fully routed, DRC clean |
+| PCB | complete — 64 × 36 mm, two layers, fully routed, DRC clean |
 
 ## Sourcing
 
@@ -32,7 +32,7 @@ style, so the requirement travels with the symbol instead of living only in this
 L1   3.3uH/20%/Isat2.4A/DCR140m/POL      C22,C23  15pF/50V/5%/C0G/C0603
 C19  10uF/6.3V/20%/X5R/C0402             R15      750R/1%/ILIM333mA
 C20,C21,C37  4.7uF/10V/20%/X5R/C0402     R21      150R/1%/250mW/R1206
-R5   33R/1%/R0402                        F1       500mA/Rmax300mR/F1206
+R5   33R/1%/R0402                        F1       750mA/Rmax290mR/F1206
 Y1   12MHz/CL10pF/ESR50R/ABM8-272-T3      D4-D8    H5VSD3B/VRWM5V/SOD-323
 ```
 
@@ -91,7 +91,7 @@ all resolved to exact matches for the footprints already drawn:
 
 | Ref | Part | LCSC | Note |
 |---|---|---|---|
-| J1 | HCTL HC-TYPE-C-16P-01A | `C2894897` | the part the KiCad footprint is named after |
+| J1 | GCT USB4105-GF-A-120 | `C5184243` | swapped from the HCTL part, see below |
 | J4 | ZHOURI DC3-2.54-10PAL | `C5156674` | right-angle shrouded box header |
 | SW1, SW2 | C&K KMR221GLFS | `C72443` | the part the KiCad footprint is named after |
 
@@ -151,7 +151,7 @@ does not fit this board:
 | Footprint | Change |
 |---|---|
 | `USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal` | the four corner ground pads are 1.00 mm tall instead of 1.15 mm, so they clear the receptacle's own shell holes at a 0.25 mm hole-to-copper rule |
-| `IDC-Header_2x05_P2.54mm_Horizontal` | the pin 1 arrow is shortened so it does not sit on R26's pad |
+| `IDC-Header_2x05_P2.54mm_Horizontal` | the pin 1 arrow is shortened so it does not sit on R26's pad, and the body outline is clipped at the board edge it overhangs |
 
 Copies do not pick up upstream library fixes. The trade is deliberate: with them, every
 footprint on the board matches its library and DRC's library check is silent, so a real
@@ -205,20 +205,17 @@ parts and will not fit.
   capability; if you retarget to a fab with a finer drill there is nothing to change.
 - **GPIO17–25 and 27–29 are unused** and carry no-connect flags. They are free if a later
   revision wants a header or a second target interface.
-- **J1's board edge is where the footprint asks for it.** The GCT footprint carries a
-  `PCB Edge` line on `Dwgs.User`, and with J1 at (103.675, 120) rotated −90° that line lands
-  on x = 100.0, which is the Edge.Cuts west edge. The receptacle body runs from the edge to
-  x = 107.35 and its courtyard reaches 0.5 mm past the edge; the mating opening is flush with
-  the edge, as the recommended land pattern intends. Nothing to change unless a specific
-  plug overmold or enclosure needs the shell to stand proud, which would be a local notch.
-- **F1's hold current is the tight one, not its resistance.** The fitted part
-  (`C720075`, Jinrui JK-nSMD050-30) is 150 mΩ typical and 300 mΩ max, so the Value field's
-  `Rmax300mR` is met and the drop is 0.06 V typical at full load. The margin problem is
-  elsewhere: worst case through F1 is the TPS2114A's 333 mA target limit plus the board's
-  own draw, call it 400–430 mA, against a 500 mA hold — and PPTC hold current derates with
-  ambient while U2 sits next to it burning ~0.7 W at that current. A 750 mA part in the same
-  1206 land (Littelfuse `1206L075/16WR`, `C371166`, 90 mΩ typical, trips at 1.5 A) gives
-  about 1.8× margin and lower resistance. F1 guards the host port against a board fault; the
+- **Both board edges are cut back from where the footprints put them**, so the connectors
+  reach through a case wall. The GCT footprint's `PCB Edge` line on `Dwgs.User` lands on
+  x = 100.0, flush with the receptacle's mating face; the edge is at 101.4 instead. J4 gets
+  the same treatment at the other end. If you ever move J1 or J4, the edges move with them.
+- **F1 is a 750 mA part, not 500 mA.** Worst case through it is U3's 333 mA target limit
+  plus the board's own draw, call it 400–430 mA. Against a 500 mA hold that is under 20%
+  margin before derating, and PPTC hold current falls with ambient while U2 sits beside it
+  burning ~0.7 W at that current, so it would nuisance-trip. The fitted part is now
+  Littelfuse `1206L075/16WR` (`C371166`): 750 mA hold, 1.5 A trip, 90 mΩ typical and 290 mΩ
+  after a trip, in the same 1206 land. Note the stock — about 6 k against 300 k for the
+  500 mA Jinrui part it replaced. F1 guards the host port against a board fault; the
   target's own overcurrent limit is U3, so raising F1 does not weaken that.
 - **TPS2114A is old but not end-of-life.** TI lists both the TPS2114A and TPS2115A as
   ACTIVE — in production and recommended for new designs. The problem is purely that JLCPCB
@@ -392,9 +389,19 @@ cable lands directly on the pads.
 
 ## PCB
 
-68 x 36 mm, **two layers**, 2 mm corner radius, four M3 holes. Parts on both sides.
-Fully routed in 919 segments and 293 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
+64 x 36 mm, **two layers**, 2 mm corner radius, four M3 holes. Parts on both sides.
+Fully routed in 919 segments and 264 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
 report nothing at any severity, and every track runs at 0, 45 or 90 degrees.
+
+**Both connectors overhang the board, for a case.** The west edge is cut back to x = 101.4
+so J1's shell stands 1.4 mm proud, and the east edge to x = 165.4 so J4's shroud stands
+2.1 mm proud. J1's 1.4 mm is the geometric maximum, not a choice: its own shield tabs are
+plated slots reaching to x = 101.7, and the board has to hold them with 0.3 mm of copper
+clearance. J4's overhang is free to grow — its pins end at x = 157.6, so the only limit is
+how much unsupported shroud you want.
+
+The four M3 holes sit 3.2 mm in from both edges they meet, so each is on the corner
+diagonal. That 3.2 mm is set by U2, whose courtyard is what H3 would run into first.
 
 J1 (USB-C), U1 and J4 (DUT header) share the y = 120 centreline, and the signal flow runs
 left to right along it: USB-C, ESD, MCU, level shifters, DUT header. The board is laid out
@@ -422,8 +429,9 @@ Series resistors in a signal path (R3/R4 on USB, R25-R30 and R32 to the DUT) sta
 where the trace already runs.
 
 GND pours on both layers with solid pad connections (thermal spokes starve on two layers)
-and roughly 200 vias into them, on a 2.5 mm lattice wherever both pours are free, including the nine under U1's exposed pad. Isolated pour
-islands are dropped rather than left floating.
+and roughly 170 vias into them, on a 2.5 mm lattice wherever both pours are free, including
+the nine under U1's exposed pad. Isolated pour islands are dropped rather than left
+floating.
 
 **The ground net is one piece of copper, and that took work.** On two layers a dense signal
 field cuts the pour into pockets, and a pocket that holds a ground pad but reaches nothing

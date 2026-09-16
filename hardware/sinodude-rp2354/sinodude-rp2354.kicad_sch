@@ -13658,7 +13658,7 @@
 				)
 			)
 		)
-		(property "Value" "500mA/Rmax300mR/F1206"
+		(property "Value" "750mA/Rmax290mR/F1206"
 			(at 71.12 45.72 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13701,7 +13701,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C720075"
+		(property "LCSC" "C371166"
 			(at 71.12 48.26 90)
 			(hide yes)
 			(show_name no)
