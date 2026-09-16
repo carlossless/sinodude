@@ -405,7 +405,7 @@ cable lands directly on the pads.
 ## PCB
 
 64 x 36 mm, **two layers**, 2 mm corner radius, four M3 holes. Parts on both sides.
-Fully routed in 919 segments and 264 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
+Fully routed in 792 segments and 264 vias; `kicad-cli pcb drc` and `kicad-cli sch erc` both
 report nothing at any severity, and every track runs at 0, 45 or 90 degrees.
 
 **Both connectors overhang the board, for a case.** The west edge is cut back so J1's shell
