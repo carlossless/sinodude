@@ -372,7 +372,8 @@ cable lands directly on the pads.
 J1 (USB-C), U1 and J4 (DUT header) share the y = 120 centreline, and the signal flow runs
 left to right along it: USB-C, ESD, MCU, level shifters, DUT header. The board is laid out
 in blocks: USB and the 3V3 regulator west, SWD connector and clock north, target supply and
-level shifters east, target discharge south-east, the two buttons together under U4.
+level shifters east, the target discharge switch tucked under U6 beside the VTGT network it
+switches, the two buttons together along the south edge below U4.
 
 **U1 is rotated 180 degrees**, which puts its east column against U4 and brings USB DM/DP
 out of the south row toward J1.
@@ -390,24 +391,22 @@ Series resistors in a signal path (R3/R4 on USB, R25-R30 and R32 to the DUT) sta
 where the trace already runs.
 
 GND pours on both layers with solid pad connections (thermal spokes starve on two layers)
-and roughly 190 stitching vias. Isolated pour islands are dropped rather than left floating.
+and roughly 170 vias into them, including the nine under U1's exposed pad. Isolated pour
+islands are dropped rather than left floating.
 
 **The Tag-Connect (J2) is routed by hand.** Its five leg holes are exported as keepout
 circles that box in each pad, leaving exactly one single-track channel per pad, and which
 channel a pad may use is forced by geometry. No autorouter finds these. The same applies to
-the USB pair, and to the VBUS bridge between J1's two power pad pairs, which crosses on the
-back so the CC and D+/D- pads keep the front-side corridor beside the connector.
+the VBUS bridge between J1's two power pad pairs, which crosses on the back so the CC and
+D+/D- pads keep the front-side corridor beside the connector.
 
-### Unfinished
+No via sits on a J2 pad. A pogo pin has to land on bare, flat copper, and a via in the pad
+wicks paste and leaves a dimple even when it carries the same net, so DRC will not catch it.
 
-Two connections are still open. Both are in the congested pocket east of U1 and need either
-a hand-drawn track in KiCad or a small placement change:
-
-- `KEY_DIR`, U1 pin 10 to U6 pin 5.
-- `GND`, U1 pin 47 to the pour. The exposed pad (pin 61) is connected, so the part is
-  grounded; this is one of the package's peripheral ground pins.
-
-Everything else is routed and DRC is clean.
+`USB_DM`/`USB_DP` run as a coupled pair from J1 through R3/R4 to U1, 0.15 mm wide on a
+0.25 mm gap, on the front layer with no via between connector and MCU. Full-speed USB does
+not need this; the pair is routed anyway so the segment between the ESD diode and the
+series resistors has a defined return path.
 
 ### Design rules
 
@@ -418,13 +417,14 @@ board does not attract fine-pitch pricing.
 |---|---|---|---|
 | Default | 0.15 mm | 0.15 mm | 0.6 / 0.3 mm |
 | Power | 0.30 mm | 0.15 mm | 0.6 / 0.3 mm |
+| USB | 0.15 mm | 0.15 mm | 0.6 / 0.3 mm, pair gap 0.25 mm |
 
 Board minimums are set to JLCPCB's two-layer capability: 0.127 mm track and clearance,
 0.3 mm drill, 0.45 mm via, 0.13 mm annular ring, 0.5 mm hole-to-hole, 0.3 mm copper-to-edge,
 0.8 mm silkscreen text at 0.15 mm line width.
 
-RP2350's USB is full-speed only, so there is no impedance-controlled pair to hold and two
-layers cost nothing here.
+RP2350's USB is full-speed only, so the USB class holds a pair geometry but no target
+impedance, and two layers cost nothing here.
 
 ### Passive sizes
 
