@@ -236,26 +236,37 @@ pub enum SinoLinkError {
 type Result<T> = std::result::Result<T, SinoLinkError>;
 
 /// Decode the dongle's master result byte, reported by both the 0x40 connect status and the
-/// 0x16 operation status.
+/// Every value the v3.00 firmware can put in `resp[0]` of bRequest 0x16, enumerated from the
+/// stores to its status byte at RAM 0x20000014. V3.20 moved that byte to 0x20000015 and uses a
+/// different set, so a dongle reporting a version other than 03 00 may not match this.
 pub fn decode_status(code: u8) -> &'static str {
     match code {
         0x00 => "ok",
-        0x09 => "ISP connect handshake failed",
-        0x11 => "program mismatch",
-        0x12 => "verify mismatch",
-        0x14..=0x17 => "frame/byte send timeout",
-        0x18 | 0x19 | 0x20 | 0x21 => "result byte read timeout",
-        0x22 | 0x23 => "silicon ID read failed",
-        0x24 | 0x25 => "address/value send timeout",
+        0x01 => "JTAG IDCODE read failed",
+        0x08 => "ICP write-command header not acknowledged",
+        0x09 => "ICP connect handshake failed",
+        0x0a => "ICP program verify failed",
+        0x11 | 0x22 | 0x96 => "flash operation dispatch failed",
+        0x14 => "ICP bit send timeout",
+        0x15 => "TAP byte shift timeout",
+        0x16 => "ICP nibble send timeout",
+        0x17 => "ICP framed nibble send timeout",
+        0x18 | 0x19 => "ICP result byte read timeout",
+        0x21 => "chip ID SFR read failed",
+        0x23 => "silicon ID read failed",
+        0x25 => "ICP address and value send timeout",
         0x28 => "erase frame not acknowledged",
-        0x30 => "combined address+read timeout",
-        0x33 | 0x34 | 0x37 => "program/verify mismatch",
+        0x30 => "ICP address and read timeout",
+        0x33 | 0x34 | 0x37 => "ICP program verify mismatch",
+        0x38 => "bulk stream transfer failed",
         0x55 => "busy",
-        0x99 => "ISP shim load failed",
-        0xcc | 0xdd => "debug entry retry",
+        0x99 => "ISP mode entry failed",
+        0xcc => "target mode entry failed",
         0xee => "erase busy timeout",
         0xf3 => "single-wire bus stuck",
-        0xff => "erase failed",
+        0xf4 => "oscillator measurement failed",
+        0xf5 => "target handshake not detected",
+        0xff => "operation setup rejected",
         _ => "unknown",
     }
 }
