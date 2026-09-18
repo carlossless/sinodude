@@ -4,8 +4,8 @@
 
 use super::Protection;
 use crate::parts::{
-    hex_string, Part, Region, SecurityRecordFormat, Voltage, PROTECTION_PASSWORD_LEN,
-    PROTECTION_PASSWORD_OFFSET, PROTECTION_RECORD_LEN,
+    find_parts_by_part_number, hex_string, Part, Region, SecurityRecordFormat, Voltage,
+    PROTECTION_PASSWORD_LEN, PROTECTION_PASSWORD_OFFSET, PROTECTION_RECORD_LEN,
 };
 use hex_literal::hex;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -217,6 +217,8 @@ pub enum SinoLinkError {
     VoltageOutOfRange { power: Power, mv: u16 },
     #[error("no target power detected ({mv} mV); with --power external the board must supply the target")]
     NoExternalPower { mv: u16 },
+    #[error("part number mismatch: expected {expected}, got {actual}")]
+    PartNumberMismatch { expected: String, actual: String },
     #[error("unlock key rejected: the target still reads locked")]
     UnlockKeyRejected,
     #[error("unsupported for this part: {0}")]
@@ -840,7 +842,45 @@ impl SinoLinkProgrammer {
         {
             return Err(SinoLinkError::UnlockKeyRejected);
         }
+        self.verify_part_number()?;
         self.non_default_option_bits = self.upper_options_differ();
+        Ok(())
+    }
+
+    /// Read the part number the die reports and refuse a mismatch, so a wrong `--part` cannot
+    /// program a chip with another part's geometry.
+    fn verify_part_number(&mut self) -> Result<()> {
+        let block = match self.part.custom_block {
+            0x02 => 0x0a00,
+            0x03 => 0x1200,
+            0x04 => 0x2200,
+            _ => return Ok(()),
+        };
+        let Ok(data) = self.link.read(block, Region::Custom, 16) else {
+            return Ok(());
+        };
+        let Some(actual) = data.get(9..14) else {
+            return Ok(());
+        };
+        // A locked or unpowered die reads uniformly; that is not a mismatch worth reporting.
+        if actual.iter().all(|&b| b == 0xff) || actual.iter().all(|&b| b == 0x00) {
+            return Ok(());
+        }
+        eprintln!("Target part number: {}", hex_string(actual));
+        if actual != self.part.part_number {
+            let matching = find_parts_by_part_number(actual.try_into().unwrap());
+            if !matching.is_empty() {
+                eprintln!(
+                    "Parts matching {}: {}",
+                    hex_string(actual),
+                    matching.join(", ")
+                );
+            }
+            return Err(SinoLinkError::PartNumberMismatch {
+                expected: hex_string(&self.part.part_number),
+                actual: hex_string(actual),
+            });
+        }
         Ok(())
     }
 
