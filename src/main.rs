@@ -409,6 +409,15 @@ fn cli() -> Command {
         )
 }
 
+/// The PARTS keys are static, so the chosen name can outlive the ArgMatches.
+fn part_name_static(sub: &ArgMatches) -> &'static str {
+    let n = sub
+        .get_one::<String>("part")
+        .map(|s| s.as_str())
+        .unwrap_or("");
+    PARTS.keys().find(|k| **k == n).copied().unwrap_or("")
+}
+
 fn make_programmer(
     sub: &ArgMatches,
     part: &'static Part,
@@ -417,7 +426,12 @@ fn make_programmer(
     match sub.get_one::<String>("programmer").map(|s| s.as_str()) {
         Some("sinolink") => {
             let power = sinolink_power(sub);
-            Ok(Box::new(SinoLinkProgrammer::new(part, cancelled, power)?))
+            Ok(Box::new(SinoLinkProgrammer::new(
+                part,
+                part_name_static(sub),
+                cancelled,
+                power,
+            )?))
         }
         _ => {
             let port = sub
@@ -474,9 +488,6 @@ fn sinolink_cmd(matches: &ArgMatches) -> Result<(), Box<dyn std::error::Error>> 
         "part {} chip_type {} flash {:#x}",
         part_name, part.chip_type, part.flash_size
     );
-    if !blob_is_verified(part) {
-        eprintln!("warning: no verified config blob for {part_name}; using the SH68F90A capture with fields patched, results are not trustworthy");
-    }
     let write_mode = matches!(
         action,
         "erase" | "program" | "options" | "writeopts" | "recover" | "raw"
@@ -492,7 +503,7 @@ fn sinolink_cmd(matches: &ArgMatches) -> Result<(), Box<dyn std::error::Error>> 
     };
     std::thread::sleep(std::time::Duration::from_millis(300));
     println!("target power: {power} ({mv} mV)");
-    let blob = build_blob(part, power, write_mode);
+    let blob = build_blob(part, part_name, write_mode);
     link.download_blob(&blob)?;
     let status = link.connect(mode)?;
     std::thread::sleep(std::time::Duration::from_millis(20));

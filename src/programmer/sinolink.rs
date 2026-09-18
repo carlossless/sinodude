@@ -7,7 +7,6 @@ use crate::parts::{
     find_parts_by_part_number, hex_string, Part, Region, SecurityRecordFormat, Voltage,
     PROTECTION_PASSWORD_LEN, PROTECTION_PASSWORD_OFFSET, PROTECTION_RECORD_LEN,
 };
-use hex_literal::hex;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use nusb::transfer::{
@@ -581,80 +580,6 @@ impl SinoLink {
     }
 }
 
-/// The config blob ProWriter sends for an SH68F90A, captured from the wire: the read-session
-/// variant and the write-session variant. Synthesising a blob from scratch for an arbitrary part
-/// is not solved (see `8051_TRANSPORT_GAP.md` in the reverse-engineering repo), so a known-good
-/// capture is the base and only the fields whose derivation is established get patched.
-const BLOB_WRITE: [u8; 1024] = hex!(
-    "78877a0700010301040000050000030106f20000000000000008000000000000"
-    "00000000000000000000000000000008a4e063c00f0000880000000000000000"
-    "0000010040ff0000c04a64000000000000000000000001008658000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0002000080000000000000000000000000000000000000000000000000000000"
-    "081c1106080f09000aff00000000000009120000050068f90a00000000000000"
-    "0400000000000000000000000000000004000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000100000001200000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000024011514321605500000000000000000"
-);
-
-const BLOB_READ: [u8; 1024] = hex!(
-    "7887bd0700020402040000050000030106200000000000000008000000000000"
-    "00000000000000000000000000000008a4e063c00f0000880000000000000000"
-    "0000010040ff0000fd8f3600000000000000000000000100b363000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0002000080000000000000000000000000000000000000000000000000000000"
-    "081c1106080f09000aff00000000000009120000050068f90a00000000000000"
-    "0400000000000000000000000000000004000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000100000001200000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000000000000000000000000000000000000"
-    "0000000000000000000000000000000023030820360705500000000000000000"
-);
-
 /// Block holding the die.s own identity record, keyed by CustomBlock. The part number sits at
 /// offset 9 within it.
 pub fn product_block_addr(part: &Part) -> u32 {
@@ -666,37 +591,78 @@ pub fn product_block_addr(part: &Part) -> u32 {
     }
 }
 
-/// True when `build_blob` can produce a blob this driver trusts. Everything else gets the
-/// SH68F90A capture with a handful of fields patched, which is wrong in ways that show up as
-/// uniform garbage on read.
-pub fn blob_is_verified(part: &Part) -> bool {
-    part.part_number == hex!("68f90a0000")
+/// Pack a chip name the way the dongle expects at blob[0xa0]: one length byte, then one code per
+/// character with digits 0-9 mapping to 0..9 and letters A-Z to 10..35, then a 0xff terminator.
+fn pack_chip_name(name: &str, out: &mut [u8]) -> usize {
+    let mut n = 0;
+    for c in name.chars().map(|c| c.to_ascii_uppercase()) {
+        let code = match c {
+            '0'..='9' => c as u8 - b'0',
+            'A'..='Z' => c as u8 - b'A' + 10,
+            _ => continue,
+        };
+        if n + 1 >= out.len() {
+            break;
+        }
+        out[n] = code;
+        n += 1;
+    }
+    out[n] = 0xff;
+    n
 }
 
-/// Build the 1024-byte config blob the dongle latches ChipType, the link class, geometry and the
-/// region addresses from.
-pub fn build_blob(part: &Part, power: Power, write_mode: bool) -> [u8; 1024] {
-    let mut b = if write_mode { BLOB_WRITE } else { BLOB_READ };
-    // Escape hatch for telling a driver bug apart from a target problem: send the capture exactly
-    // as ProWriter did, with none of the patching below.
-    if std::env::var("SINOLINK_RAW_BLOB").is_ok() {
-        return b;
-    }
+/// Build the 1024-byte config blob from the part table rather than from a capture.
+///
+/// Field placement follows `SinoLink_BuildDownloadFlashParamsBlob` in ProWriter's WDev_Pro06B.dll;
+/// see `SINOLINK_8051_DRIVING.md`. The three content-derived fields ProWriter fills (a rounded
+/// image length and two checksums of the image being written) are left zero.
+pub fn build_blob(part: &Part, name: &str, write_mode: bool) -> [u8; 1024] {
+    let mut b = [0u8; 1024];
+    b[0x00] = 0x78;
+    b[0x01] = 0x87;
     b[0x03] = part.chip_type;
-    b[0x04] = 0x00;
-    // Left at the captured VDDVoltageType. The rail is chosen by bRequest 0x3e subcommand 1, and
-    // the encoding of this field is not established, so overwriting it buys nothing.
-    let _ = power;
+    let (m5, m6, m7) = if write_mode { (1, 3, 1) } else { (2, 4, 2) };
+    b[0x05] = m5;
+    b[0x06] = m6;
+    b[0x07] = m7;
+    b[0x08] = part.security_level;
+    b[0x0b] = 5;
     b[0x0e] = part.custom_block;
+    b[0x0f] = 1;
+    b[0x10] = 6;
+    b[0x11] = if write_mode { 0xf2 } else { 0x20 };
+    b[0x19] = part.option_byte_count as u8;
     b[0x2f] = part.option_byte_count as u8;
-    // Deliberately NOT patched from part.default_code_options: the whole blob is an SH68F90A
-    // capture, and mixing the part table's defaults into it put a real part into a state where the
-    // top of flash stopped accepting writes. Options are driven separately by load_option_bytes.
+
+    let opts = part.default_code_options;
+    let n = opts.len().min(8);
+    b[0x30..0x30 + n].copy_from_slice(&opts[..n]);
+
+    let flash = part.flash_size as u32;
+    b[0x40..0x44].copy_from_slice(&flash.to_le_bytes());
+    b[0x44..0x48].copy_from_slice(&flash.to_le_bytes());
+    b[0x54..0x58].copy_from_slice(&flash.to_le_bytes());
+    b[0x80..0x84].copy_from_slice(&(part.sector_size as u32).to_le_bytes());
+    let sectors = part.flash_size.div_ceil(part.sector_size) as u32;
+    b[0x84..0x88].copy_from_slice(&sectors.to_le_bytes());
+
+    let mut packed = [0u8; 32];
+    let len = pack_chip_name(name, &mut packed);
+    b[0xa0] = len as u8;
+    b[0xa1..0xa1 + len + 1].copy_from_slice(&packed[..len + 1]);
+
+    let product = product_block_addr(part);
+    b[0xb0..0xb4].copy_from_slice(&(product + 9).to_le_bytes());
+    b[0xb4] = part.part_number.len() as u8;
     b[0xb6..0xbb].copy_from_slice(&part.part_number);
+
+    b[0xc0] = 4;
+    b[0xd0] = 4;
     b[0x204..0x208].copy_from_slice(&part.customer_id.address.to_le_bytes());
-    // The capture holds 0x1200 here, which is the product block for CustomBlock 3, not the
-    // customer-option address this used to write.
-    b[0x208..0x20c].copy_from_slice(&product_block_addr(part).to_le_bytes());
+    b[0x208..0x20c].copy_from_slice(&product.to_le_bytes());
+    b[0x3f6] = 0x05;
+    b[0x3f7] = 0x50;
+
     apply_blob_patch(&mut b);
     set_blob_checksum(&mut b);
     b
@@ -756,6 +722,7 @@ pub struct SinoLinkProgrammer {
     cancelled: Arc<AtomicBool>,
     power: Power,
     connect_mode: u8,
+    name: &'static str,
     unlock_key: Option<[u8; 8]>,
     stored_custom: Option<Vec<u8>>,
     powered_down: bool,
@@ -763,21 +730,21 @@ pub struct SinoLinkProgrammer {
 }
 
 impl SinoLinkProgrammer {
-    pub fn new(part: &'static Part, cancelled: Arc<AtomicBool>, power: Power) -> Result<Self> {
+    pub fn new(
+        part: &'static Part,
+        name: &'static str,
+        cancelled: Arc<AtomicBool>,
+        power: Power,
+    ) -> Result<Self> {
         power.check(part)?;
         let link = SinoLink::open()?;
-        if !blob_is_verified(part) {
-            eprintln!(
-                "warning: no verified config blob for {}; falling back to the SH68F90A capture with fields patched. Geometry, region addresses and receive calibration are likely wrong, which usually shows up as a uniform byte on read.",
-                hex_string(&part.part_number)
-            );
-        }
         Ok(Self {
             link,
             part,
             cancelled,
             power,
             connect_mode: 1,
+            name,
             unlock_key: None,
             stored_custom: None,
             powered_down: false,
@@ -833,7 +800,7 @@ impl SinoLinkProgrammer {
         let mv = self.apply_power()?;
         std::thread::sleep(POWER_CYCLE);
         self.powered_down = false;
-        let blob = build_blob(self.part, self.power, write_mode);
+        let blob = build_blob(self.part, self.name, write_mode);
         self.link.download_blob(&blob)?;
         let status = self.link.connect(self.connect_mode)?;
         std::thread::sleep(SETTLE);
@@ -1304,6 +1271,126 @@ impl Drop for SinoLinkProgrammer {
         if self.power != Power::External && !self.powered_down {
             let _ = self.link.set_supply(Supply::Off);
             self.powered_down = true;
+        }
+    }
+}
+
+#[cfg(test)]
+mod blob_tests {
+    use super::*;
+    use hex_literal::hex;
+
+    /// What ProWriter actually sent for an SH68F90A, captured from the wire. Not used to drive
+    /// hardware any more; it is the oracle the builder is checked against.
+    const BLOB_WRITE: [u8; 1024] = hex!(
+        "78877a0700010301040000050000030106f20000000000000008000000000000"
+        "00000000000000000000000000000008a4e063c00f0000880000000000000000"
+        "0000010040ff0000c04a64000000000000000000000001008658000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0002000080000000000000000000000000000000000000000000000000000000"
+        "081c1106080f09000aff00000000000009120000050068f90a00000000000000"
+        "0400000000000000000000000000000004000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000100000001200000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000024011514321605500000000000000000"
+    );
+    const BLOB_READ: [u8; 1024] = hex!(
+        "7887bd0700020402040000050000030106200000000000000008000000000000"
+        "00000000000000000000000000000008a4e063c00f0000880000000000000000"
+        "0000010040ff0000fd8f3600000000000000000000000100b363000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0002000080000000000000000000000000000000000000000000000000000000"
+        "081c1106080f09000aff00000000000009120000050068f90a00000000000000"
+        "0400000000000000000000000000000004000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000100000001200000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000023030820360705500000000000000000"
+    );
+
+    /// Offsets ProWriter derives from the image being transferred or from the clock, which a
+    /// synthesised blob cannot and need not reproduce.
+    fn content_derived(i: usize) -> bool {
+        i == 0x02
+            || (0x44..0x48).contains(&i)
+            || (0x48..0x4c).contains(&i)
+            || (0x58..0x5c).contains(&i)
+            || (0x3f0..0x3f6).contains(&i)
+    }
+
+    #[test]
+    fn synth_matches_the_captured_sh68f90a_blob() {
+        for (write_mode, captured) in [(false, BLOB_READ), (true, BLOB_WRITE)] {
+            let built = build_blob(&crate::parts::sh68f90a::PART, "SH68F90A", write_mode);
+            let part = &crate::parts::sh68f90a::PART;
+            // The capture has the operator.s option selections applied; ours has the table
+            // defaults. A difference is only legitimate inside the editable mask.
+            let editable = |i: usize, a: u8, b: u8| {
+                (0x30..0x38).contains(&i)
+                    && (a ^ b) & !part.code_option_mask.get(i - 0x30).copied().unwrap_or(0) == 0
+            };
+            let diffs: Vec<String> = (0..1024)
+                .filter(|&i| {
+                    !content_derived(i)
+                        && built[i] != captured[i]
+                        && !editable(i, built[i], captured[i])
+                })
+                .map(|i| {
+                    format!(
+                        "{i:#05x}: built {:02x} capture {:02x}",
+                        built[i], captured[i]
+                    )
+                })
+                .collect();
+            assert!(
+                diffs.is_empty(),
+                "write_mode={write_mode}: {} byte(s) differ:\n{}",
+                diffs.len(),
+                diffs.join("\n")
+            );
         }
     }
 }
