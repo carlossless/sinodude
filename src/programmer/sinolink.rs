@@ -644,6 +644,17 @@ const BLOB_READ: [u8; 1024] = hex!(
     "0000000000000000000000000000000023030820360705500000000000000000"
 );
 
+/// Block holding the die.s own identity record, keyed by CustomBlock. The part number sits at
+/// offset 9 within it.
+pub fn product_block_addr(part: &Part) -> u32 {
+    match part.custom_block {
+        0x02 => 0x0a00,
+        0x03 => 0x1200,
+        0x04 => 0x2200,
+        _ => 0,
+    }
+}
+
 /// True when `build_blob` can produce a blob this driver trusts. Everything else gets the
 /// SH68F90A capture with a handful of fields patched, which is wrong in ways that show up as
 /// uniform garbage on read.
@@ -672,7 +683,9 @@ pub fn build_blob(part: &Part, power: Power, write_mode: bool) -> [u8; 1024] {
     // top of flash stopped accepting writes. Options are driven separately by load_option_bytes.
     b[0xb6..0xbb].copy_from_slice(&part.part_number);
     b[0x204..0x208].copy_from_slice(&part.customer_id.address.to_le_bytes());
-    b[0x208..0x20c].copy_from_slice(&part.customer_option.address.to_le_bytes());
+    // The capture holds 0x1200 here, which is the product block for CustomBlock 3, not the
+    // customer-option address this used to write.
+    b[0x208..0x20c].copy_from_slice(&product_block_addr(part).to_le_bytes());
     apply_blob_patch(&mut b);
     set_blob_checksum(&mut b);
     b
@@ -850,11 +863,9 @@ impl SinoLinkProgrammer {
     /// Read the part number the die reports and refuse a mismatch, so a wrong `--part` cannot
     /// program a chip with another part's geometry.
     fn verify_part_number(&mut self) -> Result<()> {
-        let block = match self.part.custom_block {
-            0x02 => 0x0a00,
-            0x03 => 0x1200,
-            0x04 => 0x2200,
-            _ => return Ok(()),
+        let block = match product_block_addr(self.part) {
+            0 => return Ok(()),
+            a => a,
         };
         let Ok(data) = self.link.read(block, Region::Custom, 16) else {
             return Ok(());
