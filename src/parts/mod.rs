@@ -11,8 +11,8 @@ pub const MAX_PROTECT_GROUPS: usize = 32;
 
 pub const PROTECTION_BITMAP_LEN: usize = 0x10;
 pub const PROTECTION_FLAG_OFFSET: usize = 0x10;
-pub const PROTECTION_MARK_OFFSET: usize = 0x11;
-pub const PROTECTION_MARK_LEN: usize = 6;
+pub const PROTECTION_PASSWORD_OFFSET: usize = 0x11;
+pub const PROTECTION_PASSWORD_LEN: usize = 6;
 
 pub mod adc2015;
 pub mod ch6935a;
@@ -602,11 +602,21 @@ impl Part {
             .min(MAX_PROTECT_GROUPS)
     }
 
+    /// True when the geometry needs more groups than the 16 bitmap bytes of a 25-byte record can
+    /// hold. [`Self::protect_group_count`] clamps, so acting on such a part would silently leave
+    /// everything past group 31 unprotected.
+    pub fn protection_exceeds_record(&self) -> bool {
+        self.flash_size
+            .div_ceil(self.sector_size)
+            .div_ceil(self.sectors_per_protect_bit())
+            > MAX_PROTECT_GROUPS
+    }
+
     pub fn build_protection_record(
         &self,
         read_protect: &[bool],
         write_protect: &[bool],
-        custom_mark: &[u8; 6],
+        password: &[u8; 6],
     ) -> Vec<u8> {
         let mut record = vec![0u8; PROTECTION_RECORD_LEN];
         let groups = self.protect_group_count();
@@ -631,8 +641,8 @@ impl Part {
 
         let any_write = write_protect.iter().take(groups).any(|&b| b);
         record[PROTECTION_FLAG_OFFSET] = if any_write { 0x33 } else { 0x00 };
-        record[PROTECTION_MARK_OFFSET..PROTECTION_MARK_OFFSET + PROTECTION_MARK_LEN]
-            .copy_from_slice(custom_mark);
+        record[PROTECTION_PASSWORD_OFFSET..PROTECTION_PASSWORD_OFFSET + PROTECTION_PASSWORD_LEN]
+            .copy_from_slice(password);
 
         record
     }
@@ -1129,6 +1139,51 @@ mod protection_tests {
         let (r, w) = part.decode_protection_record(&record);
         assert_eq!(r, all);
         assert_eq!(w, all);
+    }
+
+    #[test]
+    fn password_lands_at_record_offset_0x11() {
+        let part = &sh68f90a::PART;
+        let all = vec![true; 16];
+        let pw = [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff];
+        let record = part.build_protection_record(&all, &all, &pw);
+
+        assert_eq!(
+            &record[PROTECTION_PASSWORD_OFFSET..PROTECTION_PASSWORD_OFFSET + 6],
+            &pw
+        );
+        assert!(record[PROTECTION_PASSWORD_OFFSET + 6..]
+            .iter()
+            .all(|&b| b == 0));
+    }
+
+    #[test]
+    fn oversized_geometries_are_flagged_not_clamped_silently() {
+        assert!(sh32f9b00::PART.protection_exceeds_record());
+        assert!(sh30f9010::PART.protection_exceeds_record());
+        assert!(!sh68f90a::PART.protection_exceeds_record());
+        assert!(!sh68f89::PART.protection_exceeds_record());
+
+        let over = PARTS
+            .values()
+            .filter(|p| p.protection_exceeds_record())
+            .count();
+        assert_eq!(over, 52);
+    }
+
+    #[test]
+    fn every_part_group_count_fits_the_bitmap() {
+        for (name, part) in PARTS.entries() {
+            let groups = part.protect_group_count();
+            assert!(
+                groups <= MAX_PROTECT_GROUPS,
+                "{name} reports {groups} groups"
+            );
+            assert!(
+                groups * 4 <= PROTECTION_BITMAP_LEN * 8,
+                "{name} bitmap overflows the flag byte"
+            );
+        }
     }
 
     #[test]

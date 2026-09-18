@@ -1,8 +1,9 @@
 use super::super::parts::{
     find_parts_by_jtag_id, find_parts_by_part_number, format_parsed_options, hex_string,
-    parse_code_options, Part, Region, SecurityRecordFormat, Voltage, PROTECTION_MARK_LEN,
-    PROTECTION_MARK_OFFSET, PROTECTION_RECORD_LEN,
+    parse_code_options, Part, Region, SecurityRecordFormat, Voltage, PROTECTION_PASSWORD_LEN,
+    PROTECTION_PASSWORD_OFFSET, PROTECTION_RECORD_LEN,
 };
+use super::Protection;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use std::io::{Read, Write};
@@ -138,12 +139,6 @@ pub enum SinodudeSerialProgrammerError {
     },
     #[error("Part does not support 5.0V required by sinodude-serial programmer. Supported voltages: {supported}")]
     UnsupportedVoltage { supported: String },
-}
-
-pub struct Protection {
-    pub read: Vec<bool>,
-    pub write: Vec<bool>,
-    pub record: Vec<u8>,
 }
 
 pub struct SinodudeSerialProgrammer {
@@ -988,6 +983,11 @@ impl SinodudeSerialProgrammer {
                 part: self.part_label(),
             });
         }
+        if self.chip_type.protection_exceeds_record() {
+            return Err(SinodudeSerialProgrammerError::UnsupportedProtection {
+                part: self.part_label(),
+            });
+        }
         let addr = self.chip_type.security.address;
         let raw = self.read_region(Region::Custom, addr, PROTECTION_RECORD_LEN)?;
         let (read, write) = self.chip_type.decode_protection_record(&raw);
@@ -1002,8 +1002,14 @@ impl SinodudeSerialProgrammer {
         &mut self,
         read_protect: &[bool],
         write_protect: &[bool],
+        new_password: Option<&[u8; PROTECTION_PASSWORD_LEN]>,
     ) -> Result<(), SinodudeSerialProgrammerError> {
         if self.chip_type.security_record_format != SecurityRecordFormat::Record19 {
+            return Err(SinodudeSerialProgrammerError::UnsupportedProtection {
+                part: self.part_label(),
+            });
+        }
+        if self.chip_type.protection_exceeds_record() {
             return Err(SinodudeSerialProgrammerError::UnsupportedProtection {
                 part: self.part_label(),
             });
@@ -1016,16 +1022,20 @@ impl SinodudeSerialProgrammer {
                 PROTECTION_RECORD_LEN,
             )
             .unwrap_or_else(|_| vec![0u8; PROTECTION_RECORD_LEN]);
-        let mut custom_mark = [0u8; PROTECTION_MARK_LEN];
-        if existing.len() >= PROTECTION_MARK_OFFSET + PROTECTION_MARK_LEN {
-            custom_mark.copy_from_slice(
-                &existing[PROTECTION_MARK_OFFSET..PROTECTION_MARK_OFFSET + PROTECTION_MARK_LEN],
+        let mut password = [0u8; PROTECTION_PASSWORD_LEN];
+        if existing.len() >= PROTECTION_PASSWORD_OFFSET + PROTECTION_PASSWORD_LEN {
+            password.copy_from_slice(
+                &existing[PROTECTION_PASSWORD_OFFSET
+                    ..PROTECTION_PASSWORD_OFFSET + PROTECTION_PASSWORD_LEN],
             );
         }
+        if let Some(p) = new_password {
+            password = *p;
+        }
 
-        let record =
-            self.chip_type
-                .build_protection_record(read_protect, write_protect, &custom_mark);
+        let record = self
+            .chip_type
+            .build_protection_record(read_protect, write_protect, &password);
 
         for (i, (&want, &have)) in record.iter().zip(existing.iter()).enumerate() {
             if have & !want != 0 {
