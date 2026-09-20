@@ -565,6 +565,10 @@ impl SinoLink {
         let start = std::time::Instant::now();
         loop {
             let (code, sub) = self.op_status()?;
+            debug!(
+                "op status {code:#04x} ({}) sub={sub:#010x}",
+                decode_status(code)
+            );
             if code == 0x00 {
                 return Ok(());
             }
