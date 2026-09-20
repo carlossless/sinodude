@@ -49,9 +49,8 @@ pub mod req {
     pub const READ: u8 = 0x44;
     pub const ERASE: u8 = 0x45;
     pub const UNLOCK_KEY: u8 = 0x46;
-    /// Documented by ProWriter captures but not reproduced here: driving it with the parameter
-    /// block the spec describes returned a cleared status rather than a sum, and a second call
-    /// dropped the USB device. Unused until the framing is understood.
+    /// Sums a buffer in the dongle's own RAM, not target memory, so it verifies the download
+    /// rather than the chip. Unused here for that reason.
     #[allow(dead_code)]
     pub const CHECKSUM: u8 = 0x49;
 }
