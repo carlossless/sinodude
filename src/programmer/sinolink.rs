@@ -779,10 +779,7 @@ impl SinoLinkProgrammer {
     /// load-switch positions, so the only way to know which voltage a given dongle puts out is to
     /// measure it.
     fn apply_power(&self) -> Result<u16> {
-        let mv = match self.power.supply() {
-            Some(sup) => self.link.set_supply(sup)?,
-            None => self.link.pin_supply(2, 0).map(|_| 0).unwrap_or(0),
-        };
+        let mv = apply_power_to(&self.link, self.power)?;
         match self.power.expected_mv() {
             Some((lo, hi)) if mv < lo || mv > hi => {
                 return Err(SinoLinkError::VoltageOutOfRange {
@@ -1395,6 +1392,27 @@ mod blob_tests {
                 diffs.len(),
                 diffs.join("\n")
             );
+        }
+    }
+}
+
+/// Below this a rail is not a real supply, just a floating pin or residual charge.
+const MIN_EXTERNAL_MV: u16 = 2000;
+
+/// Put the target rail into the requested state and report what DUT_VDD actually measures.
+///
+/// For [`Power::External`] this explicitly opens the dongle's load switch rather than leaving
+/// whatever the last run selected, so the dongle cannot backfeed a board that supplies itself,
+/// and then checks that something else really is powering the target.
+pub fn apply_power_to(link: &SinoLink, power: Power) -> Result<u16> {
+    match power.supply() {
+        Some(sup) => link.set_supply(sup),
+        None => {
+            let mv = link.set_supply(Supply::Off)?;
+            if mv < MIN_EXTERNAL_MV {
+                return Err(SinoLinkError::NoExternalPower { mv });
+            }
+            Ok(mv)
         }
     }
 }

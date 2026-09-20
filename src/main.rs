@@ -496,11 +496,7 @@ fn sinolink_cmd(matches: &ArgMatches) -> Result<(), Box<dyn std::error::Error>> 
     // and re-applying it without this drops the ICP handshake with status 0x09.
     let _ = link.power_reset(0);
     std::thread::sleep(std::time::Duration::from_millis(300));
-    let mv = match power {
-        Power::V5_0 => link.set_supply(Supply::RailB)?,
-        Power::V3_3 => link.set_supply(Supply::RailA)?,
-        Power::External => 0,
-    };
+    let mv = apply_power_to(&link, power)?;
     std::thread::sleep(std::time::Duration::from_millis(300));
     println!("target power: {power} ({mv} mV)");
     let blob = build_blob(part, part_name, write_mode);
