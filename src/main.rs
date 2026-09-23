@@ -659,8 +659,15 @@ fn sinolink_cmd(matches: &ArgMatches) -> Result<(), Box<dyn std::error::Error>> 
             link.load_option_bytes(0x30, 8, pm)?;
         }
         println!("programming {} bytes at {:#x}", data.len(), addr);
-        for (i, chunk) in data.chunks(0x400).enumerate() {
-            link.program(addr + (i * 0x400) as u32, region, chunk)?;
+        // Some parts latch only one byte per program command whatever length is asked for, so the
+        // chunk size has to drop to 1 to write them at all. See SINOLINK_8051_DRIVING.md.
+        let csz: usize = std::env::var("SINOLINK_CHUNK")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .filter(|n| *n > 0)
+            .unwrap_or(0x400);
+        for (i, chunk) in data.chunks(csz).enumerate() {
+            link.program(addr + (i * csz) as u32, region, chunk)?;
         }
         println!("program ok");
         return Ok(());
