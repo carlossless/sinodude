@@ -659,8 +659,9 @@ fn sinolink_cmd(matches: &ArgMatches) -> Result<(), Box<dyn std::error::Error>> 
             link.load_option_bytes(0x30, 8, pm)?;
         }
         println!("programming {} bytes at {:#x}", data.len(), addr);
-        // Some parts latch only one byte per program command whatever length is asked for, so the
-        // chunk size has to drop to 1 to write them at all. See SINOLINK_8051_DRIVING.md.
+        // On some parts a program transfer stops matching after about five bytes whatever length is
+        // asked for; one byte per command stays under that. A workaround, not a hardware limit.
+        // See SINOLINK_8051_DRIVING.md.
         let csz: usize = std::env::var("SINOLINK_CHUNK")
             .ok()
             .and_then(|v| v.parse().ok())
