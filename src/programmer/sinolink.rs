@@ -221,6 +221,10 @@ pub enum SinoLinkError {
     NoExternalPower { mv: u16 },
     #[error("part number mismatch: expected {expected}, got {actual}")]
     PartNumberMismatch { expected: String, actual: String },
+    #[error("the erase reported success but the flash still reads programmed. Some parts need a 5 V supply to erase and silently do nothing at 3.3 V; check --power.")]
+    EraseDidNothing,
+    #[error("no verified link to the target: connect mode {mode} is not checked by the firmware, and the die reads uniformly. Only mode 1 (ICP) proves the target is answering; check seating, wiring and that the part matches.")]
+    NoVerifiedLink { mode: u8 },
     #[error("unlock key rejected: the target still reads locked")]
     UnlockKeyRejected,
     #[error("unsupported for this part: {0}")]
@@ -855,9 +859,20 @@ impl SinoLinkProgrammer {
         let Some(actual) = data.get(9..14) else {
             return Ok(());
         };
-        // A locked or unpowered die reads uniformly; that is not a mismatch worth reporting.
+        // A uniform read means the die is telling us nothing: locked, unpowered, or not talking
+        // at all. Only an ICP connect proves the link, so in any other mode treat it as no link
+        // rather than waving it through.
         if actual.iter().all(|&b| b == 0xff) || actual.iter().all(|&b| b == 0x00) {
-            return Ok(());
+            if self.connect_mode == 1 {
+                eprintln!(
+                    "Target part number reads uniformly {:#04x}; the die is locked or silent, continuing on the ICP link",
+                    actual[0]
+                );
+                return Ok(());
+            }
+            return Err(SinoLinkError::NoVerifiedLink {
+                mode: self.connect_mode,
+            });
         }
         eprintln!("Target part number: {}", hex_string(actual));
         if actual != self.part.part_number {
@@ -1014,6 +1029,17 @@ impl SinoLinkProgrammer {
         }
     }
 
+    /// Sample the start of code flash and say whether it looks erased.
+    ///
+    /// An erase that reports success without doing anything is the worst failure this driver can
+    /// have: the caller programs on top of stale contents, or trusts that secrets are gone. Seen
+    /// for real on a ChipType 2 part driven at 3.3 V, where every erase mode returned ok and the
+    /// flash was untouched.
+    fn flash_reads_erased(&self) -> Result<bool> {
+        let got = self.link.read(0, Region::Flash, 0x100)?;
+        Ok(got.iter().all(|&b| b == 0x00) || got.iter().all(|&b| b == 0xff))
+    }
+
     pub fn mass_erase(&mut self) -> Result<()> {
         let modes = self.full_erase_modes();
         let t = Instant::now();
@@ -1031,6 +1057,9 @@ impl SinoLinkProgrammer {
         }
         if let Some(e) = last {
             return Err(e);
+        }
+        if !self.flash_reads_erased()? {
+            return Err(SinoLinkError::EraseDidNothing);
         }
         eprintln!("Mass erase complete in {:.2?}", t.elapsed());
         self.blank_security_and_set_option_defaults()?;

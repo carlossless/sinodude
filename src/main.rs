@@ -527,6 +527,13 @@ fn sinolink_cmd(matches: &ArgMatches) -> Result<(), Box<dyn std::error::Error>> 
         );
     }
     println!("connected, status {:02x?}", &status[..status.len().min(8)]);
+    if mode != 1 {
+        // The firmware only checks the handshake for mode 1. Modes 2, 3 and 4 return success
+        // without asking the target anything, so this "connected" proves nothing.
+        println!(
+            "warning: connect mode {mode} is not verified by the firmware; it reports success even with no target. Only mode 1 (ICP) proves the die is answering."
+        );
+    }
 
     if action == "raw" {
         let num = |k: &str, d: u64| -> Result<u64, Box<dyn std::error::Error>> {
